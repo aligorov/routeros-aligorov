@@ -1,0 +1,13 @@
+name: remote-selftest
+descr: library/redis из Docker Hub (авто-конвертация store-combine)
+category: database
+icon: icon.png
+auto-update: false
+services:
+  remote-selftest:
+    image: docker.io/library/redis:7-alpine
+    ports:
+      - 6391:6379/tcp
+    environment:
+      REDIS_VERSION: 7.4.11
+    restart: unless-stopped
