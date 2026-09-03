@@ -20,15 +20,14 @@
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/vpn-manager
   category: security
   icon: https://aligorov.github.io/routeros-aligorov/apps/vpn-manager/icon.png
-  default-credentials: admin / значение секрета admin-password (задаётся при установке)
-  url-path: /
+  default-credentials: admin:change-me
   auto-update: false
   services:
     db:
       image: docker.io/library/postgres:15-alpine
       environment:
         POSTGRES_USER: vpn_user
-        POSTGRES_PASSWORD: '[secret:db-password]'
+        POSTGRES_PASSWORD: change-me
         POSTGRES_DB: vpn_creator
       volumes:
       - pgdata:/var/lib/postgresql/data
@@ -39,12 +38,11 @@
       - 3000:3000/tcp:web
       environment:
         DATABASE_URL: postgresql://vpn_user:__POSTGRES_PASSWORD__@localhost:5432/vpn_creator
-        POSTGRES_PASSWORD: '[secret:db-password]'
+        POSTGRES_PASSWORD: change-me
         ENCRYPTION_KEY: auto
         SESSION_SECRET: auto
         ADMIN_DEFAULT_USERNAME: admin
-        ADMIN_DEFAULT_PASSWORD: '[secret:admin-password]'
-        FREERADIUS_HOST: '[routerIP]'
+        ADMIN_DEFAULT_PASSWORD: change-me
       volumes:
       - radius-cfg:/app/freeradius
       - app-data:/app/data
@@ -63,6 +61,3 @@
     radius-cfg: {}
     app-data: {}
     downloads: {}
-  secrets:
-    db-password: {}
-    admin-password: {}

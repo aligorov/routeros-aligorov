@@ -3,14 +3,16 @@
 #  админ-панель (Next.js) + PostgreSQL + FreeRADIUS одним приложением.
 #  Исходники приватные; образы: ghcr.io/aligorov/routeros-aligorov/*
 #  Полная инструкция: README.md в этой папке.
+#  ВАЖНО: манифест держим консервативным (как demo-nginx) — экзотические
+#  поля (secrets:/[secret:]/[routerIP]/url-path) RouterOS 7.24 из стора
+#  не принимал, приложение не появлялось в каталоге.
 # =============================================================
 name: vpn-manager
 descr: "VPN user manager for MikroTik: WireGuard/OpenVPN/VLESS provisioning, AD sync, FreeRADIUS, self-service portal"
 page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/vpn-manager
 category: security
 icon: icon.png
-default-credentials: "admin / значение секрета admin-password (задаётся при установке)"
-url-path: /
+default-credentials: "admin:change-me"
 auto-update: false
 
 services:
@@ -18,7 +20,7 @@ services:
     image: docker.io/library/postgres:15-alpine
     environment:
       POSTGRES_USER: vpn_user
-      POSTGRES_PASSWORD: "[secret:db-password]"
+      POSTGRES_PASSWORD: change-me
       POSTGRES_DB: vpn_creator
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -31,17 +33,15 @@ services:
       - 3000:3000/tcp:web
     environment:
       # Пароль БД подставляется entrypoint'ом в URL из POSTGRES_PASSWORD —
-      # меняется в одном месте (секрет db-password).
+      # меняется в одном месте (после установки через /app env).
       DATABASE_URL: "postgresql://vpn_user:__POSTGRES_PASSWORD__@localhost:5432/vpn_creator"
-      POSTGRES_PASSWORD: "[secret:db-password]"
+      POSTGRES_PASSWORD: change-me
       # Ключи шифрования/сессий генерируются автоматически при первом старте
       # и персистятся в томе app-data (переживают рестарты и обновления).
       ENCRYPTION_KEY: auto
       SESSION_SECRET: auto
       ADMIN_DEFAULT_USERNAME: admin
-      ADMIN_DEFAULT_PASSWORD: "[secret:admin-password]"
-      # Адрес, по которому роутер достаёт до FreeRADIUS (плейсхолдер RouterOS).
-      FREERADIUS_HOST: "[routerIP]"
+      ADMIN_DEFAULT_PASSWORD: change-me
     volumes:
       # FreeRADIUS-конфиги: приложение генерирует их из SystemSettings,
       # radius-контейнер копирует при своём старте
@@ -66,9 +66,3 @@ volumes:
   radius-cfg: {}
   app-data: {}
   downloads: {}
-
-# Секреты: значения вводятся при установке (Winbox спросит), в репозитории
-# их нет. db-password — и для Postgres, и для приложения (один и тот же).
-secrets:
-  db-password: {}
-  admin-password: {}
