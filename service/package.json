@@ -1,0 +1,26 @@
+{
+  "name": "store-combine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Комбайн: Docker-образ -> приложение RouterOS app-store (MCP + Telegram бот + CLI)",
+  "scripts": {
+    "mcp": "tsx src/mcp.ts",
+    "bot": "tsx src/bot.ts",
+    "cli": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "grammy": "^1.40.0",
+    "yaml": "^2.8.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
