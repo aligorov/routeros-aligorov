@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
 
   app:
-    image: ghcr.io/aligorov/routeros-aligorov/vpn-app:1.0.0
+    image: ghcr.io/aligorov/routeros-aligorov/vpn-app:1.0.1
     ports:
       # UI админки и портала; метка web => кнопка открытия в Winbox
       - 3000:3000/tcp:web
