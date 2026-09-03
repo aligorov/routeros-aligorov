@@ -25,15 +25,25 @@ export function readApps(repoDir = config.repoDir): AppEntry[] {
   return out.sort((a, b) => a.dir.localeCompare(b.dir));
 }
 
-export function rebuildStore(repoDir = config.repoDir, baseUrl = config.storeBaseUrl): number {
-  const apps = readApps(repoDir);
+export interface GeneratedStore {
+  "store.yaml": string;
+  "default.yaml": string;
+  "index.html": string;
+}
+
+/** Сборка содержимого store.yaml/default.yaml/index.html из списка приложений (fs-независимо). */
+export function buildStoreFiles(
+  apps: AppEntry[],
+  baseUrl: string,
+  iconExists: (dir: string, icon: string) => boolean = () => true,
+): GeneratedStore {
   if (!apps.length) throw new Error("В apps/ нет ни одного приложения");
 
   const items = apps.map(({ dir, manifest }) => {
     const doc = structuredClone(manifest);
     const icon = doc.icon;
     if (icon && !String(icon).startsWith("http")) {
-      if (!existsSync(path.join(repoDir, "apps", dir, String(icon)))) {
+      if (!iconExists(dir, String(icon))) {
         throw new Error(`apps/${dir}: не найдена иконка ${icon}`);
       }
       doc.icon = `${baseUrl}/apps/${dir}/${icon}`;
@@ -46,11 +56,7 @@ export function rebuildStore(repoDir = config.repoDir, baseUrl = config.storeBas
     "#  СГЕНЕРИРОВАН (scripts/build.sh | service) — НЕ РЕДАКТИРОВАТЬ\n" +
     "#  Источники приложений: apps/*/app.yaml\n" +
     "# =============================================================\n";
-  writeFileSync(
-    path.join(repoDir, "store.yaml"),
-    header + YAML.stringify(items, { lineWidth: 0 }),
-  );
-  copyFileSync(path.join(repoDir, "store.yaml"), path.join(repoDir, "default.yaml"));
+  const storeYaml = header + YAML.stringify(items, { lineWidth: 0 });
 
   const esc = (s: any) =>
     String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -68,9 +74,7 @@ export function rebuildStore(repoDir = config.repoDir, baseUrl = config.storeBas
       );
     })
     .join("\n");
-  writeFileSync(
-    path.join(repoDir, "index.html"),
-    `<!doctype html>
+  const indexHtml = `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <title>routeros-aligorov app-store</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -87,7 +91,16 @@ export function rebuildStore(repoDir = config.repoDir, baseUrl = config.storeBas
 <code>${esc(baseUrl)}/store.yaml</code></p>
 ${cards}
 </body></html>
-`,
-  );
-  return items.length;
+`;
+  return { "store.yaml": storeYaml, "default.yaml": storeYaml, "index.html": indexHtml };
+}
+
+export function rebuildStore(repoDir = config.repoDir, baseUrl = config.storeBaseUrl): number {
+  const exists = (dir: string, icon: string) =>
+    existsSync(path.join(repoDir, "apps", dir, icon));
+  const generated = buildStoreFiles(readApps(repoDir), baseUrl, exists);
+  writeFileSync(path.join(repoDir, "store.yaml"), generated["store.yaml"]);
+  writeFileSync(path.join(repoDir, "default.yaml"), generated["default.yaml"]);
+  writeFileSync(path.join(repoDir, "index.html"), generated["index.html"]);
+  return readApps(repoDir).length;
 }

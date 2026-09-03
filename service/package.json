@@ -1,11 +1,12 @@
 {
   "name": "store-combine",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Комбайн: Docker-образ -> приложение RouterOS app-store (MCP + Telegram бот + CLI)",
+  "description": "Комбайн: Docker-образ/compose -> приложение RouterOS app-store (MCP stdio+HTTP + Telegram бот + CLI)",
   "scripts": {
     "mcp": "tsx src/mcp.ts",
+    "http": "tsx src/http.ts",
     "bot": "tsx src/bot.ts",
     "cli": "tsx src/cli.ts",
     "typecheck": "tsc --noEmit"

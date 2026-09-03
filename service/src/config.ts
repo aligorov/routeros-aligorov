@@ -15,6 +15,8 @@ export const config = {
     .filter(Boolean)
     .map(Number),
   allowCommit: process.env.ALLOW_COMMIT === "1",
+  mcpToken: process.env.MCP_TOKEN ?? "",
+  httpPort: Number(process.env.PORT ?? 8765),
 };
 
 export const schemaPath = path.join(

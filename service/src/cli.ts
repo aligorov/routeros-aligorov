@@ -5,8 +5,7 @@
 //   remove <name> [--commit]
 import { checkImage, formatInfo } from "./core/registry.js";
 import { buildAppFiles } from "./core/converter.js";
-import { readApps } from "./core/build-store.js";
-import { publishApp, removeApp } from "./core/publisher-local.js";
+import { listApps, publishApp, removeApp, publisherMode } from "./core/publisher.js";
 import { config } from "./config.js";
 
 async function main() {
@@ -44,15 +43,15 @@ async function main() {
         category: flag("--category"),
         env,
         ports,
-      }, readApps());
+      }, await listApps());
       console.log(formatInfo(r.info));
       console.log(`\n--- apps/${r.name}/app.yaml ---\n${r.files["app.yaml"]}`);
       if (flag("--commit") !== undefined || config.allowCommit) {
         const res = await publishApp(r.name, r.files);
         console.log(
-          res.pushed
+          res.commit
             ? `\n✅ Опубликовано: ${res.commit} (приложений в сторе: ${res.apps})\n${res.storeUrl}`
-            : `\n⚠️ Изменений нет (приложение уже было в таком виде)`,
+            : "\n⚠️ Изменений нет (приложение уже было в таком виде)",
         );
       } else {
         console.log("\n(dry-run: файлы НЕ записаны; добавьте --commit для публикации)");
@@ -74,7 +73,7 @@ async function main() {
       if (flag("--commit") !== undefined || config.allowCommit) {
         const res = await publishApp(r.name, r.files);
         console.log(
-          res.pushed
+          res.commit
             ? `\n✅ Опубликовано: ${res.commit} (приложений: ${res.apps})\n${res.storeUrl}`
             : "\n⚠️ Изменений нет",
         );
@@ -84,12 +83,13 @@ async function main() {
       break;
     }
     case "list": {
-      for (const { dir, manifest } of readApps()) {
+      for (const { dir, manifest } of await listApps()) {
         const imgs = Object.values<any>(manifest.services ?? {})
           .map((s) => s.image)
           .join(", ");
         console.log(`- ${dir}  [${manifest.category ?? "?"}]  ${imgs}`);
       }
+      console.log(`(режим публикации: ${publisherMode()})`);
       break;
     }
     case "remove": {
@@ -99,7 +99,7 @@ async function main() {
         break;
       }
       const res = await removeApp(rest[0]);
-      console.log(res.pushed ? `✅ Удалено, стор пересобран (${res.commit})` : "Изменений нет");
+      console.log(res.commit ? `✅ Удалено, стор пересобран (${res.commit})` : "Изменений нет");
       break;
     }
     default:

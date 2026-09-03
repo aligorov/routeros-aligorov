@@ -41,18 +41,44 @@ npm run cli -- import https://example.com/docker-compose.yml             # compo
 
 ## Запуск в Docker
 
+**Вариант A — remote-режим (рекомендуется, без монтирования репо):**
+
 ```sh
 docker run -d --name store-combine \
-  -v /путь/к/routeros-aligorov:/repo \
-  -e REPO_DIR=/repo \
+  -e GITHUB_TOKEN=github_pat_... \
+  -e PUBLISHER=github-api \
+  -e TELEGRAM_BOT_TOKEN=... -e TELEGRAM_ALLOWED_IDS=... \
+  aligorov/store-combine:latest
+```
+
+Нужен fine-grained PAT (только этот репо, Metadata:R + Contents:RW) —
+публикация идёт через GitHub Git Data API атомарным коммитом.
+
+**Вариант B — локальный режим (клон репо в контейнере):**
+
+```sh
+docker run -d --name store-combine \
+  -v /путь/к/routeros-aligorov:/repo -e REPO_DIR=/repo \
   -e STORE_BASE_URL=https://aligorov.github.io/routeros-aligorov \
   -e TELEGRAM_BOT_TOKEN=... -e TELEGRAM_ALLOWED_IDS=... \
   aligorov/store-combine:latest
 ```
 
-Для `git push` из контейнера нужен доступ к GitHub: смонтируйте
-настроенный клон (ssh-remotes + ключ) или переключитесь на
-GitHub-API-publisher (M4, план `docs/plan-store-combine.md`).
+Для `git push` в варианте B нужен настроенный git-доступ к GitHub внутри тома.
+
+## HTTP API (MCP)
+
+`MCP_TOKEN=... PORT=8765 npm run http` — streamable HTTP MCP на `/mcp`
+(bearer-авторизация) + `GET /healthz`. Подключение агентом:
+
+```json
+{ "mcpServers": { "store-combine": {
+    "type": "http", "url": "http://host:8765/mcp",
+    "headers": { "Authorization": "Bearer ..." } } } }
+```
+
+Инструменты: `check_image`, `add_docker_image`, `import_compose`,
+`publish_app`, `list_apps`, `remove_app`, `store_status`.
 
 ## MCP (для агента)
 

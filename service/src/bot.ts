@@ -3,8 +3,7 @@
 import { Bot, Context, InlineKeyboard } from "grammy";
 import { checkImage, formatInfo } from "./core/registry.js";
 import { buildAppFiles } from "./core/converter.js";
-import { readApps } from "./core/build-store.js";
-import { publishApp, removeApp } from "./core/publisher-local.js";
+import { listApps, publishApp, removeApp } from "./core/publisher.js";
 import { config } from "./config.js";
 
 interface Pending {
@@ -58,7 +57,7 @@ bot.command("add", async (ctx) => {
   }
   await ctx.replyWithChatAction("typing");
   try {
-    const r = await buildAppFiles(image, { name: parts[1] }, readApps());
+    const r = await buildAppFiles(image, { name: parts[1] }, await listApps());
     pending.set(ctx.from!.id, { kind: "add", name: r.name, files: r.files, info: formatInfo(r.info) });
     const yaml = String(r.files["app.yaml"]);
     const body = yaml.length > 2800 ? yaml.slice(0, 2800) + "\n…" : yaml;
@@ -122,8 +121,8 @@ async function doImport(ctx: Context, source: string, label?: string) {
   }
 }
 
-bot.command("list", (ctx) => {
-  const apps = readApps()
+bot.command("list", async (ctx) => {
+  const apps = (await listApps())
     .map(({ dir, manifest }) => {
       const imgs = Object.values<any>(manifest.services ?? {}).map((s) => s.image).join(", ");
       return `• <b>${escape(dir)}</b> [${escape(manifest.category ?? "?")}] <code>${escape(imgs)}</code>`;
@@ -135,7 +134,7 @@ bot.command("list", (ctx) => {
 bot.command("remove", async (ctx) => {
   const name = ctx.match?.trim();
   if (!name) return ctx.reply("Использование: /remove <имя>");
-  if (!readApps().some((a) => a.dir === name)) return ctx.reply(`Нет приложения: ${name}`);
+  if (!(await listApps()).some((a) => a.dir === name)) return ctx.reply(`Нет приложения: ${name}`);
   pending.set(ctx.from!.id, { kind: "remove", name });
   ctx.reply(`Удалить <b>${escape(name)}</b> из стора?`, {
     parse_mode: "HTML",
@@ -154,7 +153,7 @@ bot.callbackQuery("pub", async (ctx) => {
         ? await publishApp(p.name, p.files!)
         : await removeApp(p.name);
     await ctx.editMessageText(
-      res.pushed
+      res.commit
         ? `✅ Готово (${res.commit}); приложений в сторе: ${res.apps}.\nСтор: ${res.storeUrl}\nОбновится на роутере в течение ~1 мин.`
         : "Изменений нет (уже опубликовано в таком виде).",
       { parse_mode: undefined },
