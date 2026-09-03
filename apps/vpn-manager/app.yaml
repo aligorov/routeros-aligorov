@@ -1,0 +1,74 @@
+# =============================================================
+#  VPN Manager — стек управления VPN-пользователями для MikroTik:
+#  админ-панель (Next.js) + PostgreSQL + FreeRADIUS одним приложением.
+#  Исходники приватные; образы: ghcr.io/aligorov/routeros-aligorov/*
+#  Полная инструкция: README.md в этой папке.
+# =============================================================
+name: vpn-manager
+descr: "VPN user manager for MikroTik: WireGuard/OpenVPN/VLESS provisioning, AD sync, FreeRADIUS, self-service portal"
+page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/vpn-manager
+category: security
+icon: icon.png
+default-credentials: "admin / значение секрета admin-password (задаётся при установке)"
+url-path: /
+auto-update: false
+
+services:
+  db:
+    image: docker.io/library/postgres:15-alpine
+    environment:
+      POSTGRES_USER: vpn_user
+      POSTGRES_PASSWORD: "[secret:db-password]"
+      POSTGRES_DB: vpn_creator
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  app:
+    image: ghcr.io/aligorov/routeros-aligorov/vpn-app:1.0.0
+    ports:
+      # UI админки и портала; метка web => кнопка открытия в Winbox
+      - 3000:3000/tcp:web
+    environment:
+      # Пароль БД подставляется entrypoint'ом в URL из POSTGRES_PASSWORD —
+      # меняется в одном месте (секрет db-password).
+      DATABASE_URL: "postgresql://vpn_user:__POSTGRES_PASSWORD__@localhost:5432/vpn_creator"
+      POSTGRES_PASSWORD: "[secret:db-password]"
+      # Ключи шифрования/сессий генерируются автоматически при первом старте
+      # и персистятся в томе app-data (переживают рестарты и обновления).
+      ENCRYPTION_KEY: auto
+      SESSION_SECRET: auto
+      ADMIN_DEFAULT_USERNAME: admin
+      ADMIN_DEFAULT_PASSWORD: "[secret:admin-password]"
+      # Адрес, по которому роутер достаёт до FreeRADIUS (плейсхолдер RouterOS).
+      FREERADIUS_HOST: "[routerIP]"
+    volumes:
+      # FreeRADIUS-конфиги: приложение генерирует их из SystemSettings,
+      # radius-контейнер копирует при своём старте
+      - radius-cfg:/app/freeradius
+      # ключи ENCRYPTION_KEY/SESSION_SECRET (генерируются entrypoint'ом)
+      - app-data:/app/data
+      # дистрибутивы для портала (класть файлы без пересборки)
+      - downloads:/app/public/portal/downloads
+    restart: unless-stopped
+
+  freeradius:
+    image: ghcr.io/aligorov/routeros-aligorov/vpn-freeradius:1.0.0
+    ports:
+      - 1812:1812/udp:radius-auth
+      - 1813:1813/udp:radius-acct
+    volumes:
+      - radius-cfg:/radius-cfg:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata: {}
+  radius-cfg: {}
+  app-data: {}
+  downloads: {}
+
+# Секреты: значения вводятся при установке (Winbox спросит), в репозитории
+# их нет. db-password — и для Postgres, и для приложения (один и тот же).
+secrets:
+  db-password: {}
+  admin-password: {}

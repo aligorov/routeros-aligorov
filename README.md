@@ -91,6 +91,7 @@ scripts/ghcr-push.sh       # сборка arm64-образа и пуш в GHCR
 
 | Приложение | Что это | Проверка |
 |---|---|---|
+| `vpn-manager` | VPN-менеджер: админка + PostgreSQL + FreeRADIUS, синк с AD, провижининг WG/OpenVPN/VLESS на MikroTik, портал пользователей | после установки открыть `http://<ip-роутера>:3000`, вход admin + секрет `admin-password` |
 | `demo-nginx` | nginx — проверка работоспособности стора end-to-end | после установки открыть `http://<ip-роутера>:8080` |
 
 ## Полезное

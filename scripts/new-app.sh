@@ -13,8 +13,9 @@ DEST="apps/$NAME"
 [ -e "$DEST" ] && { echo "ERROR: уже существует: $DEST"; exit 1; }
 
 cp -R apps/_template "$DEST"
-sed -i '' -e "s/^name: my-app/name: $NAME/" \
-          -e "s/^descr: \"TODO: короткое описание приложения\"/descr: \"$DESC\"/" \
+# разделитель | : в описании допустимы слэши (но не | и &)
+sed -i '' -e "s|^name: my-app|name: $NAME|" \
+          -e "s|^descr: \"TODO: короткое описание приложения\"|descr: \"$DESC\"|" \
     "$DEST/app.yaml"
 
 echo "Создано: $DEST"
