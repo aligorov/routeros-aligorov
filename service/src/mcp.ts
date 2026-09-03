@@ -78,6 +78,36 @@ server.registerTool(
   },
 );
 
+server.registerTool(
+  "import_compose",
+  {
+    description:
+      "Импортировать docker-compose.yml (локальный путь или URL) в одно приложение RouterOS. " +
+      "По умолчанию dry-run (возвращает YAML + предупреждения); commit:true — опубликовать.",
+    inputSchema: {
+      source: z.string().describe("путь к docker-compose.yml или https://URL"),
+      name: z.string().optional(),
+      commit: z.boolean().optional(),
+    },
+  },
+  async (p) => {
+    const { importCompose, loadCompose } = await import("./core/compose.js");
+    const r = await importCompose(await loadCompose(p.source), { name: p.name });
+    let out = `apps/${r.name}/app.yaml:\n${r.files["app.yaml"]}`;
+    if (r.warnings.length) out += `\n\n⚠️ Предупреждения:\n${r.warnings.map((w) => `- ${w}`).join("\n")}`;
+    if (r.secretLocalEnv.length) {
+      out += `\n\n🔒 Секреты вводятся при установке (значения НЕ в репо): ${r.secretLocalEnv.map((s) => s.split("=")[0]).join(", ")}`;
+    }
+    if (p.commit) {
+      const res = await publishApp(r.name, r.files);
+      out += res.pushed ? `\n\n✅ Опубликовано: ${res.commit}; стор: ${res.storeUrl}` : "\n\n⚠️ Изменений нет";
+    } else {
+      out += "\n\n(dry-run; commit:true для публикации)";
+    }
+    return text(out);
+  },
+);
+
 server.registerTool("list_apps", { description: "Приложения в сторе (локальный репо)" }, async () =>
   text(
     readApps()

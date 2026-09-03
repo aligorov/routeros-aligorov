@@ -76,6 +76,52 @@ bot.command("add", async (ctx) => {
   }
 });
 
+bot.command("import", async (ctx) => {
+  const source = ctx.match?.trim();
+  if (!source) {
+    return ctx.reply(
+      "Использование: /import <URL docker-compose.yml>\n" +
+        "Или просто пришлите файл docker-compose.yml документом 📎",
+    );
+  }
+  await doImport(ctx, source);
+});
+
+// приём compose-файла документом
+bot.on(":document", async (ctx) => {
+  const doc = ctx.message?.document;
+  if (!doc || !/\.(ya?ml)$/i.test(doc.file_name ?? "")) return;
+  const f = await ctx.getFile();
+  if (!f.file_path) return ctx.reply("Не смог получить файл");
+  const url = `https://api.telegram.org/file/bot${config.telegramBotToken}/${f.file_path}`;
+  await doImport(ctx, url, doc.file_name);
+});
+
+async function doImport(ctx: Context, source: string, label?: string) {
+  await ctx.replyWithChatAction("typing");
+  try {
+    const { importCompose, loadCompose } = await import("./core/compose.js");
+    const r = await importCompose(await loadCompose(source));
+    pending.set(ctx.from!.id, { kind: "add", name: r.name, files: r.files });
+    const yaml = String(r.files["app.yaml"]);
+    const body = yaml.length > 2600 ? yaml.slice(0, 2600) + "\n…" : yaml;
+    let msg = `<b>${escape(label ?? "docker-compose.yml")} → apps/${escape(r.name)}</b>\n`;
+    if (r.warnings.length) {
+      msg += `\n⚠️ Предупреждения:\n${r.warnings.slice(0, 10).map((w) => `• ${escape(w)}`).join("\n")}\n`;
+    }
+    if (r.secretLocalEnv.length) {
+      msg += `\n🔒 Секреты (${r.secretLocalEnv.length} шт.) — значения вводятся при установке на роутере.\n`;
+    }
+    msg += `\n<pre>${escape(body)}</pre>\n\nПубликовать в стор?`;
+    await ctx.reply(msg, {
+      parse_mode: "HTML",
+      reply_markup: new InlineKeyboard().text("✅ Опубликовать", "pub").text("Отмена", "cancel"),
+    });
+  } catch (e: any) {
+    ctx.reply(`❌ ${e.message}`);
+  }
+}
+
 bot.command("list", (ctx) => {
   const apps = readApps()
     .map(({ dir, manifest }) => {
@@ -132,6 +178,7 @@ function help(): string {
     "",
     "/check <образ> — проверить (arm64, размер, порты)",
     "/add <образ> [имя] — конвертировать и предложить публикацию",
+    "/import <URL> или файл .yml документом — импорт docker-compose",
     "/list — приложения в сторе",
     "/remove <имя> — удалить из стора",
     "",

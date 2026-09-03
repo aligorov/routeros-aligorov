@@ -1,11 +1,13 @@
 # store-combine — комбайн app-store
 
-Сервис добавления Docker-образов в стор `routeros-aligorov` тремя способами:
+Сервис добавления контейнеров в стор `routeros-aligorov` тремя способами:
 **Telegram-бот**, **MCP-инструменты** (для ИИ-агента) и **CLI**.
 
 Что делает: проверяет образ (arm64! размер, порты, env) → генерирует
 `apps/<имя>/app.yaml` по официальной схеме RouterOS → placeholder-иконка →
 валидация → пересборка `store.yaml` → коммит+push → стор обновляется на GitHub Pages.
+
+Образ в Docker Hub: `aligorov/store-combine:latest` (arm64+amd64).
 
 ## Быстрый старт (CLI, без токенов)
 
@@ -15,6 +17,8 @@ npm install
 npm run cli -- check docker.io/library/nginx:1.27-alpine   # проверка образа
 npm run cli -- add docker.io/library/redis:7-alpine        # dry-run (показ YAML)
 npm run cli -- add docker.io/library/redis:7-alpine --commit --name redis --port 6379:6379
+npm run cli -- import /путь/docker-compose.yml [--name имя] [--commit]   # импорт compose (M2)
+npm run cli -- import https://example.com/docker-compose.yml             # compose по URL
 ```
 
 ## Telegram-бот
@@ -28,10 +32,27 @@ npm run cli -- add docker.io/library/redis:7-alpine --commit --name redis --port
 
 - `/add docker.io/library/redis:7-alpine redis` → бот пришлёт YAML и кнопки
   «✅ Опубликовать / Отмена»
+- `/import <URL docker-compose.yml>` или просто прислать файл `.yml/.yaml`
+  документом 📎 → импорт compose с отчётом о предупреждениях
 - `/check <образ>` — проверка без добавления
 - `/list`, `/remove <имя>`
 
 Чужим пользователям бот не отвечает (белый список ID).
+
+## Запуск в Docker
+
+```sh
+docker run -d --name store-combine \
+  -v /путь/к/routeros-aligorov:/repo \
+  -e REPO_DIR=/repo \
+  -e STORE_BASE_URL=https://aligorov.github.io/routeros-aligorov \
+  -e TELEGRAM_BOT_TOKEN=... -e TELEGRAM_ALLOWED_IDS=... \
+  aligorov/store-combine:latest
+```
+
+Для `git push` из контейнера нужен доступ к GitHub: смонтируйте
+настроенный клон (ssh-remotes + ключ) или переключитесь на
+GitHub-API-publisher (M4, план `docs/plan-store-combine.md`).
 
 ## MCP (для агента)
 

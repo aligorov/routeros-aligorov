@@ -59,6 +59,30 @@ async function main() {
       }
       break;
     }
+    case "import": {
+      const source = rest[0];
+      if (!source) throw new Error("usage: import <docker-compose.yml | URL> [--name n] [--commit]");
+      const { importCompose, loadCompose } = await import("./core/compose.js");
+      const content = await loadCompose(source);
+      const r = await importCompose(content, { name: flag("--name") });
+      if (r.warnings.length) console.log(`\n⚠️ Предупреждения:\n${r.warnings.map((w) => `  - ${w}`).join("\n")}`);
+      if (r.secretLocalEnv.length) {
+        console.log(`\n🔒 Секреты сохранены ТОЛЬКО локально (введите при установке):`);
+        for (const s of r.secretLocalEnv) console.log(`  ${s.split("=")[0]}=***`);
+      }
+      console.log(`\n--- apps/${r.name}/app.yaml ---\n${r.files["app.yaml"]}`);
+      if (flag("--commit") !== undefined || config.allowCommit) {
+        const res = await publishApp(r.name, r.files);
+        console.log(
+          res.pushed
+            ? `\n✅ Опубликовано: ${res.commit} (приложений: ${res.apps})\n${res.storeUrl}`
+            : "\n⚠️ Изменений нет",
+        );
+      } else {
+        console.log("\n(dry-run: файлы НЕ записаны; добавьте --commit для публикации)");
+      }
+      break;
+    }
     case "list": {
       for (const { dir, manifest } of readApps()) {
         const imgs = Object.values<any>(manifest.services ?? {})

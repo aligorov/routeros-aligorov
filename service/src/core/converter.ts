@@ -191,8 +191,8 @@ export async function buildAppFiles(
   };
 }
 
-function guessCategory(info: ImageInfo): string {
-  const s = `${info.name} ${Object.keys(info.labels).join(" ")}`.toLowerCase();
+export function guessCategory(info: { name: string; labels?: Record<string, string> }): string {
+  const s = `${info.name} ${Object.keys(info.labels ?? {}).join(" ")}`.toLowerCase();
   if (/(postgres|mysql|mariadb|redis|mongo|database|influxdb)/.test(s)) return "database";
   if (/(wireguard|vpn|nginx|dns|proxy|network|tailscale|netbird)/.test(s)) return "networking";
   if (/(prometheus|grafana|zabbix|uptime|monitor)/.test(s)) return "monitoring";
