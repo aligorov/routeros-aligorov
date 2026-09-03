@@ -1,0 +1,16 @@
+# =============================================================
+#  СГЕНЕРИРОВАН scripts/build.sh — НЕ РЕДАКТИРОВАТЬ ВРУЧНУЮ
+#  Источники приложений: apps/*/app.yaml
+# =============================================================
+- name: demo-nginx
+  descr: 'Демо: nginx — проверка работоспособности app-store end-to-end'
+  page: https://nginx.org/
+  category: development
+  icon: https://aligorov.github.io/routeros-aligorov/apps/demo-nginx/icon.png
+  auto-update: false
+  services:
+    demo-nginx:
+      image: docker.io/library/nginx:1.27-alpine
+      ports:
+      - 8080:80/tcp:web
+      restart: unless-stopped

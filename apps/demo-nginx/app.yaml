@@ -1,0 +1,13 @@
+name: demo-nginx
+descr: "Демо: nginx — проверка работоспособности app-store end-to-end"
+page: https://nginx.org/
+category: development
+icon: icon.png
+auto-update: false
+
+services:
+  demo-nginx:
+    image: docker.io/library/nginx:1.27-alpine
+    ports:
+      - "8080:80/tcp:web"    # метка web => кнопка открытия UI в Winbox
+    restart: unless-stopped

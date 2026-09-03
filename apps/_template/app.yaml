@@ -1,0 +1,52 @@
+# ============================================================
+#  Манифест приложения RouterOS (/app)
+#  Полная схема: schemas/routeros-app-yaml.schema.json
+#  После правки: ./scripts/build.sh && ./scripts/validate.sh
+#  ВНИМАНИЕ: репозиторий публичный — никаких реальных паролей/ключей!
+# ============================================================
+name: my-app                     # уникальное имя: [a-z0-9-]
+descr: "TODO: короткое описание приложения"
+page: https://example.com        # (опц.) страница проекта
+category: networking             # одно из: productivity storage networking development
+                                 #   communication file-management search video media
+                                 #   media-management home-automation monitoring database
+                                 #   automation ai messaging radio security business
+icon: icon.png                   # иконка в этой же папке; build.sh сам заменит на URL
+# default-credentials: "admin:changeme"   # (опц.) логин:пароль по умолчанию
+# url-path: /                    # (опц.) путь для кнопки открытия UI в браузере
+auto-update: false               # не обновлять образы автоматически
+
+services:
+  main:                          # имя сервиса = имя контейнера [a-zA-Z0-9_-]
+    image: docker.io/library/nginx:1.27-alpine   # ОБЯЗАТЕЛЬНО; образ с registry
+                                 # свои образы: ghcr.io/aligorov/routeros-aligorov/<имя>:<тег>
+    ports:
+      - "8080:80/tcp:web"        # хост:контейнер/протокол:метка
+                                 # метка "web" => в Winbox появится кнопка открытия UI
+                                 # udp: "53:53/udp:dns"; наружу не публиковать — не указывайте
+    environment:                 # переменные окружения, ТОЛЬКО несекретные дефолты
+      SOME_KEY: some-value       # ключи: ВЕРХНИЙ регистр [A-Z_][A-Z0-9_]*
+      # ADMIN_PASSWORD: "[secret:admin-password]"   # секрет — вводится при установке
+    volumes:
+      - data:/var/lib/app        # именованный том; объявлен ниже в volumes:
+    restart: unless-stopped      # no | always | on-failure | unless-stopped
+    # depends_on: [db]           # порядок запуска (имена других сервисов)
+    # hostname: my-app           # имя хоста контейнера
+    # command: ["--verbose"]     # переопределение команды
+    # configs:                   # inline-файлы: контент берётся из configs: ниже
+    #   - source: app-config     # имя конфига из корневого configs:
+    #     target: /etc/app/app.conf
+    #     mode: 0o644            # (опц.) права на файл
+
+volumes:                         # именованные тома (RouterOS создаёт сам)
+  data: {}                       # пустое значение = без опций
+
+# configs:                       # inline-конфиги: содержимое файла прямо в YAML
+#   app-config:
+#     content: |
+#       key=value
+#       another=setting
+
+# secrets:                       # объявления секретов (значения НЕ в репозитории)
+#   admin-password: {}           # при установке RouterOS спросит значение;
+                                 # в environment на него ссылаются [secret:admin-password]

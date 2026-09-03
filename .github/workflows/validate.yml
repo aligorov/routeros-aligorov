@@ -1,0 +1,21 @@
+name: validate
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet pyyaml jsonschema
+      - name: Валидация манифестов и store.yaml
+        run: python3 scripts/_validate.py
+      - name: store.yaml актуален
+        run: |
+          ./scripts/build.sh
+          git diff --exit-code -- store.yaml default.yaml index.html \
+            || { echo "store.yaml устарел: запустите ./scripts/build.sh и закоммитьте"; exit 1; }
