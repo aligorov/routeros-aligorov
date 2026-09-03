@@ -2,19 +2,6 @@
 #  СГЕНЕРИРОВАН (scripts/build.sh | service) — НЕ РЕДАКТИРОВАТЬ
 #  Источники приложений: apps/*/app.yaml
 # =============================================================
-- name: combine-selftest
-  descr: library/redis из Docker Hub (авто-конвертация store-combine)
-  category: database
-  icon: https://aligorov.github.io/routeros-aligorov/apps/combine-selftest/icon.png
-  auto-update: false
-  services:
-    combine-selftest:
-      image: docker.io/library/redis:7-alpine
-      ports:
-        - 6390:6379/tcp
-      environment:
-        REDIS_VERSION: 7.4.11
-      restart: unless-stopped
 - name: demo-nginx
   descr: "Демо: nginx — проверка работоспособности app-store end-to-end"
   page: https://nginx.org/
