@@ -40,6 +40,22 @@ https://aligorov.github.io/routeros-aligorov/store.yaml
    ```
    Через ~1 минуту GitHub Pages обновится — приложение появится в App Store на роутере.
 
+## store-combine: добавление контейнеров через Telegram-бота / MCP / CLI
+
+В `service/` живёт комбайн: проверяет Docker-образ (arm64, размер, env),
+генерирует манифест по официальной схеме, маскирует секреты, валидирует
+и публикует в стор одной командой:
+
+```sh
+cd service && npm install
+npm run cli -- add docker.io/library/redis:7-alpine --port 6390:6379 --commit
+```
+
+Интерфейсы: **Telegram-бот** (`/add <образ>` → YAML + кнопка «Опубликовать`),
+**MCP-сервер** (`npm run mcp` — инструменты `check_image`, `add_docker_image`, …
+для ИИ-агента), **CLI** (dry-run по умолчанию, `--commit` для публикации).
+Настройка и запуск бота как сервиса — `service/README.md`, переменные — `service/.env.example`.
+
 ## Свои образы (GHCR)
 
 Стор ссылается на образы в registry. Для своих контейнеров используйте GHCR:
