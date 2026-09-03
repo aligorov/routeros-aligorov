@@ -14,19 +14,6 @@
       ports:
         - 8080:80/tcp:web
       restart: unless-stopped
-- name: remote-selftest
-  descr: library/redis из Docker Hub (авто-конвертация store-combine)
-  category: database
-  icon: https://aligorov.github.io/routeros-aligorov/apps/remote-selftest/icon.png
-  auto-update: false
-  services:
-    remote-selftest:
-      image: docker.io/library/redis:7-alpine
-      ports:
-        - 6391:6379/tcp
-      environment:
-        REDIS_VERSION: 7.4.11
-      restart: unless-stopped
 - name: vpn-manager
   descr: "VPN user manager for MikroTik: WireGuard/OpenVPN/VLESS provisioning, AD sync, FreeRADIUS, self-service portal"
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/vpn-manager
