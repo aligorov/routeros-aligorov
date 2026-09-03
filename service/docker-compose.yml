@@ -1,0 +1,28 @@
+# Запуск store-combine через docker compose.
+#   1) cp .env.example .env  (или используйте созданный .env) и заполните токены
+#   2) docker compose up -d                # бот
+#   3) docker compose --profile mcp up -d  # + MCP HTTP-эндпоинт :8765
+#
+# Remote-режим: публикации идут через GitHub API — репо и git не нужны.
+name: store-combine
+
+services:
+  bot:
+    image: aligorov/store-combine:0.2.0
+    # Если хотите собирать из исходников локально — раскомментируйте:
+    # build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PUBLISHER: github-api
+
+  mcp-http:
+    image: aligorov/store-combine:0.2.0
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PUBLISHER: github-api
+    command: ["npx", "tsx", "src/http.ts"]
+    ports:
+      - "8765:8765"
+    profiles: ["mcp"]
