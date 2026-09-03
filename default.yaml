@@ -49,7 +49,7 @@
       - downloads:/app/public/portal/downloads
       restart: unless-stopped
     freeradius:
-      image: ghcr.io/aligorov/routeros-aligorov/vpn-freeradius:1.0.0
+      image: ghcr.io/aligorov/routeros-aligorov/vpn-freeradius:1.0.1
       ports:
       - 1812:1812/udp:radius-auth
       - 1813:1813/udp:radius-acct
