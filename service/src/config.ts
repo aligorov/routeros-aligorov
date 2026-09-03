@@ -1,4 +1,5 @@
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url)); // .../service/src
@@ -19,8 +20,8 @@ export const config = {
   httpPort: Number(process.env.PORT ?? 8765),
 };
 
-export const schemaPath = path.join(
-  config.repoDir,
-  "schemas",
-  "routeros-app-yaml.schema.json",
-);
+// Схема: из репо стора (локальный режим), иначе вендоренная копия в service/schemas (docker)
+const repoSchema = path.join(config.repoDir, "schemas", "routeros-app-yaml.schema.json");
+export const schemaPath = existsSync(repoSchema)
+  ? repoSchema
+  : path.resolve(here, "../schemas/routeros-app-yaml.schema.json");

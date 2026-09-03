@@ -16,6 +16,7 @@ RUN npm ci --omit=dev
 
 COPY tsconfig.json ./
 COPY src ./src
+COPY schemas ./schemas
 
 # внутри контейнера репо стора по умолчанию ожидается в /repo (том)
 ENV REPO_DIR=/repo
