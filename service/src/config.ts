@@ -18,6 +18,8 @@ export const config = {
   allowCommit: process.env.ALLOW_COMMIT === "1",
   mcpToken: process.env.MCP_TOKEN ?? "",
   httpPort: Number(process.env.PORT ?? 8765),
+  /** Префикс имён приложений в каталоге (различение своих в общем списке App Store) */
+  appNamePrefix: process.env.APP_NAME_PREFIX ?? "A-",
 };
 
 // Схема: из репо стора (локальный режим), иначе вендоренная копия в service/schemas (docker)

@@ -1,4 +1,4 @@
-name: mihomo-proxy
+name: A-mihomo-proxy
 descr: Mihomo (Clash.Meta) прокси с WebUI и TPROXY — заточен под RouterOS 7.20+ (см. README)
 category: networking
 icon: icon.png

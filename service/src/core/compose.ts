@@ -54,15 +54,13 @@ export async function importCompose(
   const readEnvFile =
     opts.readEnvFile ?? ((p: string) => readFileSync(p, "utf8"));
 
-  const name = (
-    opts.name ??
-    doc.name ??
-    "compose-app"
-  )
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+  const config = (await import("../config.js")).config;
+  let name = opts.name ?? doc.name ?? "compose-app";
+  name = name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+  if (config.appNamePrefix && !name.startsWith(config.appNamePrefix.toLowerCase())) {
+    name = config.appNamePrefix + name;
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(name)) {
     throw new Error(`Не получилось имя приложения: '${name}'`);
   }
 

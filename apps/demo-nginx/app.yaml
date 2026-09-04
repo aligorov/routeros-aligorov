@@ -1,4 +1,4 @@
-name: demo-nginx
+name: A-demo-nginx
 descr: "Демо: nginx — проверка работоспособности app-store end-to-end"
 page: https://nginx.org/
 category: development

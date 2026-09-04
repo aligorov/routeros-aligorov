@@ -69,9 +69,13 @@ export async function buildAppFiles(
     // мягкое предупреждение — не блокируем
   }
 
-  const name = (opts.name ?? slugFromImage(info)).toLowerCase();
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
-    throw new Error(`Недопустимое имя приложения: '${name}' (нужно [a-z0-9-])`);
+  const config = (await import("../config.js")).config;
+  let name = opts.name ?? slugFromImage(info);
+  if (config.appNamePrefix && !name.toLowerCase().startsWith(config.appNamePrefix.toLowerCase())) {
+    name = config.appNamePrefix + name;
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(name)) {
+    throw new Error(`Недопустимое имя приложения: '${name}' (нужно [A-Za-z0-9-])`);
   }
   const category = opts.category ?? guessCategory(info);
   if (!CATEGORIES.has(category)) {
@@ -141,7 +145,7 @@ export async function buildAppFiles(
     }
   }
 
-  const svcName = name.slice(0, 30);
+  const svcName = name.toLowerCase().slice(0, 30);
   const rootVolumes: Record<string, null> = {};
   const svcVolumes: string[] = [];
   for (const v of opts.volumes ?? []) {

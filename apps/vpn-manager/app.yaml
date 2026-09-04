@@ -7,7 +7,7 @@
 #  поля (secrets:/[secret:]/[routerIP]/url-path) RouterOS 7.24 из стора
 #  не принимал, приложение не появлялось в каталоге.
 # =============================================================
-name: vpn-manager
+name: A-vpn-manager
 descr: "VPN user manager for MikroTik: WireGuard/OpenVPN/VLESS provisioning, AD sync, FreeRADIUS, self-service portal"
 page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/vpn-manager
 category: security
