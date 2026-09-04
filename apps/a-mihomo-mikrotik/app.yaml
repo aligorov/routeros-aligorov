@@ -1,0 +1,60 @@
+name: A-mihomo-mikrotik
+descr: mihomo (Clash) tunnel-gateway + mixed-прокси 1080 и панель — адаптация для RouterOS
+category: networking
+icon: icon.png
+auto-update: false
+services:
+  a-mihomo-mikrotik:
+    image: docker.io/wiktorbgu/mihomo-mikrotik:latest
+    ports:
+      - 1080:1080/tcp
+      - 9091:9090/tcp:web
+    environment:
+      UI_SECRET: "[secret:ui-secret]"
+      LOG_LEVEL: error
+      DISABLE_NFTABLES: "1"
+      CONFIG: default_config.yaml
+      WORKDIR: /etc/mihomo
+      HEALTH_CHECK_ENABLE: "true"
+      HEALTH_CHECK_URL: https://www.gstatic.com/generate_204
+      HEALTH_CHECK_INTERVAL: "300"
+      HEALTH_CHECK_TIMEOUT: "5000"
+      HEALTH_CHECK_LAZY: "true"
+      HEALTH_CHECK_EXPECTED_STATUS: "204"
+      TOLERANCE: "10"
+      MIXED_PORT: "1080"
+      UI_PORT: "9090"
+      EXTERNAL_CONTROLLER_ADDRESS: 0.0.0.0
+      TUN_STACK: system
+      TUN_INET4_ADDRESS: 198.19.0.1/30
+      TUN_INET6_ADDRESS: fdfe:dcba:9876::1/126
+      TUN_AUTO_REDIRECT: "true"
+      TUN_AUTO_DETECT_INTERFACE: "true"
+      TUN_AUTO_ROUTE: "true"
+      TUN_DISABLE_ICMP_FORWARDING: "true"
+      EXTERNAL_UI_PATH: ui
+      IPV6: "true"
+      IP_VERSION: dual
+      PROVIDER_INTERVAL: "3600"
+      DNS_ENABLE: "true"
+      DNS_USE_SYSTEM_HOSTS: "true"
+      DNS_CACHE_ALGORITHM: arc
+      DNS_PREFER_H3: "false"
+      DNS_LISTEN: 0.0.0.0:53
+      DNS_ENHANCED_MODE: fake-ip
+      DNS_FAKE_IP_RANGE: 198.18.0.0/15
+      DNS_FAKE_IP_TTL: "1"
+      TCP_CONCURRENT: "true"
+      KEEP_ALIVE_IDLE: "60"
+      KEEP_ALIVE_INTERVAL: "30"
+      FIND_PROCESS_MODE: off
+      STORE_SELECTED: "true"
+      UNIFIED_DELAY: "true"
+      LOADBALANCE_STRATEGY: consistent-hashing
+    volumes:
+      - mihomo-config:/etc/mihomo
+    restart: unless-stopped
+volumes:
+  mihomo-config: null
+secrets:
+  ui-secret: null

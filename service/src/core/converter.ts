@@ -14,7 +14,7 @@ export interface AddOptions {
   ramHintMB?: number;
 }
 
-const SECRET_KEY_RE = /(PASS|SECRET|TOKEN|KEY|CERT|CRED)/i;
+const SECRET_KEY_RE = /(PASS|SECRET|TOKEN|KEY|CERT|CRED|^SUB\d)/i;
 const NOISY_ENV_RE = /^(PATH|LANG|[\w.]*LC_[\w.]*|HOME|HOSTNAME|TERM|PWD|SHLVL|_|GDAL|JAVA_|PYTHON_VERSION)$/;
 
 const CATEGORIES = new Set([
