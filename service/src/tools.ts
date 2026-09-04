@@ -32,6 +32,7 @@ export function registerTools(server: McpServer): void {
         category: z.string().optional(),
         env: z.record(z.string(), z.string()).optional(),
         ports: z.array(z.string()).optional().describe('["8080:80", "53:53/udp"]'),
+        volumes: z.array(z.string()).optional().describe('["data:/var/lib/app"]'),
         commit: z.boolean().optional(),
       },
     },
@@ -42,6 +43,7 @@ export function registerTools(server: McpServer): void {
         category: p.category,
         env: p.env,
         ports: p.ports,
+        volumes: p.volumes,
       }, await listApps());
       let out = formatInfo(r.info) + `\n\napps/${r.name}/app.yaml:\n${r.files["app.yaml"]}`;
       if (p.commit) {

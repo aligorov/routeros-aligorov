@@ -1,9 +1,9 @@
 # =============================================================
-#  СГЕНЕРИРОВАН scripts/build.sh — НЕ РЕДАКТИРОВАТЬ ВРУЧНУЮ
+#  СГЕНЕРИРОВАН (scripts/build.sh | service) — НЕ РЕДАКТИРОВАТЬ
 #  Источники приложений: apps/*/app.yaml
 # =============================================================
 - name: demo-nginx
-  descr: 'Демо: nginx — проверка работоспособности app-store end-to-end'
+  descr: "Демо: nginx — проверка работоспособности app-store end-to-end"
   page: https://nginx.org/
   category: development
   icon: https://aligorov.github.io/routeros-aligorov/apps/demo-nginx/icon.png
@@ -12,11 +12,31 @@
     demo-nginx:
       image: docker.io/library/nginx:1.27-alpine
       ports:
-      - 8080:80/tcp:web
+        - 8080:80/tcp:web
       restart: unless-stopped
+- name: mihomo-proxy
+  descr: Mihomo (Clash.Meta) прокси с WebUI и TPROXY — заточен под RouterOS 7.20+ (см. README)
+  category: networking
+  icon: https://aligorov.github.io/routeros-aligorov/apps/mihomo-proxy/icon.png
+  auto-update: false
+  services:
+    mihomo-proxy:
+      image: docker.io/medium1992/mihomo-proxy-ros:latest
+      ports:
+        - 8090:80/tcp:web
+        - 9090:9090/tcp
+      environment:
+        UI_SECRET: "[secret:ui-secret]"
+        BASIC_AUTH_USER: admin
+      volumes:
+        - mihomo-config:/root/.config/mihomo
+      restart: unless-stopped
+  volumes:
+    mihomo-config: null
+  secrets:
+    ui-secret: null
 - name: vpn-manager
-  descr: 'VPN user manager for MikroTik: WireGuard/OpenVPN/VLESS provisioning, AD
-    sync, FreeRADIUS, self-service portal'
+  descr: "VPN user manager for MikroTik: WireGuard/OpenVPN/VLESS provisioning, AD sync, FreeRADIUS, self-service portal"
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/vpn-manager
   category: security
   icon: https://aligorov.github.io/routeros-aligorov/apps/vpn-manager/icon.png
@@ -30,12 +50,12 @@
         POSTGRES_PASSWORD: change-me
         POSTGRES_DB: vpn_creator
       volumes:
-      - pgdata:/var/lib/postgresql/data
+        - pgdata:/var/lib/postgresql/data
       restart: unless-stopped
     app:
       image: ghcr.io/aligorov/routeros-aligorov/vpn-app:1.0.1
       ports:
-      - 3000:3000/tcp:web
+        - 3000:3000/tcp:web
       environment:
         DATABASE_URL: postgresql://vpn_user:__POSTGRES_PASSWORD__@localhost:5432/vpn_creator
         POSTGRES_PASSWORD: change-me
@@ -44,17 +64,17 @@
         ADMIN_DEFAULT_USERNAME: admin
         ADMIN_DEFAULT_PASSWORD: change-me
       volumes:
-      - radius-cfg:/app/freeradius
-      - app-data:/app/data
-      - downloads:/app/public/portal/downloads
+        - radius-cfg:/app/freeradius
+        - app-data:/app/data
+        - downloads:/app/public/portal/downloads
       restart: unless-stopped
     freeradius:
       image: ghcr.io/aligorov/routeros-aligorov/vpn-freeradius:1.0.2
       ports:
-      - 1812:1812/udp:radius-auth
-      - 1813:1813/udp:radius-acct
+        - 1812:1812/udp:radius-auth
+        - 1813:1813/udp:radius-acct
       volumes:
-      - radius-cfg:/radius-cfg:ro
+        - radius-cfg:/radius-cfg:ro
       restart: unless-stopped
   volumes:
     pgdata: {}

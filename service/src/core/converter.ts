@@ -9,6 +9,8 @@ export interface AddOptions {
   env?: Record<string, string>;
   /** Готовые записи портов: "8080:80/tcp:web" или "8080:80" */
   ports?: string[];
+  /** Именованные тома: "data:/var/lib/app" */
+  volumes?: string[];
   ramHintMB?: number;
 }
 
@@ -82,18 +84,18 @@ export async function buildAppFiles(
   const portEntries: string[] = [];
   if (opts.ports?.length) {
     for (const raw of opts.ports) {
-      const parts = String(raw).split(":");
-      if (parts.length < 2 || !/^\d+$/.test(parts[0]) || !/^\d+$/.test(parts[1])) {
-        throw new Error(`Порт '${raw}' — ожидается вид 8080:80[/tcp|/udp][:метка]`);
+      // родной формат RouterOS: [ip:]хост:контейнер[/протокол][:метка]
+      const m = String(raw).match(
+        /^(?:(\d{1,3}(?:\.\d{1,3}){3}):)?(\d+):(\d+)(?:\/(tcp|udp))?(?::([a-zA-Z0-9_-]+))?$/,
+      );
+      if (!m) {
+        throw new Error(
+          `Порт '${raw}' — ожидается вид 8080:80[/tcp|/udp][:метка] (например 8090:80/tcp:web)`,
+        );
       }
-      let proto = "tcp";
-      let label = "";
-      for (const extra of parts.slice(2)) {
-        if (extra === "tcp" || extra === "udp") proto = extra;
-        else if (extra) label = extra;
-      }
-      taken.push(Number(parts[0]));
-      portEntries.push(`${parts[0]}:${parts[1]}/${proto}${label ? ":" + label : ""}`);
+      const [, , host, container, proto = "tcp", label = ""] = m;
+      taken.push(Number(host));
+      portEntries.push(`${host}:${container}/${proto}${label ? ":" + label : ""}`);
     }
   } else {
     const exposed = [...info.exposedPorts].sort((a, b) =>
@@ -140,6 +142,16 @@ export async function buildAppFiles(
   }
 
   const svcName = name.slice(0, 30);
+  const rootVolumes: Record<string, null> = {};
+  const svcVolumes: string[] = [];
+  for (const v of opts.volumes ?? []) {
+    const parts = String(v).split(":");
+    if (parts.length < 2 || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(parts[0])) {
+      throw new Error(`Том '${v}' — ожидается имя:/путь/в/контейнере`);
+    }
+    rootVolumes[parts[0]] = null;
+    svcVolumes.push(v);
+  }
   const manifest: any = {
     name,
     descr: opts.descr ?? `${info.name} из Docker Hub (авто-конвертация store-combine)`,
@@ -151,10 +163,12 @@ export async function buildAppFiles(
         image: `${info.registry}/${info.name}:${info.tag}`,
         ...(portEntries.length ? { ports: portEntries } : {}),
         ...(Object.keys(env).length ? { environment: env } : {}),
+        ...(svcVolumes.length ? { volumes: svcVolumes } : {}),
         restart: "unless-stopped",
       },
     },
   };
+  if (Object.keys(rootVolumes).length) manifest.volumes = rootVolumes;
   if (Object.keys(secrets).length) manifest.secrets = secrets;
 
   assertValid(manifest, `apps/${name}/app.yaml`);

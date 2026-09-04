@@ -1,0 +1,21 @@
+name: mihomo-proxy
+descr: Mihomo (Clash.Meta) прокси с WebUI и TPROXY — заточен под RouterOS 7.20+ (см. README)
+category: networking
+icon: icon.png
+auto-update: false
+services:
+  mihomo-proxy:
+    image: docker.io/medium1992/mihomo-proxy-ros:latest
+    ports:
+      - 8090:80/tcp:web
+      - 9090:9090/tcp
+    environment:
+      UI_SECRET: "[secret:ui-secret]"
+      BASIC_AUTH_USER: admin
+    volumes:
+      - mihomo-config:/root/.config/mihomo
+    restart: unless-stopped
+volumes:
+  mihomo-config: null
+secrets:
+  ui-secret: null

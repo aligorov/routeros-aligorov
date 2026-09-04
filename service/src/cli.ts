@@ -37,12 +37,14 @@ async function main() {
         env[k] = v.join("=");
       }
       const ports = many("--port");
+      const volumes = many("--volume");
       const r = await buildAppFiles(image, {
         name: flag("--name"),
         descr: flag("--descr"),
         category: flag("--category"),
         env,
         ports,
+        volumes,
       }, await listApps());
       console.log(formatInfo(r.info));
       console.log(`\n--- apps/${r.name}/app.yaml ---\n${r.files["app.yaml"]}`);
