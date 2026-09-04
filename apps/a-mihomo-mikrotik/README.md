@@ -5,7 +5,10 @@
 
 - Образ: `docker.io/wiktorbgu/mihomo-mikrotik:latest` (arm64, ~22 МБ сжато)
 - `:1080` — mixed-прокси (SOCKS5 + HTTP/HTTPS)
-- `http://<ip-роутера>:9091/ui` — панель (zashboard/Yacd, ставится из `EXTERNAL_UI_URL`)
+- `http://<ip-роутера>:9091/ui/` — панель zashboard (скачивается контейнером при
+  старте из `EXTERNAL_UI_URL`, ~1.4 МБ cdn-fonts вариант; без этой переменной
+  панели НЕ будет — 404). Вход в панель: секрет = значение `ui-secret`,
+  введённое при установке.
 
 ## Envs (основные)
 
