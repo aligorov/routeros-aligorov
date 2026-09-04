@@ -8,7 +8,7 @@ name: store-combine
 
 services:
   bot:
-    image: aligorov/store-combine:0.2.1
+    image: aligorov/store-combine:0.2.2
     # Если хотите собирать из исходников локально — раскомментируйте:
     # build: .
     restart: unless-stopped
@@ -17,7 +17,7 @@ services:
       PUBLISHER: github-api
 
   mcp-http:
-    image: aligorov/store-combine:0.2.1
+    image: aligorov/store-combine:0.2.2
     restart: unless-stopped
     env_file: .env
     environment:
