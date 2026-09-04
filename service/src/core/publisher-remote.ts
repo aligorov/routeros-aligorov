@@ -55,7 +55,7 @@ async function apply(
   const toValidate = [...apps];
   if (addFiles?.["app.yaml"]) {
     const m = YAML.parse(String(addFiles["app.yaml"]));
-    toValidate.push({ dir: appName!, manifest: m });
+    toValidate.push({ dir: appName!.toLowerCase(), manifest: m });
   }
   const problems: string[] = [];
   for (const { dir, manifest } of toValidate) {
@@ -66,7 +66,7 @@ async function apply(
   }
 
   const finalApps = addFiles?.["app.yaml"]
-    ? [...apps, { dir: appName!, manifest: YAML.parse(String(addFiles["app.yaml"])) }].sort((a, b) =>
+    ? [...apps, { dir: appName!.toLowerCase(), manifest: YAML.parse(String(addFiles["app.yaml"])) }].sort((a, b) =>
         a.dir.localeCompare(b.dir),
       )
     : apps;
@@ -74,12 +74,13 @@ async function apply(
   const generated = buildStoreFiles(finalApps, config.storeBaseUrl);
 
   const adds: Record<string, Buffer | string> = { ...generated };
+  const dir = appName!.toLowerCase();
   if (addFiles) {
     for (const [rel, content] of Object.entries(addFiles)) {
-      adds[`apps/${appName}/${rel}`] = content;
+      adds[`apps/${dir}/${rel}`] = content;
     }
   }
-  const removes: string[] = appName && !addFiles ? await appFiles(gh, appName) : [];
+  const removes: string[] = appName && !addFiles ? await appFiles(gh, appName.toLowerCase()) : [];
 
   const commit = await gh.applyChanges(adds, removes, message);
   return { apps: finalApps.length, commit, storeUrl: `${config.storeBaseUrl}/store.yaml` };

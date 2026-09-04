@@ -1,0 +1,17 @@
+name: A-mihomo-ros
+descr: Ядро mihomo (Clash.Meta) + веб-панель ручной настройки config.yaml — для RouterOS 7.21+
+category: networking
+icon: icon.png
+auto-update: false
+services:
+  a-mihomo-ros:
+    image: docker.io/medium1992/mihomo-ros:latest
+    ports:
+      - 8091:80/tcp:web
+    environment:
+      BASIC_AUTH_USER: admin
+    volumes:
+      - mihomo-config:/etc/mihomo
+    restart: unless-stopped
+volumes:
+  mihomo-config: null

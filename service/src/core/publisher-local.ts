@@ -37,8 +37,10 @@ export function safetyScan(files: Record<string, Buffer | string>): void {
 }
 
 export function appDir(name: string): string {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new Error(`Плохое имя: ${name}`);
-  return path.join(config.repoDir, "apps", name);
+  // папка — всегда в нижнем регистре (файловая система/Pages), регистр имени — только в name:
+  const dir = name.toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(dir)) throw new Error(`Плохое имя: ${name}`);
+  return path.join(config.repoDir, "apps", dir);
 }
 
 export function writeAppFiles(name: string, files: Record<string, Buffer | string>): void {
