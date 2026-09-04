@@ -104,7 +104,13 @@ export async function finalize(commitMsg: string): Promise<PublishResult> {
 }
 
 export async function removeApp(name: string): Promise<PublishResult> {
-  const dir = appDir(name);
+  // папка может отличаться от отображаемого имени (именовалось до переименования) — ищем по name: или dir
+  const entry = readApps().find(
+    (a) => a.dir === name.toLowerCase() || a.manifest?.name === name,
+  );
+  const dir = entry
+    ? path.join(config.repoDir, "apps", entry.dir)
+    : appDir(name);
   if (!existsSync(dir)) throw new Error(`Приложение не найдено: apps/${name}`);
   rmSync(dir, { recursive: true, force: true });
   return finalize(`combine: remove ${name}`);

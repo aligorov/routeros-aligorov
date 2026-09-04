@@ -97,5 +97,10 @@ export async function remotePublishApp(
 }
 
 export async function remoteRemoveApp(name: string): Promise<RemoteResult> {
-  return apply(name, null, `combine: remove ${name}`);
+  // папка может отличаться от отображаемого имени — ищем реальный dir
+  const gh = remoteClient();
+  const apps = await remoteReadApps(gh);
+  const entry = apps.find((a) => a.dir === name.toLowerCase() || a.manifest?.name === name);
+  const dir = entry ? entry.dir : name.toLowerCase();
+  return apply(dir, null, `combine: remove ${name}`);
 }
