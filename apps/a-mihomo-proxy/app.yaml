@@ -1,0 +1,39 @@
+name: A-mihomo-proxy
+descr: "Mihomo (Clash.Meta) TPROXY-прокси с WebUI. Сначала один раз прогоните router-setup.rsc — см. README"
+page: https://github.com/Medium1992/mihomo-proxy-ros
+category: networking
+icon: icon.png
+auto-update: false
+networks:
+  mihomo:
+    name: MihomoProxyRoS
+    external: true
+services:
+  a-mihomo-proxy:
+    image: docker.io/medium1992/mihomo-proxy-ros:latest
+    ports:
+      - 8090:80/tcp:web
+      - 9090:9090/tcp
+    environment:
+      UI_SECRET: "[secret:ui-secret]"
+      BASIC_AUTH_USER: admin
+      FAKE_IP_RANGE: 198.18.0.0/15
+      FAKE_IP_TTL: "10"
+      FAKE_IP_FILTER1: DOMAIN,www.youtube.com,real-ip
+      LOG_LEVEL: error
+      GROUP: YouTube,Telegram,Discord,META,Twitch
+      YOUTUBE_GEOSITE: youtube
+      TELEGRAM_GEOSITE: telegram
+      TELEGRAM_GEOIP: telegram
+      TELEGRAM_AS: AS62041,AS59930,AS62014,AS211157,AS44907
+      DISCORD_GEOSITE: discord
+      DISCORD_GEOIP: discord
+      META_GEOSITE: meta
+      META_GEOIP: facebook
+    volumes:
+      - mihomo-config:/root/.config/mihomo
+    restart: unless-stopped
+volumes:
+  mihomo-config: null
+secrets:
+  ui-secret: null

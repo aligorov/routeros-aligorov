@@ -1,9 +1,10 @@
 # =============================================================
-#  СГЕНЕРИРОВАН (scripts/build.sh | service) — НЕ РЕДАКТИРОВАТЬ
+#  СГЕНЕРИРОВАН scripts/build.sh — НЕ РЕДАКТИРОВАТЬ ВРУЧНУЮ
 #  Источники приложений: apps/*/app.yaml
 # =============================================================
 - name: A-mihomo-mikrotik
-  descr: mihomo (Clash) tunnel-gateway + mixed-прокси 1080 и панель — адаптация для RouterOS
+  descr: mihomo (Clash) tunnel-gateway + mixed-прокси 1080 и панель — адаптация для
+    RouterOS
   category: networking
   icon: https://aligorov.github.io/routeros-aligorov/apps/a-mihomo-mikrotik/icon.png
   auto-update: false
@@ -11,60 +12,101 @@
     a-mihomo-mikrotik:
       image: docker.io/wiktorbgu/mihomo-mikrotik:latest
       ports:
-        - 1080:1080/tcp
-        - 9091:9090/tcp:web
+      - 1080:1080/tcp
+      - 9091:9090/tcp:web
       environment:
-        UI_SECRET: "[secret:ui-secret]"
+        UI_SECRET: '[secret:ui-secret]'
         EXTERNAL_UI_URL: https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip
         LOG_LEVEL: error
-        DISABLE_NFTABLES: "1"
+        DISABLE_NFTABLES: '1'
         CONFIG: default_config.yaml
         WORKDIR: /etc/mihomo
-        HEALTH_CHECK_ENABLE: "true"
+        HEALTH_CHECK_ENABLE: 'true'
         HEALTH_CHECK_URL: https://www.gstatic.com/generate_204
-        HEALTH_CHECK_INTERVAL: "300"
-        HEALTH_CHECK_TIMEOUT: "5000"
-        HEALTH_CHECK_LAZY: "true"
-        HEALTH_CHECK_EXPECTED_STATUS: "204"
-        TOLERANCE: "10"
-        MIXED_PORT: "1080"
-        UI_PORT: "9090"
+        HEALTH_CHECK_INTERVAL: '300'
+        HEALTH_CHECK_TIMEOUT: '5000'
+        HEALTH_CHECK_LAZY: 'true'
+        HEALTH_CHECK_EXPECTED_STATUS: '204'
+        TOLERANCE: '10'
+        MIXED_PORT: '1080'
+        UI_PORT: '9090'
         EXTERNAL_CONTROLLER_ADDRESS: 0.0.0.0
         TUN_STACK: system
         TUN_INET4_ADDRESS: 198.19.0.1/30
         TUN_INET6_ADDRESS: fdfe:dcba:9876::1/126
-        TUN_AUTO_REDIRECT: "true"
-        TUN_AUTO_DETECT_INTERFACE: "true"
-        TUN_AUTO_ROUTE: "true"
-        TUN_DISABLE_ICMP_FORWARDING: "true"
+        TUN_AUTO_REDIRECT: 'true'
+        TUN_AUTO_DETECT_INTERFACE: 'true'
+        TUN_AUTO_ROUTE: 'true'
+        TUN_DISABLE_ICMP_FORWARDING: 'true'
         EXTERNAL_UI_PATH: ui
-        IPV6: "true"
+        IPV6: 'true'
         IP_VERSION: dual
-        PROVIDER_INTERVAL: "3600"
-        DNS_ENABLE: "true"
-        DNS_USE_SYSTEM_HOSTS: "true"
+        PROVIDER_INTERVAL: '3600'
+        DNS_ENABLE: 'true'
+        DNS_USE_SYSTEM_HOSTS: 'true'
         DNS_CACHE_ALGORITHM: arc
-        DNS_PREFER_H3: "false"
+        DNS_PREFER_H3: 'false'
         DNS_LISTEN: 0.0.0.0:53
         DNS_ENHANCED_MODE: fake-ip
         DNS_FAKE_IP_RANGE: 198.18.0.0/15
-        DNS_FAKE_IP_TTL: "1"
-        TCP_CONCURRENT: "true"
-        KEEP_ALIVE_IDLE: "60"
-        KEEP_ALIVE_INTERVAL: "30"
-        FIND_PROCESS_MODE: off
-        STORE_SELECTED: "true"
-        UNIFIED_DELAY: "true"
+        DNS_FAKE_IP_TTL: '1'
+        TCP_CONCURRENT: 'true'
+        KEEP_ALIVE_IDLE: '60'
+        KEEP_ALIVE_INTERVAL: '30'
+        FIND_PROCESS_MODE: false
+        STORE_SELECTED: 'true'
+        UNIFIED_DELAY: 'true'
         LOADBALANCE_STRATEGY: consistent-hashing
       volumes:
-        - mihomo-config:/etc/mihomo
+      - mihomo-config:/etc/mihomo
+      restart: unless-stopped
+  volumes:
+    mihomo-config: null
+  secrets:
+    ui-secret: null
+- name: A-mihomo-proxy
+  descr: Mihomo (Clash.Meta) TPROXY-прокси с WebUI. Сначала один раз прогоните router-setup.rsc
+    — см. README
+  page: https://github.com/Medium1992/mihomo-proxy-ros
+  category: networking
+  icon: https://aligorov.github.io/routeros-aligorov/apps/a-mihomo-proxy/icon.png
+  auto-update: false
+  networks:
+    mihomo:
+      name: MihomoProxyRoS
+      external: true
+  services:
+    a-mihomo-proxy:
+      image: docker.io/medium1992/mihomo-proxy-ros:latest
+      ports:
+      - 8090:80/tcp:web
+      - 9090:9090/tcp
+      environment:
+        UI_SECRET: '[secret:ui-secret]'
+        BASIC_AUTH_USER: admin
+        FAKE_IP_RANGE: 198.18.0.0/15
+        FAKE_IP_TTL: '10'
+        FAKE_IP_FILTER1: DOMAIN,www.youtube.com,real-ip
+        LOG_LEVEL: error
+        GROUP: YouTube,Telegram,Discord,META,Twitch
+        YOUTUBE_GEOSITE: youtube
+        TELEGRAM_GEOSITE: telegram
+        TELEGRAM_GEOIP: telegram
+        TELEGRAM_AS: AS62041,AS59930,AS62014,AS211157,AS44907
+        DISCORD_GEOSITE: discord
+        DISCORD_GEOIP: discord
+        META_GEOSITE: meta
+        META_GEOIP: facebook
+      volumes:
+      - mihomo-config:/root/.config/mihomo
       restart: unless-stopped
   volumes:
     mihomo-config: null
   secrets:
     ui-secret: null
 - name: A-mihomo-ros
-  descr: Ядро mihomo (Clash.Meta) + веб-панель ручной настройки config.yaml — для RouterOS 7.21+
+  descr: Ядро mihomo (Clash.Meta) + веб-панель ручной настройки config.yaml — для
+    RouterOS 7.21+
   category: networking
   icon: https://aligorov.github.io/routeros-aligorov/apps/a-mihomo-ros/icon.png
   auto-update: false
@@ -72,16 +114,16 @@
     a-mihomo-ros:
       image: docker.io/medium1992/mihomo-ros:latest
       ports:
-        - 8091:80/tcp:web
+      - 8091:80/tcp:web
       environment:
         BASIC_AUTH_USER: admin
       volumes:
-        - mihomo-config:/etc/mihomo
+      - mihomo-config:/etc/mihomo
       restart: unless-stopped
   volumes:
     mihomo-config: null
 - name: A-demo-nginx
-  descr: "Демо: nginx — проверка работоспособности app-store end-to-end"
+  descr: 'Демо: nginx — проверка работоспособности app-store end-to-end'
   page: https://nginx.org/
   category: development
   icon: https://aligorov.github.io/routeros-aligorov/apps/demo-nginx/icon.png
@@ -90,10 +132,11 @@
     demo-nginx:
       image: docker.io/library/nginx:1.27-alpine
       ports:
-        - 8080:80/tcp:web
+      - 8080:80/tcp:web
       restart: unless-stopped
 - name: A-vpn-manager
-  descr: "VPN user manager for MikroTik: WireGuard/OpenVPN/VLESS provisioning, AD sync, FreeRADIUS, self-service portal"
+  descr: 'VPN user manager for MikroTik: WireGuard/OpenVPN/VLESS provisioning, AD
+    sync, FreeRADIUS, self-service portal'
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/vpn-manager
   category: security
   icon: https://aligorov.github.io/routeros-aligorov/apps/vpn-manager/icon.png
@@ -107,12 +150,12 @@
         POSTGRES_PASSWORD: change-me
         POSTGRES_DB: vpn_creator
       volumes:
-        - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
       restart: unless-stopped
     app:
       image: ghcr.io/aligorov/routeros-aligorov/vpn-app:1.0.1
       ports:
-        - 3000:3000/tcp:web
+      - 3000:3000/tcp:web
       environment:
         DATABASE_URL: postgresql://vpn_user:__POSTGRES_PASSWORD__@localhost:5432/vpn_creator
         POSTGRES_PASSWORD: change-me
@@ -121,17 +164,17 @@
         ADMIN_DEFAULT_USERNAME: admin
         ADMIN_DEFAULT_PASSWORD: change-me
       volumes:
-        - radius-cfg:/app/freeradius
-        - app-data:/app/data
-        - downloads:/app/public/portal/downloads
+      - radius-cfg:/app/freeradius
+      - app-data:/app/data
+      - downloads:/app/public/portal/downloads
       restart: unless-stopped
     freeradius:
       image: ghcr.io/aligorov/routeros-aligorov/vpn-freeradius:1.0.2
       ports:
-        - 1812:1812/udp:radius-auth
-        - 1813:1813/udp:radius-acct
+      - 1812:1812/udp:radius-auth
+      - 1813:1813/udp:radius-acct
       volumes:
-        - radius-cfg:/radius-cfg:ro
+      - radius-cfg:/radius-cfg:ro
       restart: unless-stopped
   volumes:
     pgdata: {}
