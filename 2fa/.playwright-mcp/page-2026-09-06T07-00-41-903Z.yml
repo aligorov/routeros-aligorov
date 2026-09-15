@@ -1,0 +1,197 @@
+- generic [ref=f4e2]:
+  - generic [ref=f4e3]:
+    - progressbar [ref=f4e4]
+    - generic [ref=f4e12]:
+      - link [ref=f4e13] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f4e15]:
+        - button "Услуги" [ref=f4e16]
+        - button "Тарифы" [ref=f4e20]
+        - button "Готовые решения" [ref=f4e24]
+        - button "Разработчикам" [ref=f4e28]
+        - button "Вопросы и ответы" [ref=f4e32]
+      - button "Войти в аккаунт" [ref=f4e37]
+      - button [ref=f4e41] [cursor=pointer]
+    - generic [ref=f4e121]:
+      - generic [ref=f4e125]:
+        - link "BYTEHAND API v1" [ref=f4e126] [cursor=pointer]:
+          - /url: /developers/v1
+        - link "Начало работы" [ref=f4e128] [cursor=pointer]:
+          - /url: /developers/v1/getting-started
+        - generic [ref=f4e130]:
+          - button "Список методов" [expanded] [ref=f4e131] [cursor=pointer]
+          - region "Список методов" [ref=f4e137]:
+            - list [ref=f4e139]:
+              - listitem [ref=f4e140]:
+                - link "Обзор" [ref=f4e141] [cursor=pointer]:
+                  - /url: /developers/v1/methods
+              - listitem [ref=f4e143]:
+                - img [aria-hidden] [ref=f4e145] [cursor=pointer]: arrow_drop_down
+                - link "Пользователи" [ref=f4e146] [cursor=pointer]:
+                  - /url: /developers/v1/methods/group/users
+              - listitem [ref=f4e148]:
+                - img [aria-hidden] [ref=f4e150] [cursor=pointer]: arrow_drop_down
+                - link "СМС сообщения" [ref=f4e151] [cursor=pointer]:
+                  - /url: /developers/v1/methods/group/sms
+              - listitem [ref=f4e153]:
+                - img [aria-hidden] [ref=f4e155] [cursor=pointer]: arrow_drop_down
+                - link "Подписи отправителя СМС" [ref=f4e156] [cursor=pointer]:
+                  - /url: /developers/v1/methods/group/sms-signatures
+        - button "Список объектов" [ref=f4e159] [cursor=pointer]
+        - link "Обработка ошибок" [ref=f4e164] [cursor=pointer]:
+          - /url: /developers/v1/errors
+      - generic [ref=f4e168]:
+        - list [ref=f4e169]:
+          - listitem [ref=f4e170]:
+            - link "BYTEHAND API v1" [ref=f4e171] [cursor=pointer]:
+              - /url: /developers/v1
+          - listitem [ref=f4e172]:
+            - link "Список методов" [ref=f4e173] [cursor=pointer]:
+              - /url: /developers/v1/methods
+          - listitem [ref=f4e174]:
+            - link "СМС сообщения" [ref=f4e175] [cursor=pointer]:
+              - /url: /developers/v1/methods/group/sms
+          - listitem [ref=f4e176]:
+            - generic [ref=f4e177]: sendSms
+        - heading "sendSms" [level=1] [ref=f4e178]
+        - generic [ref=f4e179]:
+          - paragraph [ref=f4e180]: Отправляет одно СМС сообщение.
+          - heading "Запрос" [level=2] [ref=f4e182]
+          - generic [ref=f4e183]: GET https://api.bytehand.com/v1/send
+          - heading "Параметры" [level=3] [ref=f4e185]
+          - table [ref=f4e186]:
+            - rowgroup [ref=f4e187]:
+              - row [ref=f4e188]:
+                - columnheader "Параметры запроса" [ref=f4e189]
+                - columnheader [ref=f4e190]
+            - rowgroup [ref=f4e191]:
+              - row [ref=f4e192]:
+                - cell "from" [ref=f4e193]
+                - cell [ref=f4e194]:
+                  - paragraph [ref=f4e195]: string
+                  - paragraph [ref=f4e196]: Обязательный параметр. Подпись отправителя СМС, отображаемая в телефоне получателя. Необходимо предварительно зарегистрировать в личном кабинете и пройти модерацию менеджерами BYTEHAND. Динамическая подпись отправителя включается по специальному запросу.
+              - row [ref=f4e197]:
+                - cell "id" [ref=f4e198]
+                - cell [ref=f4e199]:
+                  - paragraph [ref=f4e200]: number
+                  - paragraph [ref=f4e201]: Обязательный параметр. Идентификатор пользователя.
+              - row [ref=f4e202]:
+                - cell "key" [ref=f4e203]
+                - cell "string Обязательный параметр. Уникальный ключ пользователя. Cтрока из 16 символов, пример AB48D920104CE241." [ref=f4e204]:
+                  - paragraph [ref=f4e205]: string
+                  - paragraph [ref=f4e206]:
+                    - text: Обязательный параметр.
+                    - generic [ref=f4e207]: Уникальный ключ пользователя. Cтрока из 16 символов, пример AB48D920104CE241.
+              - row [ref=f4e208]:
+                - cell "send_after" [ref=f4e209]
+                - cell [ref=f4e210]:
+                  - paragraph [ref=f4e211]: string
+                  - paragraph [ref=f4e212]: Необязательный параметр. Дата и время, когда требуется отправить сообщение. По умолчанию сообщение отправляется немедленно.
+              - row [ref=f4e213]:
+                - cell "text" [ref=f4e214]
+                - cell [ref=f4e215]:
+                  - paragraph [ref=f4e216]: string
+                  - paragraph [ref=f4e217]: Обязательный параметр. Текст отправляемого сообщения. Максимальный размер не более 800 символов, некоторые операторы связи могут вводить дополнительные ограничения. Сообщение при необходимости будет разбито на несколько СМС, отправленных абоненту и оплаченных по отдельности. Размер одного СМС – 160 символов в латинице или 70 символов в кириллице. При разбивке сообщения на несколько СМС в каждую часть добавляется заголовок для объединения частей в одно сообщение на телефоне получателя, и максимальная длина становится 67 для кириллицы и 153 для латинских букв.
+              - row [ref=f4e218]:
+                - cell "to" [ref=f4e219]
+                - cell [ref=f4e220]:
+                  - paragraph [ref=f4e221]: string
+                  - paragraph [ref=f4e222]: Обязательный параметр. Один номер телефона получателя СМС сообщения. Будет автоматически преобразован в международный формат телефонных номеров.
+          - heading "Авторизация" [level=3] [ref=f4e224]
+          - paragraph [ref=f4e225]: Не требует авторизации и наличия каких-то определённых прав доступа.
+          - heading "Ответ" [level=2] [ref=f4e227]
+          - paragraph [ref=f4e228]: Поле description содержит идентификатор отправленного СМС сообщения.
+          - heading "Пример" [level=2] [ref=f4e230]
+          - paragraph [ref=f4e231]: Запрос
+          - generic [ref=f4e232]: GET https://api.bytehand.com/v1/send?send_after=2017-01-17%2010%3A00%3A00&from=MyShop&id=71234&to=%2B79167654321&text=Today%20only!%2020%25%20off%20for%20all%20goods!!&key=AB48D920104CE241
+          - paragraph [ref=f4e233]: Ответ
+          - generic [ref=f4e234]: "Status Code: 200 Content-Type: application/json;charset=UTF-8 Cache-Control: no-cache, no-store, max-age=0, must-revalidate Pragma: no-cache { \"status\": 0, \"description\": \"164030961834893019\" }"
+        - separator
+        - separator [ref=f4e235]
+        - generic [ref=f4e236]:
+          - generic [ref=f4e237]: Нужна помощь? Посетите нашу страницу поддержки
+          - button "Связаться с нами" [ref=f4e238]
+    - generic [ref=f4e52]:
+      - generic [ref=f4e53]:
+        - generic [ref=f4e54]:
+          - generic [ref=f4e55]:
+            - heading "BYTEHAND" [level=2] [ref=f4e56]
+            - list [ref=f4e57]:
+              - listitem [ref=f4e58]:
+                - link "Новости" [ref=f4e59] [cursor=pointer]:
+                  - /url: /news
+              - listitem [ref=f4e60]:
+                - link "О проекте" [ref=f4e61] [cursor=pointer]:
+                  - /url: /about
+              - listitem [ref=f4e62]:
+                - link "Условия использования" [ref=f4e63] [cursor=pointer]:
+                  - /url: /terms
+              - listitem [ref=f4e64]:
+                - link "Политика безопасности" [ref=f4e65] [cursor=pointer]:
+                  - /url: /privacy
+              - listitem [ref=f4e66]:
+                - link "Контакты" [ref=f4e67] [cursor=pointer]:
+                  - /url: /contacts
+          - generic [ref=f4e68]:
+            - heading "Информация" [level=2] [ref=f4e69]
+            - list [ref=f4e70]:
+              - listitem [ref=f4e71]:
+                - link "Тарифы для всех стран" [ref=f4e72] [cursor=pointer]:
+                  - /url: /pricing
+              - listitem [ref=f4e73]:
+                - link "Вопросы и ответы" [ref=f4e74] [cursor=pointer]:
+                  - /url: /faq
+              - listitem [ref=f4e75]:
+                - link "Рассылки" [ref=f4e76] [cursor=pointer]:
+                  - /url: /campaigns
+              - listitem [ref=f4e77]:
+                - link "Наши клиенты" [ref=f4e78] [cursor=pointer]:
+                  - /url: /customers
+              - listitem [ref=f4e79]:
+                - link "Карта сайта" [ref=f4e80] [cursor=pointer]:
+                  - /url: /site-map
+        - generic [ref=f4e81]:
+          - generic [ref=f4e82]:
+            - heading "С чего начать?" [level=2] [ref=f4e83]
+            - list [ref=f4e84]:
+              - listitem [ref=f4e85]:
+                - link "Варианты использования" [ref=f4e86] [cursor=pointer]:
+                  - /url: /cases
+              - listitem [ref=f4e87]:
+                - link "Услуги" [ref=f4e88] [cursor=pointer]:
+                  - /url: /services
+              - listitem [ref=f4e89]:
+                - link "Разработчикам" [ref=f4e90] [cursor=pointer]:
+                  - /url: /developers
+              - listitem [ref=f4e91]:
+                - link "Готовые решения" [ref=f4e92] [cursor=pointer]:
+                  - /url: /solutions
+              - listitem [ref=f4e93]:
+                - link "Связаться с нами" [ref=f4e94] [cursor=pointer]:
+                  - /url: /contact-us
+          - generic [ref=f4e95]:
+            - heading "Сотрудничество" [level=2] [ref=f4e96]
+            - list [ref=f4e97]:
+              - listitem [ref=f4e98]:
+                - link "Наши преимущества" [ref=f4e99] [cursor=pointer]:
+                  - /url: /advantages
+              - listitem [ref=f4e100]:
+                - link "Запросить индивидуальный тариф" [ref=f4e101] [cursor=pointer]:
+                  - /url: /request-quote
+              - listitem [ref=f4e102]:
+                - link "Партнёрская программа" [ref=f4e103] [cursor=pointer]:
+                  - /url: /affiliates
+              - listitem [ref=f4e104]:
+                - link "Представителям компаний" [ref=f4e105] [cursor=pointer]:
+                  - /url: /representatives
+              - listitem [ref=f4e106]:
+                - link "СМС-шлюзам" [ref=f4e107] [cursor=pointer]:
+                  - /url: /resellers
+      - generic [ref=f4e109]:
+        - heading "СМС-рассылки по всему миру! - SMSC, SMS-шлюз, HTTP REST API, SMPP-сервер" [level=3] [ref=f4e110]
+        - heading [level=3] [ref=f4e111]:
+          - text: Copyright © BYTEHAND.COM 2007 - 2026,
+          - link "Лицензия связи №177869" [ref=f4e112] [cursor=pointer]:
+            - /url: assets/images/license_telecom.jpg
+  - button [ref=f4e114] [cursor=pointer]:
+    - img [aria-hidden] [ref=f4e115]: keyboard_arrow_up

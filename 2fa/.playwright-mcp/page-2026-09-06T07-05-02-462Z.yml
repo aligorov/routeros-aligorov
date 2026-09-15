@@ -1,0 +1,1066 @@
+- generic [ref=f1e2]:
+  - generic [ref=f1e3]:
+    - progressbar [ref=f1e4]
+    - generic [ref=f1e12]:
+      - link [ref=f1e13] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f1e15]:
+        - button "Услуги" [ref=f1e16]
+        - button "Тарифы" [ref=f1e20]
+        - button "Готовые решения" [ref=f1e24]
+        - button "Разработчикам" [ref=f1e28]
+        - button "Вопросы и ответы" [ref=f1e32]
+      - button "Войти в аккаунт" [ref=f1e37]
+      - button [ref=f1e41] [cursor=pointer]
+    - generic [ref=f1e121]:
+      - generic [ref=f1e125]:
+        - link "BYTEHAND" [ref=f1e126] [cursor=pointer]:
+          - /url: /
+        - link "Тарифы" [ref=f1e128] [cursor=pointer]:
+          - /url: /pricing
+        - link "Варианты использования" [ref=f1e130] [cursor=pointer]:
+          - /url: /cases
+        - link "Готовые решения" [ref=f1e132] [cursor=pointer]:
+          - /url: /solutions
+        - generic [ref=f1e134]:
+          - button "Руководство разработчика" [expanded] [ref=f1e135] [cursor=pointer]
+          - region "Руководство разработчика" [ref=f1e141]:
+            - list [ref=f1e143]:
+              - listitem [ref=f1e144]:
+                - link "Обзор" [ref=f1e145] [cursor=pointer]:
+                  - /url: /developers
+              - listitem [ref=f1e147]:
+                - link "BYTEHAND API v2" [ref=f1e148] [cursor=pointer]:
+                  - /url: /developers/v2
+              - listitem [ref=f1e150]:
+                - link "BYTEHAND API v1" [ref=f1e151] [cursor=pointer]:
+                  - /url: /developers/v1
+              - listitem [ref=f1e153]:
+                - link "SMPP шлюз" [ref=f1e154] [cursor=pointer]:
+                  - /url: /developers/smpp
+        - link "Вопросы и ответы" [ref=f1e156] [cursor=pointer]:
+          - /url: /faq
+        - link "Связаться с нами" [ref=f1e158] [cursor=pointer]:
+          - /url: /contact-us
+      - generic [ref=f1e162]:
+        - list [ref=f1e163]:
+          - listitem [ref=f1e164]:
+            - link "BYTEHAND" [ref=f1e165] [cursor=pointer]:
+              - /url: /
+          - listitem [ref=f1e166]:
+            - generic [ref=f1e167]: Тарифы
+        - heading "Тарифы" [level=1] [ref=f1e168]
+        - heading "Отправка СМС по России" [level=2] [ref=f1e170]
+        - paragraph [ref=f1e171]: С 2014 года операторы связи РФ не поддерживают гарантированную моментальную доставку СМС через интернет-сервисы для клиентов-физических лиц, работающих без договора с СМС-шлюзом.
+        - paragraph [ref=f1e172]: BYTEHAND использует лучшие технологии для высокого уровня доставки СМС даже на тарифе по умолчанию, однако всё же рекомендует компаниям-клиентам выбирать один из ПРЯМЫХ тарифов, описанных ниже. Только на них операторами связи гарантируется 100% моментальная доставка.
+        - generic [ref=f1e174]:
+          - img [aria-hidden] [ref=f1e175]: language
+          - paragraph [ref=f1e176]: Тарифные планы влияют на отправку сообщений по России, отправка СМС сообщений по всему миру не зависит от выбранного варианта подключения и действует как для физических, так и для юридических лиц.
+        - heading "Тариф с подписью в тексте СМС (без заключения договора, по умолчанию при регистрации в BYTEHAND)" [level=3] [ref=f1e178]
+        - generic [ref=f1e180]:
+          - img [aria-hidden] [ref=f1e181]: info
+          - paragraph [ref=f1e182]: Этим тарифом могут воспользоваться как физические лица, так и юридические лица!
+        - generic [ref=f1e184]:
+          - generic [ref=f1e186]:
+            - generic [ref=f1e187]: "Страна: Описание"
+            - generic [ref=f1e188]: Цена
+            - generic [ref=f1e189]: Примечания
+          - generic [ref=f1e190]:
+            - generic [ref=f1e191]:
+              - generic [ref=f1e192]:
+                - heading "Ангола" [level=3] [ref=f1e193]
+                - heading "Колумбия" [level=3] [ref=f1e197]
+                - heading "Коста-Рика" [level=3] [ref=f1e201]
+                - heading "Лаос" [level=3] [ref=f1e205]
+                - heading "Либерия" [level=3] [ref=f1e209]
+                - heading "Южно-Африканская Республика" [level=3] [ref=f1e213]
+                - heading "Абхазия" [level=3] [ref=f1e217]
+              - heading "2,60 ₽" [level=3] [ref=f1e222]
+            - generic [ref=f1e224]:
+              - generic [ref=f1e225]:
+                - heading "Чили" [level=3] [ref=f1e226]
+                - heading "Кипр" [level=3] [ref=f1e230]
+                - heading "Республика Корея" [level=3] [ref=f1e234]
+              - heading "3,60 ₽" [level=3] [ref=f1e239]
+            - generic [ref=f1e241]:
+              - heading "Бахрейн" [level=3] [ref=f1e243]
+              - heading "4,00 ₽" [level=3] [ref=f1e248]
+            - generic [ref=f1e250]:
+              - generic [ref=f1e251]:
+                - heading "Эстония" [level=3] [ref=f1e252]
+                - heading "Греция" [level=3] [ref=f1e256]
+                - heading "Испания" [level=3] [ref=f1e260]
+                - heading "Швеция" [level=3] [ref=f1e264]
+              - heading "4,60 ₽" [level=3] [ref=f1e269]
+            - generic [ref=f1e271]:
+              - generic [ref=f1e272]:
+                - heading "Андорра" [level=3] [ref=f1e273]
+                - heading "Япония" [level=3] [ref=f1e277]
+                - heading "Мальта" [level=3] [ref=f1e281]
+                - heading "Таджикистан" [level=3] [ref=f1e285]
+              - heading "5,00 ₽" [level=3] [ref=f1e290]
+            - generic [ref=f1e292]:
+              - heading "Китай" [level=3] [ref=f1e294]
+              - heading "6,00 ₽" [level=3] [ref=f1e299]
+            - generic [ref=f1e301]:
+              - generic [ref=f1e302]:
+                - heading "Бельгия" [level=3] [ref=f1e303]
+                - heading "Куба" [level=3] [ref=f1e307]
+                - heading "Дания" [level=3] [ref=f1e311]
+                - heading "Финляндия" [level=3] [ref=f1e315]
+                - heading "Исландия" [level=3] [ref=f1e319]
+                - heading "Литва" [level=3] [ref=f1e323]
+                - heading "Польша" [level=3] [ref=f1e327]
+                - heading "Румыния" [level=3] [ref=f1e331]
+                - heading "Россия" [level=3] [ref=f1e335]
+                - heading "Сингапур" [level=3] [ref=f1e339]
+                - heading "Словакия" [level=3] [ref=f1e343]
+                - heading "Таиланд" [level=3] [ref=f1e347]
+                - heading "Уругвай" [level=3] [ref=f1e351]
+              - heading "7,00 ₽" [level=3] [ref=f1e356]
+            - generic [ref=f1e358]:
+              - generic [ref=f1e359]:
+                - heading "Боливия" [level=3] [ref=f1e360]
+                - heading "Тайвань" [level=3] [ref=f1e364]
+                - heading "Грузия" [level=3] [ref=f1e368]
+                - heading "Индия" [level=3] [ref=f1e372]
+                - heading "Латвия" [level=3] [ref=f1e376]
+                - heading "Новая Зеландия" [level=3] [ref=f1e380]
+                - heading "Парагвай" [level=3] [ref=f1e384]
+              - heading "8,00 ₽" [level=3] [ref=f1e389]
+            - generic [ref=f1e391]:
+              - generic [ref=f1e392]:
+                - 'heading "Россия: ПАО \"Мобильные ТелеСистемы\"" [level=3] [ref=f1e393]'
+                - 'heading "Россия: ПАО \"МегаФон\"" [level=3] [ref=f1e397]'
+                - 'heading "Россия: ООО \"Скартел\"" [level=3] [ref=f1e401]'
+              - heading "8,50 ₽" [level=3] [ref=f1e406]
+            - generic [ref=f1e408]:
+              - generic [ref=f1e409]:
+                - 'heading "Россия: ПАО \"Вымпел-Коммуникации\"" [level=3] [ref=f1e410]'
+                - 'heading "Россия: ООО \"Т2 Мобайл\"" [level=3] [ref=f1e414]'
+              - heading "9,00 ₽" [level=3] [ref=f1e419]
+            - generic [ref=f1e421]:
+              - generic [ref=f1e422]:
+                - heading "Аргентина" [level=3] [ref=f1e423]
+                - heading "Австралия" [level=3] [ref=f1e427]
+                - heading "Бразилия" [level=3] [ref=f1e431]
+                - heading "Камбоджа" [level=3] [ref=f1e435]
+                - heading "Камерун" [level=3] [ref=f1e439]
+                - heading "Канада" [level=3] [ref=f1e443]
+                - heading "Конго - Браззавиль" [level=3] [ref=f1e447]
+                - heading "Хорватия" [level=3] [ref=f1e451]
+                - heading "Гонконг" [level=3] [ref=f1e455]
+                - heading "Ирландия" [level=3] [ref=f1e459]
+                - heading "Кувейт" [level=3] [ref=f1e463]
+                - heading "Мексика" [level=3] [ref=f1e467]
+                - heading "Норвегия" [level=3] [ref=f1e471]
+                - heading "Вьетнам" [level=3] [ref=f1e475]
+                - heading "Северная Македония" [level=3] [ref=f1e479]
+                - heading "Великобритания" [level=3] [ref=f1e483]
+              - heading "10,00 ₽" [level=3] [ref=f1e488]
+            - generic [ref=f1e490]:
+              - heading "Словения" [level=3] [ref=f1e492]
+              - heading "11,00 ₽" [level=3] [ref=f1e497]
+            - generic [ref=f1e499]:
+              - generic [ref=f1e500]:
+                - heading "Туркменистан" [level=3] [ref=f1e501]
+                - heading "Соединенные Штаты" [level=3] [ref=f1e505]
+              - heading "12,00 ₽" [level=3] [ref=f1e510]
+            - generic [ref=f1e512]:
+              - generic [ref=f1e513]:
+                - heading "Армения" [level=3] [ref=f1e514]
+                - heading "Индонезия" [level=3] [ref=f1e518]
+                - heading "Саудовская Аравия" [level=3] [ref=f1e522]
+              - heading "13,00 ₽" [level=3] [ref=f1e527]
+            - generic [ref=f1e529]:
+              - generic [ref=f1e530]:
+                - heading "Болгария" [level=3] [ref=f1e531]
+                - heading "Черногория" [level=3] [ref=f1e535]
+              - heading "15,00 ₽" [level=3] [ref=f1e540]
+            - generic [ref=f1e542]:
+              - generic [ref=f1e543]:
+                - heading "Монголия" [level=3] [ref=f1e544]
+                - heading "Непал" [level=3] [ref=f1e548]
+              - heading "18,00 ₽" [level=3] [ref=f1e553]
+            - generic [ref=f1e555]:
+              - generic [ref=f1e556]:
+                - heading "Беларусь" [level=3] [ref=f1e557]
+                - heading "Венесуэла" [level=3] [ref=f1e561]
+              - heading "21,00 ₽" [level=3] [ref=f1e566]
+            - generic [ref=f1e568]:
+              - heading "Босния и Герцеговина" [level=3] [ref=f1e570]
+              - heading "22,00 ₽" [level=3] [ref=f1e575]
+            - generic [ref=f1e577]:
+              - generic [ref=f1e578]:
+                - heading "Малайзия" [level=3] [ref=f1e579]
+                - heading "Филиппины" [level=3] [ref=f1e583]
+                - heading "ОАЭ" [level=3] [ref=f1e587]
+              - heading "25,00 ₽" [level=3] [ref=f1e592]
+            - generic [ref=f1e594]:
+              - generic [ref=f1e595]:
+                - heading "Другие страны" [level=3] [ref=f1e596]
+                - heading "Киргизия" [level=3] [ref=f1e600]
+                - heading "Узбекистан" [level=3] [ref=f1e604]
+              - heading "30,00 ₽" [level=3] [ref=f1e609]
+            - generic [ref=f1e611]:
+              - heading "Другие страны" [level=3] [ref=f1e613]
+              - heading [level=3] [ref=f1e618]:
+                - link "В соответствии с тарифами на отправку СМС по всему миру" [ref=f1e619] [cursor=pointer]:
+                  - /url: /pricing#sending-international
+        - paragraph [ref=f1e620]: "Особенности тарифного плана:"
+        - list [ref=f1e621]:
+          - listitem [ref=f1e622]: Тариф без абонентской платы за подпись;
+          - listitem [ref=f1e623]:
+            - generic [ref=f1e624]: При отправке СМС абонентам в России сервис будет вставлять вашу подпись в начало текста СМС, а само сообщение отправлять от цифрового номера или от нейтральной буквенной подписи, в зависимости от оператора, например BYTEHAND, BH SMS, MSG и иные
+            - text: .
+        - paragraph [ref=f1e625]: "Как подключить тарифный план:"
+        - list [ref=f1e626]:
+          - listitem [ref=f1e627]: Включается по умолчанию при создании аккаунта.
+        - heading "Тариф с подписью в тексте СМС" [level=3] [ref=f1e629]
+        - generic [ref=f1e631]:
+          - img [aria-hidden] [ref=f1e632]: warning
+          - paragraph [ref=f1e633]: Этим тарифом могут воспользоваться только юридические лица после заключения контракта с сервисом BYTEHAND!
+        - generic [ref=f1e635]:
+          - generic [ref=f1e637]:
+            - generic [ref=f1e638]: "Страна: Описание"
+            - generic [ref=f1e639]: Цена
+            - generic [ref=f1e640]: Примечания
+          - generic [ref=f1e641]:
+            - generic [ref=f1e642]:
+              - generic [ref=f1e643]:
+                - heading "Ангола" [level=3] [ref=f1e644]
+                - heading "Колумбия" [level=3] [ref=f1e648]
+                - heading "Коста-Рика" [level=3] [ref=f1e652]
+                - heading "Лаос" [level=3] [ref=f1e656]
+                - heading "Либерия" [level=3] [ref=f1e660]
+                - heading "Южно-Африканская Республика" [level=3] [ref=f1e664]
+                - heading "Абхазия" [level=3] [ref=f1e668]
+              - heading "2,60 ₽" [level=3] [ref=f1e673]
+            - generic [ref=f1e675]:
+              - generic [ref=f1e676]:
+                - heading "Чили" [level=3] [ref=f1e677]
+                - heading "Кипр" [level=3] [ref=f1e681]
+                - heading "Республика Корея" [level=3] [ref=f1e685]
+              - heading "3,60 ₽" [level=3] [ref=f1e690]
+            - generic [ref=f1e692]:
+              - heading "Бахрейн" [level=3] [ref=f1e694]
+              - heading "4,00 ₽" [level=3] [ref=f1e699]
+            - generic [ref=f1e701]:
+              - generic [ref=f1e702]:
+                - heading "Эстония" [level=3] [ref=f1e703]
+                - heading "Греция" [level=3] [ref=f1e707]
+                - heading "Испания" [level=3] [ref=f1e711]
+                - heading "Швеция" [level=3] [ref=f1e715]
+              - heading "4,60 ₽" [level=3] [ref=f1e720]
+            - generic [ref=f1e722]:
+              - generic [ref=f1e723]:
+                - heading "Андорра" [level=3] [ref=f1e724]
+                - heading "Япония" [level=3] [ref=f1e728]
+                - heading "Мальта" [level=3] [ref=f1e732]
+                - heading "Таджикистан" [level=3] [ref=f1e736]
+              - heading "5,00 ₽" [level=3] [ref=f1e741]
+            - generic [ref=f1e743]:
+              - heading "Китай" [level=3] [ref=f1e745]
+              - heading "6,00 ₽" [level=3] [ref=f1e750]
+            - generic [ref=f1e752]:
+              - generic [ref=f1e753]:
+                - heading "Бельгия" [level=3] [ref=f1e754]
+                - heading "Куба" [level=3] [ref=f1e758]
+                - heading "Дания" [level=3] [ref=f1e762]
+                - heading "Финляндия" [level=3] [ref=f1e766]
+                - heading "Исландия" [level=3] [ref=f1e770]
+                - heading "Литва" [level=3] [ref=f1e774]
+                - heading "Польша" [level=3] [ref=f1e778]
+                - heading "Румыния" [level=3] [ref=f1e782]
+                - heading "Сингапур" [level=3] [ref=f1e786]
+                - heading "Словакия" [level=3] [ref=f1e790]
+                - heading "Таиланд" [level=3] [ref=f1e794]
+                - heading "Уругвай" [level=3] [ref=f1e798]
+              - heading "7,00 ₽" [level=3] [ref=f1e803]
+            - generic [ref=f1e805]:
+              - heading "Россия" [level=3] [ref=f1e807]
+              - heading "7,80 ₽" [level=3] [ref=f1e812]
+            - generic [ref=f1e814]:
+              - generic [ref=f1e815]:
+                - heading "Боливия" [level=3] [ref=f1e816]
+                - heading "Тайвань" [level=3] [ref=f1e820]
+                - heading "Грузия" [level=3] [ref=f1e824]
+                - heading "Индия" [level=3] [ref=f1e828]
+                - heading "Латвия" [level=3] [ref=f1e832]
+                - heading "Новая Зеландия" [level=3] [ref=f1e836]
+                - heading "Парагвай" [level=3] [ref=f1e840]
+                - 'heading "Россия: ПАО \"МегаФон\"" [level=3] [ref=f1e844]'
+                - 'heading "Россия: ООО \"Скартел\"" [level=3] [ref=f1e848]'
+              - heading "8,00 ₽" [level=3] [ref=f1e853]
+            - generic [ref=f1e855]:
+              - generic [ref=f1e856]:
+                - 'heading "Россия: ПАО \"Вымпел-Коммуникации\"" [level=3] [ref=f1e857]'
+                - 'heading "Россия: ПАО \"Мобильные ТелеСистемы\"" [level=3] [ref=f1e861]'
+                - 'heading "Россия: ООО \"Т2 Мобайл\"" [level=3] [ref=f1e865]'
+              - heading "8,50 ₽" [level=3] [ref=f1e870]
+            - generic [ref=f1e872]:
+              - generic [ref=f1e873]:
+                - heading "Аргентина" [level=3] [ref=f1e874]
+                - heading "Австралия" [level=3] [ref=f1e878]
+                - heading "Бразилия" [level=3] [ref=f1e882]
+                - heading "Камбоджа" [level=3] [ref=f1e886]
+                - heading "Камерун" [level=3] [ref=f1e890]
+                - heading "Канада" [level=3] [ref=f1e894]
+                - heading "Конго - Браззавиль" [level=3] [ref=f1e898]
+                - heading "Хорватия" [level=3] [ref=f1e902]
+                - heading "Гонконг" [level=3] [ref=f1e906]
+                - heading "Ирландия" [level=3] [ref=f1e910]
+                - heading "Кувейт" [level=3] [ref=f1e914]
+                - heading "Мексика" [level=3] [ref=f1e918]
+                - heading "Вьетнам" [level=3] [ref=f1e922]
+                - heading "Северная Македония" [level=3] [ref=f1e926]
+                - heading "Великобритания" [level=3] [ref=f1e930]
+              - heading "10,00 ₽" [level=3] [ref=f1e935]
+            - generic [ref=f1e937]:
+              - heading "Словения" [level=3] [ref=f1e939]
+              - heading "11,00 ₽" [level=3] [ref=f1e944]
+            - generic [ref=f1e946]:
+              - generic [ref=f1e947]:
+                - heading "Туркменистан" [level=3] [ref=f1e948]
+                - heading "Соединенные Штаты" [level=3] [ref=f1e952]
+              - heading "12,00 ₽" [level=3] [ref=f1e957]
+            - generic [ref=f1e959]:
+              - generic [ref=f1e960]:
+                - heading "Армения" [level=3] [ref=f1e961]
+                - heading "Индонезия" [level=3] [ref=f1e965]
+                - heading "Саудовская Аравия" [level=3] [ref=f1e969]
+              - heading "13,00 ₽" [level=3] [ref=f1e974]
+            - generic [ref=f1e976]:
+              - generic [ref=f1e977]:
+                - heading "Болгария" [level=3] [ref=f1e978]
+                - heading "Черногория" [level=3] [ref=f1e982]
+              - heading "15,00 ₽" [level=3] [ref=f1e987]
+            - generic [ref=f1e989]:
+              - generic [ref=f1e990]:
+                - heading "Монголия" [level=3] [ref=f1e991]
+                - heading "Непал" [level=3] [ref=f1e995]
+              - heading "18,00 ₽" [level=3] [ref=f1e1000]
+            - generic [ref=f1e1002]:
+              - generic [ref=f1e1003]:
+                - heading "Беларусь" [level=3] [ref=f1e1004]
+                - heading "Венесуэла" [level=3] [ref=f1e1008]
+              - heading "21,00 ₽" [level=3] [ref=f1e1013]
+            - generic [ref=f1e1015]:
+              - generic [ref=f1e1016]:
+                - heading "Босния и Герцеговина" [level=3] [ref=f1e1017]
+                - heading "Украина" [level=3] [ref=f1e1021]
+              - heading "22,00 ₽" [level=3] [ref=f1e1026]
+            - generic [ref=f1e1028]:
+              - generic [ref=f1e1029]:
+                - heading "Малайзия" [level=3] [ref=f1e1030]
+                - heading "Филиппины" [level=3] [ref=f1e1034]
+                - heading "ОАЭ" [level=3] [ref=f1e1038]
+              - heading "25,00 ₽" [level=3] [ref=f1e1043]
+            - generic [ref=f1e1045]:
+              - generic [ref=f1e1046]:
+                - heading "Другие страны" [level=3] [ref=f1e1047]
+                - heading "Киргизия" [level=3] [ref=f1e1051]
+                - heading "Узбекистан" [level=3] [ref=f1e1055]
+              - heading "30,00 ₽" [level=3] [ref=f1e1060]
+            - generic [ref=f1e1062]:
+              - heading "Другие страны" [level=3] [ref=f1e1064]
+              - heading [level=3] [ref=f1e1069]:
+                - link "В соответствии с тарифами на отправку СМС по всему миру" [ref=f1e1070] [cursor=pointer]:
+                  - /url: /pricing#sending-international
+        - paragraph [ref=f1e1071]: "Особенности тарифного плана:"
+        - list [ref=f1e1072]:
+          - listitem [ref=f1e1073]: Тариф с гарантированной доставкой СМС, который можно быстро подключить, без модерации вашей подписи операторами связи;
+          - listitem [ref=f1e1074]: Тариф без абонентской платы за подпись;
+          - listitem [ref=f1e1075]:
+            - generic [ref=f1e1076]: При отправке СМС абонентам в России сервис будет вставлять вашу подпись в начало текста СМС, а само сообщение отправлять от нейтральной буквенной подписи, в зависимости от оператора, например BYTEHAND, BH SMS, MSG и иные
+            - text: .
+        - paragraph [ref=f1e1077]: "Как подключить тарифный план:"
+        - list [ref=f1e1078]:
+          - listitem [ref=f1e1079]: Войдите в свой аккаунт BYTEHAND;
+          - listitem [ref=f1e1080]:
+            - generic [ref=f1e1081]:
+              - text: Перейдите в раздел Документы → страница
+              - link "Договор" [ref=f1e1083] [cursor=pointer]:
+                - /url: /secure/documents/contract
+              - text: → нажмите кнопку Начать подписание договора и следуйте дальнейшим инструкциям
+            - text: ;
+          - listitem [ref=f1e1084]:
+            - generic [ref=f1e1085]:
+              - text: Перейдите в раздел
+              - link "Служба поддержки" [ref=f1e1087] [cursor=pointer]:
+                - /url: /contact-us
+              - text: и отправьте сообщение с указанием тарифа, который вам требуется
+            - text: .
+        - heading "Тариф с вашей подписью СМС (кроме МТС и Мегафон), без абонентской платы" [level=3] [ref=f1e1089]
+        - generic [ref=f1e1091]:
+          - img [aria-hidden] [ref=f1e1092]: warning
+          - paragraph [ref=f1e1093]: Этим тарифом могут воспользоваться только юридические лица после заключения контракта с сервисом BYTEHAND!
+        - generic [ref=f1e1095]:
+          - generic [ref=f1e1097]:
+            - generic [ref=f1e1098]: "Страна: Описание"
+            - generic [ref=f1e1099]: Цена
+            - generic [ref=f1e1100]: Примечания
+          - generic [ref=f1e1101]:
+            - generic [ref=f1e1102]:
+              - generic [ref=f1e1103]:
+                - heading "Ангола" [level=3] [ref=f1e1104]
+                - heading "Колумбия" [level=3] [ref=f1e1108]
+                - heading "Коста-Рика" [level=3] [ref=f1e1112]
+                - heading "Лаос" [level=3] [ref=f1e1116]
+                - heading "Либерия" [level=3] [ref=f1e1120]
+                - heading "Южно-Африканская Республика" [level=3] [ref=f1e1124]
+                - heading "Абхазия" [level=3] [ref=f1e1128]
+              - heading "2,60 ₽" [level=3] [ref=f1e1133]
+            - generic [ref=f1e1135]:
+              - generic [ref=f1e1136]:
+                - heading "Чили" [level=3] [ref=f1e1137]
+                - heading "Кипр" [level=3] [ref=f1e1141]
+                - heading "Республика Корея" [level=3] [ref=f1e1145]
+              - heading "3,60 ₽" [level=3] [ref=f1e1150]
+            - generic [ref=f1e1152]:
+              - heading "Бахрейн" [level=3] [ref=f1e1154]
+              - heading "4,00 ₽" [level=3] [ref=f1e1159]
+            - generic [ref=f1e1161]:
+              - generic [ref=f1e1162]:
+                - heading "Эстония" [level=3] [ref=f1e1163]
+                - heading "Греция" [level=3] [ref=f1e1167]
+                - heading "Испания" [level=3] [ref=f1e1171]
+                - heading "Швеция" [level=3] [ref=f1e1175]
+              - heading "4,60 ₽" [level=3] [ref=f1e1180]
+            - generic [ref=f1e1182]:
+              - generic [ref=f1e1183]:
+                - heading "Андорра" [level=3] [ref=f1e1184]
+                - heading "Япония" [level=3] [ref=f1e1188]
+                - heading "Мальта" [level=3] [ref=f1e1192]
+                - heading "Таджикистан" [level=3] [ref=f1e1196]
+              - heading "5,00 ₽" [level=3] [ref=f1e1201]
+            - generic [ref=f1e1203]:
+              - heading "Китай" [level=3] [ref=f1e1205]
+              - heading "6,00 ₽" [level=3] [ref=f1e1210]
+            - generic [ref=f1e1212]:
+              - generic [ref=f1e1213]:
+                - heading "Бельгия" [level=3] [ref=f1e1214]
+                - heading "Куба" [level=3] [ref=f1e1218]
+                - heading "Дания" [level=3] [ref=f1e1222]
+                - heading "Финляндия" [level=3] [ref=f1e1226]
+                - heading "Исландия" [level=3] [ref=f1e1230]
+                - heading "Литва" [level=3] [ref=f1e1234]
+                - heading "Польша" [level=3] [ref=f1e1238]
+                - heading "Румыния" [level=3] [ref=f1e1242]
+                - heading "Сингапур" [level=3] [ref=f1e1246]
+                - heading "Словакия" [level=3] [ref=f1e1250]
+                - heading "Таиланд" [level=3] [ref=f1e1254]
+                - heading "Уругвай" [level=3] [ref=f1e1258]
+              - heading "7,00 ₽" [level=3] [ref=f1e1263]
+            - generic [ref=f1e1265]:
+              - heading "Россия" [level=3] [ref=f1e1267]
+              - heading "7,80 ₽" [level=3] [ref=f1e1272]
+            - generic [ref=f1e1274]:
+              - generic [ref=f1e1275]:
+                - heading "Боливия" [level=3] [ref=f1e1276]
+                - heading "Тайвань" [level=3] [ref=f1e1280]
+                - heading "Грузия" [level=3] [ref=f1e1284]
+                - heading "Индия" [level=3] [ref=f1e1288]
+                - heading "Латвия" [level=3] [ref=f1e1292]
+                - heading "Новая Зеландия" [level=3] [ref=f1e1296]
+                - heading "Парагвай" [level=3] [ref=f1e1300]
+                - 'heading "Россия: ПАО \"МегаФон\"" [level=3] [ref=f1e1304]'
+                - 'heading "Россия: ООО \"Скартел\"" [level=3] [ref=f1e1308]'
+              - heading "8,00 ₽" [level=3] [ref=f1e1313]
+            - generic [ref=f1e1315]:
+              - 'heading "Россия: ПАО \"Вымпел-Коммуникации\"" [level=3] [ref=f1e1317]'
+              - heading "8,40 ₽" [level=3] [ref=f1e1322]
+              - generic [ref=f1e1323]: Пакетом по 5 СМСза 42,00 ₽
+            - generic [ref=f1e1325]:
+              - generic [ref=f1e1326]:
+                - 'heading "Россия: ПАО \"Мобильные ТелеСистемы\"" [level=3] [ref=f1e1327]'
+                - 'heading "Россия: ООО \"Т2 Мобайл\"" [level=3] [ref=f1e1331]'
+              - heading "8,50 ₽" [level=3] [ref=f1e1336]
+            - generic [ref=f1e1338]:
+              - generic [ref=f1e1339]:
+                - heading "Аргентина" [level=3] [ref=f1e1340]
+                - heading "Австралия" [level=3] [ref=f1e1344]
+                - heading "Бразилия" [level=3] [ref=f1e1348]
+                - heading "Камбоджа" [level=3] [ref=f1e1352]
+                - heading "Камерун" [level=3] [ref=f1e1356]
+                - heading "Канада" [level=3] [ref=f1e1360]
+                - heading "Конго - Браззавиль" [level=3] [ref=f1e1364]
+                - heading "Хорватия" [level=3] [ref=f1e1368]
+                - heading "Гонконг" [level=3] [ref=f1e1372]
+                - heading "Ирландия" [level=3] [ref=f1e1376]
+                - heading "Кувейт" [level=3] [ref=f1e1380]
+                - heading "Мексика" [level=3] [ref=f1e1384]
+                - heading "Вьетнам" [level=3] [ref=f1e1388]
+                - heading "Северная Македония" [level=3] [ref=f1e1392]
+                - heading "Великобритания" [level=3] [ref=f1e1396]
+              - heading "10,00 ₽" [level=3] [ref=f1e1401]
+            - generic [ref=f1e1403]:
+              - heading "Словения" [level=3] [ref=f1e1405]
+              - heading "11,00 ₽" [level=3] [ref=f1e1410]
+            - generic [ref=f1e1412]:
+              - generic [ref=f1e1413]:
+                - heading "Туркменистан" [level=3] [ref=f1e1414]
+                - heading "Соединенные Штаты" [level=3] [ref=f1e1418]
+              - heading "12,00 ₽" [level=3] [ref=f1e1423]
+            - generic [ref=f1e1425]:
+              - generic [ref=f1e1426]:
+                - heading "Армения" [level=3] [ref=f1e1427]
+                - heading "Индонезия" [level=3] [ref=f1e1431]
+                - heading "Саудовская Аравия" [level=3] [ref=f1e1435]
+              - heading "13,00 ₽" [level=3] [ref=f1e1440]
+            - generic [ref=f1e1442]:
+              - generic [ref=f1e1443]:
+                - heading "Болгария" [level=3] [ref=f1e1444]
+                - heading "Черногория" [level=3] [ref=f1e1448]
+              - heading "15,00 ₽" [level=3] [ref=f1e1453]
+            - generic [ref=f1e1455]:
+              - generic [ref=f1e1456]:
+                - heading "Монголия" [level=3] [ref=f1e1457]
+                - heading "Непал" [level=3] [ref=f1e1461]
+              - heading "18,00 ₽" [level=3] [ref=f1e1466]
+            - generic [ref=f1e1468]:
+              - generic [ref=f1e1469]:
+                - heading "Беларусь" [level=3] [ref=f1e1470]
+                - heading "Венесуэла" [level=3] [ref=f1e1474]
+              - heading "21,00 ₽" [level=3] [ref=f1e1479]
+            - generic [ref=f1e1481]:
+              - generic [ref=f1e1482]:
+                - heading "Босния и Герцеговина" [level=3] [ref=f1e1483]
+                - heading "Украина" [level=3] [ref=f1e1487]
+              - heading "22,00 ₽" [level=3] [ref=f1e1492]
+            - generic [ref=f1e1494]:
+              - generic [ref=f1e1495]:
+                - heading "Малайзия" [level=3] [ref=f1e1496]
+                - heading "Филиппины" [level=3] [ref=f1e1500]
+                - heading "ОАЭ" [level=3] [ref=f1e1504]
+              - heading "25,00 ₽" [level=3] [ref=f1e1509]
+            - generic [ref=f1e1511]:
+              - generic [ref=f1e1512]:
+                - heading "Другие страны" [level=3] [ref=f1e1513]
+                - heading "Киргизия" [level=3] [ref=f1e1517]
+                - heading "Узбекистан" [level=3] [ref=f1e1521]
+              - heading "30,00 ₽" [level=3] [ref=f1e1526]
+            - generic [ref=f1e1528]:
+              - heading "Другие страны" [level=3] [ref=f1e1530]
+              - heading [level=3] [ref=f1e1535]:
+                - link "В соответствии с тарифами на отправку СМС по всему миру" [ref=f1e1536] [cursor=pointer]:
+                  - /url: /pricing#sending-international
+        - paragraph [ref=f1e1537]: "Особенности тарифного плана:"
+        - list [ref=f1e1538]:
+          - listitem [ref=f1e1539]: Тариф с гарантированной доставкой СМС, подключение требует модерации документа на подпись операторами связи (5-10 рабочих дней);
+          - listitem [ref=f1e1540]: Тариф без абонентской платы за подпись;
+          - listitem [ref=f1e1541]:
+            - generic [ref=f1e1542]: Ваша подпись является отправителем СМС для всех операторов РФ, кроме МТС и Мегафон. При отправке СМС абонентам операторов МТС и Мегафон сервис будет вставлять вашу подпись в начало текста СМС, а само сообщение отправлять от нейтральной буквенной подписи, в зависимости от оператора, например BYTEHAND, BH SMS, MSG и иные
+            - text: ;
+          - listitem [ref=f1e1543]:
+            - generic [ref=f1e1544]: Тарификация пакетами для ПАО "Вымпел-Коммуникации" подразумевает оплату пакета из 5 (пяти) частей СМС одному абоненту от одной подписи отправителя. Оплата списывается в момент отправки первой СМС данному абоненту в текущем месяце. Если отправляемая первая СМС состоит менее чем из 5 частей, остальные СМС можно отправить бесплатно до истечения календарного месяца. Если количество отправленных СМС превышает 5 (пять) за календарный месяц, списывается оплата за 2й и последующие пакеты СМС
+            - text: .
+        - paragraph [ref=f1e1545]: "Как подключить тарифный план:"
+        - list [ref=f1e1546]:
+          - listitem [ref=f1e1547]: Войдите в свой аккаунт BYTEHAND;
+          - listitem [ref=f1e1548]:
+            - generic [ref=f1e1549]:
+              - text: Перейдите в раздел Документы → страница
+              - link "Договор" [ref=f1e1551] [cursor=pointer]:
+                - /url: /secure/documents/contract
+              - text: → нажмите кнопку Начать подписание договора и следуйте дальнейшим инструкциям
+            - text: ;
+          - listitem [ref=f1e1552]:
+            - generic [ref=f1e1553]:
+              - text: Перейдите в раздел
+              - link "Служба поддержки" [ref=f1e1555] [cursor=pointer]:
+                - /url: /contact-us
+              - text: и отправьте сообщение с указанием тарифа, который вам требуется
+            - text: .
+          - listitem [ref=f1e1556]: К сообщению сразу приложите скан документа, подтверждающего право вашей компании на подпись СМС (скан справки о владении доменом или товарным знаком).
+        - heading "Тариф с вашей подписью СМС, с абонентской платой" [level=3] [ref=f1e1558]
+        - generic [ref=f1e1560]:
+          - img [aria-hidden] [ref=f1e1561]: warning
+          - paragraph [ref=f1e1562]: Этим тарифом могут воспользоваться только юридические лица после заключения контракта с сервисом BYTEHAND!
+        - generic [ref=f1e1564]:
+          - generic [ref=f1e1566]:
+            - generic [ref=f1e1567]: "Страна: Описание"
+            - generic [ref=f1e1568]: Цена
+            - generic [ref=f1e1569]: Примечания
+          - generic [ref=f1e1570]:
+            - generic [ref=f1e1571]:
+              - generic [ref=f1e1572]:
+                - heading "Ангола" [level=3] [ref=f1e1573]
+                - heading "Колумбия" [level=3] [ref=f1e1577]
+                - heading "Коста-Рика" [level=3] [ref=f1e1581]
+                - heading "Лаос" [level=3] [ref=f1e1585]
+                - heading "Либерия" [level=3] [ref=f1e1589]
+                - heading "Южно-Африканская Республика" [level=3] [ref=f1e1593]
+                - heading "Абхазия" [level=3] [ref=f1e1597]
+              - heading "2,60 ₽" [level=3] [ref=f1e1602]
+            - generic [ref=f1e1604]:
+              - generic [ref=f1e1605]:
+                - heading "Чили" [level=3] [ref=f1e1606]
+                - heading "Кипр" [level=3] [ref=f1e1610]
+                - heading "Республика Корея" [level=3] [ref=f1e1614]
+              - heading "3,60 ₽" [level=3] [ref=f1e1619]
+            - generic [ref=f1e1621]:
+              - heading "Бахрейн" [level=3] [ref=f1e1623]
+              - heading "4,00 ₽" [level=3] [ref=f1e1628]
+            - generic [ref=f1e1630]:
+              - generic [ref=f1e1631]:
+                - heading "Эстония" [level=3] [ref=f1e1632]
+                - heading "Греция" [level=3] [ref=f1e1636]
+                - heading "Испания" [level=3] [ref=f1e1640]
+                - heading "Швеция" [level=3] [ref=f1e1644]
+              - heading "4,60 ₽" [level=3] [ref=f1e1649]
+            - generic [ref=f1e1651]:
+              - generic [ref=f1e1652]:
+                - heading "Андорра" [level=3] [ref=f1e1653]
+                - heading "Япония" [level=3] [ref=f1e1657]
+                - heading "Мальта" [level=3] [ref=f1e1661]
+                - heading "Таджикистан" [level=3] [ref=f1e1665]
+              - heading "5,00 ₽" [level=3] [ref=f1e1670]
+            - generic [ref=f1e1672]:
+              - heading "Китай" [level=3] [ref=f1e1674]
+              - heading "6,00 ₽" [level=3] [ref=f1e1679]
+            - generic [ref=f1e1681]:
+              - generic [ref=f1e1682]:
+                - heading "Бельгия" [level=3] [ref=f1e1683]
+                - heading "Куба" [level=3] [ref=f1e1687]
+                - heading "Дания" [level=3] [ref=f1e1691]
+                - heading "Финляндия" [level=3] [ref=f1e1695]
+                - heading "Исландия" [level=3] [ref=f1e1699]
+                - heading "Литва" [level=3] [ref=f1e1703]
+                - heading "Польша" [level=3] [ref=f1e1707]
+                - heading "Румыния" [level=3] [ref=f1e1711]
+                - heading "Сингапур" [level=3] [ref=f1e1715]
+                - heading "Словакия" [level=3] [ref=f1e1719]
+                - heading "Таиланд" [level=3] [ref=f1e1723]
+                - heading "Уругвай" [level=3] [ref=f1e1727]
+              - heading "7,00 ₽" [level=3] [ref=f1e1732]
+            - generic [ref=f1e1734]:
+              - heading "Россия" [level=3] [ref=f1e1736]
+              - heading "7,80 ₽" [level=3] [ref=f1e1741]
+            - generic [ref=f1e1743]:
+              - generic [ref=f1e1744]:
+                - heading "Боливия" [level=3] [ref=f1e1745]
+                - heading "Тайвань" [level=3] [ref=f1e1749]
+                - heading "Грузия" [level=3] [ref=f1e1753]
+                - heading "Индия" [level=3] [ref=f1e1757]
+                - heading "Латвия" [level=3] [ref=f1e1761]
+                - heading "Новая Зеландия" [level=3] [ref=f1e1765]
+                - heading "Парагвай" [level=3] [ref=f1e1769]
+              - heading "8,00 ₽" [level=3] [ref=f1e1774]
+            - generic [ref=f1e1776]:
+              - generic [ref=f1e1777]:
+                - 'heading "Россия: ПАО \"МегаФон\"" [level=3] [ref=f1e1778]'
+                - 'heading "Россия: ООО \"Скартел\"" [level=3] [ref=f1e1782]'
+              - heading "8,00 ₽" [level=3] [ref=f1e1787]
+              - generic [ref=f1e1788]: Пакетом по 5 СМСза 40,00 ₽
+            - generic [ref=f1e1790]:
+              - 'heading "Россия: ПАО \"Вымпел-Коммуникации\"" [level=3] [ref=f1e1792]'
+              - heading "8,40 ₽" [level=3] [ref=f1e1797]
+              - generic [ref=f1e1798]: Пакетом по 5 СМСза 42,00 ₽
+            - generic [ref=f1e1800]:
+              - generic [ref=f1e1801]:
+                - 'heading "Россия: ПАО \"Мобильные ТелеСистемы\"" [level=3] [ref=f1e1802]'
+                - 'heading "Россия: ООО \"Т2 Мобайл\"" [level=3] [ref=f1e1806]'
+              - heading "8,50 ₽" [level=3] [ref=f1e1811]
+            - generic [ref=f1e1813]:
+              - generic [ref=f1e1814]:
+                - heading "Аргентина" [level=3] [ref=f1e1815]
+                - heading "Австралия" [level=3] [ref=f1e1819]
+                - heading "Бразилия" [level=3] [ref=f1e1823]
+                - heading "Камбоджа" [level=3] [ref=f1e1827]
+                - heading "Камерун" [level=3] [ref=f1e1831]
+                - heading "Канада" [level=3] [ref=f1e1835]
+                - heading "Конго - Браззавиль" [level=3] [ref=f1e1839]
+                - heading "Хорватия" [level=3] [ref=f1e1843]
+                - heading "Гонконг" [level=3] [ref=f1e1847]
+                - heading "Ирландия" [level=3] [ref=f1e1851]
+                - heading "Кувейт" [level=3] [ref=f1e1855]
+                - heading "Мексика" [level=3] [ref=f1e1859]
+                - heading "Вьетнам" [level=3] [ref=f1e1863]
+                - heading "Северная Македония" [level=3] [ref=f1e1867]
+                - heading "Великобритания" [level=3] [ref=f1e1871]
+              - heading "10,00 ₽" [level=3] [ref=f1e1876]
+            - generic [ref=f1e1878]:
+              - heading "Словения" [level=3] [ref=f1e1880]
+              - heading "11,00 ₽" [level=3] [ref=f1e1885]
+            - generic [ref=f1e1887]:
+              - generic [ref=f1e1888]:
+                - heading "Туркменистан" [level=3] [ref=f1e1889]
+                - heading "Соединенные Штаты" [level=3] [ref=f1e1893]
+              - heading "12,00 ₽" [level=3] [ref=f1e1898]
+            - generic [ref=f1e1900]:
+              - generic [ref=f1e1901]:
+                - heading "Армения" [level=3] [ref=f1e1902]
+                - heading "Индонезия" [level=3] [ref=f1e1906]
+                - heading "Саудовская Аравия" [level=3] [ref=f1e1910]
+              - heading "13,00 ₽" [level=3] [ref=f1e1915]
+            - generic [ref=f1e1917]:
+              - generic [ref=f1e1918]:
+                - heading "Болгария" [level=3] [ref=f1e1919]
+                - heading "Черногория" [level=3] [ref=f1e1923]
+              - heading "15,00 ₽" [level=3] [ref=f1e1928]
+            - generic [ref=f1e1930]:
+              - generic [ref=f1e1931]:
+                - heading "Монголия" [level=3] [ref=f1e1932]
+                - heading "Непал" [level=3] [ref=f1e1936]
+              - heading "18,00 ₽" [level=3] [ref=f1e1941]
+            - generic [ref=f1e1943]:
+              - generic [ref=f1e1944]:
+                - heading "Беларусь" [level=3] [ref=f1e1945]
+                - heading "Венесуэла" [level=3] [ref=f1e1949]
+              - heading "21,00 ₽" [level=3] [ref=f1e1954]
+            - generic [ref=f1e1956]:
+              - generic [ref=f1e1957]:
+                - heading "Босния и Герцеговина" [level=3] [ref=f1e1958]
+                - heading "Украина" [level=3] [ref=f1e1962]
+              - heading "22,00 ₽" [level=3] [ref=f1e1967]
+            - generic [ref=f1e1969]:
+              - generic [ref=f1e1970]:
+                - heading "Малайзия" [level=3] [ref=f1e1971]
+                - heading "Филиппины" [level=3] [ref=f1e1975]
+                - heading "ОАЭ" [level=3] [ref=f1e1979]
+              - heading "25,00 ₽" [level=3] [ref=f1e1984]
+            - generic [ref=f1e1986]:
+              - generic [ref=f1e1987]:
+                - heading "Другие страны" [level=3] [ref=f1e1988]
+                - heading "Киргизия" [level=3] [ref=f1e1992]
+                - heading "Узбекистан" [level=3] [ref=f1e1996]
+              - heading "30,00 ₽" [level=3] [ref=f1e2001]
+            - generic [ref=f1e2003]:
+              - heading "Другие страны" [level=3] [ref=f1e2005]
+              - heading [level=3] [ref=f1e2010]:
+                - link "В соответствии с тарифами на отправку СМС по всему миру" [ref=f1e2011] [cursor=pointer]:
+                  - /url: /pricing#sending-international
+        - paragraph [ref=f1e2012]: "Особенности тарифного плана:"
+        - list [ref=f1e2013]:
+          - listitem [ref=f1e2014]: Тариф с гарантированной доставкой СМС, подключение требует модерации документа на подпись операторами связи (5-10 рабочих дней);
+          - listitem [ref=f1e2015]: Ваша подпись является отправителем СМС для всех операторов РФ;
+          - listitem [ref=f1e2016]: Тариф с ежемесячной абонентской платой 4600 руб. в месяц за каждую подпись, абонентская плата списывается в последних числах каждого календарного месяца;
+          - listitem [ref=f1e2017]:
+            - generic [ref=f1e2018]: Тарификация пакетами для ПАО "Вымпел-Коммуникации" подразумевает оплату пакета из 5 (пяти) частей СМС одному абоненту от одной подписи отправителя. Оплата списывается в момент отправки первой СМС данному абоненту в текущем месяце. Если отправляемая первая СМС состоит менее чем из 5 частей, остальные СМС можно отправить бесплатно до истечения календарного месяца. Если количество отправленных СМС превышает 5 (пять) за календарный месяц, списывается оплата за 2й и последующие пакеты СМС
+            - text: .
+        - paragraph [ref=f1e2019]: "Как подключить тарифный план:"
+        - list [ref=f1e2020]:
+          - listitem [ref=f1e2021]: Войдите в свой аккаунт BYTEHAND;
+          - listitem [ref=f1e2022]:
+            - generic [ref=f1e2023]:
+              - text: Перейдите в раздел Документы → страница
+              - link "Договор" [ref=f1e2025] [cursor=pointer]:
+                - /url: /secure/documents/contract
+              - text: → нажмите кнопку Начать подписание договора и следуйте дальнейшим инструкциям
+            - text: ;
+          - listitem [ref=f1e2026]:
+            - generic [ref=f1e2027]:
+              - text: Перейдите в раздел
+              - link "Служба поддержки" [ref=f1e2029] [cursor=pointer]:
+                - /url: /contact-us
+              - text: и отправьте сообщение с указанием тарифа, который вам требуется
+            - text: .
+          - listitem [ref=f1e2030]: К сообщению сразу приложите скан документа, подтверждающего право вашей компании на подпись СМС (скан справки о владении доменом или товарным знаком).
+        - heading "Тариф с вашей подписью СМС (для сервисных сообщений), с абонентской платой" [level=3] [ref=f1e2032]
+        - generic [ref=f1e2034]:
+          - img [aria-hidden] [ref=f1e2035]: warning
+          - paragraph [ref=f1e2036]: Этим тарифом могут воспользоваться только юридические лица после заключения контракта с сервисом BYTEHAND!
+        - generic [ref=f1e2038]:
+          - generic [ref=f1e2040]:
+            - generic [ref=f1e2041]: "Страна: Описание"
+            - generic [ref=f1e2042]: Цена
+            - generic [ref=f1e2043]: Примечания
+          - generic [ref=f1e2044]:
+            - generic [ref=f1e2045]:
+              - heading "Россия" [level=3] [ref=f1e2047]
+              - heading [level=3] [ref=f1e2052]:
+                - link "Согласно тарифам операторов сотовой связи" [ref=f1e2053] [cursor=pointer]:
+                  - /url: /assets/files/pricing_ru_direct_2025-10-20.pdf
+            - generic [ref=f1e2054]:
+              - heading "Другие страны" [level=3] [ref=f1e2056]
+              - heading [level=3] [ref=f1e2061]:
+                - link "В соответствии с тарифами на отправку СМС по всему миру" [ref=f1e2062] [cursor=pointer]:
+                  - /url: /pricing#sending-international
+        - paragraph [ref=f1e2063]: "Особенности тарифного плана:"
+        - list [ref=f1e2064]:
+          - listitem [ref=f1e2065]: Сервисные (транзакционные) СМС — это немаркетинговые автоматизированные сообщения, которые компании отправляют для поддержки своих клиентов. Наиболее распространенные примеры подобных сообщений — подтверждения телефона, приветственные сообщения и изменения статуса заказов;
+          - listitem [ref=f1e2066]: Тексты сервисных СМС заранее согласовываются с операторами связи в виде шаблонов, модерация занимает до нескольких дней;
+          - listitem [ref=f1e2067]: Тарифицируются как сервисные только те сообщения, которые прошли такую модерацию у операторов связи, все остальные сообщения тарифицируются как рекламные;
+          - listitem [ref=f1e2068]: Тариф с гарантированной доставкой СМС, подключение требует модерации документа на подпись операторами связи (10-15 рабочих дней);
+          - listitem [ref=f1e2069]: Ваша подпись является отправителем СМС для всех операторов РФ;
+          - listitem [ref=f1e2070]: Тариф с ежемесячной абонентской платой 7000 руб. в месяц за первую подпись и 8000 руб. в месяц за каждую последующую подпись для одного юридического лица, абонентская плата списывается в последних числах каждого календарного месяца.
+        - paragraph [ref=f1e2071]: "Как подключить тарифный план:"
+        - list [ref=f1e2072]:
+          - listitem [ref=f1e2073]: Войдите в свой аккаунт BYTEHAND;
+          - listitem [ref=f1e2074]:
+            - generic [ref=f1e2075]:
+              - text: Перейдите в раздел Документы → страница
+              - link "Договор" [ref=f1e2077] [cursor=pointer]:
+                - /url: /secure/documents/contract
+              - text: → нажмите кнопку Начать подписание договора и следуйте дальнейшим инструкциям
+            - text: ;
+          - listitem [ref=f1e2078]:
+            - generic [ref=f1e2079]:
+              - text: Перейдите в раздел
+              - link "Служба поддержки" [ref=f1e2081] [cursor=pointer]:
+                - /url: /contact-us
+              - text: и отправьте сообщение с указанием тарифа, который вам требуется
+            - text: .
+          - listitem [ref=f1e2082]: К сообщению сразу приложите скан документа, подтверждающего право вашей компании на подпись СМС (скан справки о владении доменом или товарным знаком).
+        - heading "Отправка СМС по всему миру" [level=2] [ref=f1e2084]
+        - generic [ref=f1e2086]:
+          - img [aria-hidden] [ref=f1e2087]: language
+          - paragraph [ref=f1e2088]: Тарифные планы влияют на отправку сообщений по России, отправка СМС сообщений по всему миру не зависит от выбранного варианта подключения и действует как для физических, так и для юридических лиц.
+        - generic [ref=f1e2090]:
+          - generic [ref=f1e2092]:
+            - generic [ref=f1e2093]: "Страна: Описание"
+            - generic [ref=f1e2094]: Цена
+            - generic [ref=f1e2095]: Примечания
+          - generic [ref=f1e2096]:
+            - generic [ref=f1e2097]:
+              - generic [ref=f1e2098]:
+                - heading "Ангола" [level=3] [ref=f1e2099]
+                - heading "Колумбия" [level=3] [ref=f1e2103]
+                - heading "Коста-Рика" [level=3] [ref=f1e2107]
+                - heading "Лаос" [level=3] [ref=f1e2111]
+                - heading "Либерия" [level=3] [ref=f1e2115]
+                - heading "Южно-Африканская Республика" [level=3] [ref=f1e2119]
+                - heading "Абхазия" [level=3] [ref=f1e2123]
+              - heading "2,60 ₽" [level=3] [ref=f1e2128]
+            - generic [ref=f1e2130]:
+              - generic [ref=f1e2131]:
+                - heading "Чили" [level=3] [ref=f1e2132]
+                - heading "Кипр" [level=3] [ref=f1e2136]
+                - heading "Республика Корея" [level=3] [ref=f1e2140]
+              - heading "3,60 ₽" [level=3] [ref=f1e2145]
+            - generic [ref=f1e2147]:
+              - heading "Бахрейн" [level=3] [ref=f1e2149]
+              - heading "4,00 ₽" [level=3] [ref=f1e2154]
+            - generic [ref=f1e2156]:
+              - generic [ref=f1e2157]:
+                - heading "Эстония" [level=3] [ref=f1e2158]
+                - heading "Греция" [level=3] [ref=f1e2162]
+                - heading "Испания" [level=3] [ref=f1e2166]
+                - heading "Швеция" [level=3] [ref=f1e2170]
+              - heading "4,60 ₽" [level=3] [ref=f1e2175]
+            - generic [ref=f1e2177]:
+              - generic [ref=f1e2178]:
+                - heading "Андорра" [level=3] [ref=f1e2179]
+                - heading "Япония" [level=3] [ref=f1e2183]
+                - heading "Мальта" [level=3] [ref=f1e2187]
+                - heading "Таджикистан" [level=3] [ref=f1e2191]
+              - heading "5,00 ₽" [level=3] [ref=f1e2196]
+            - generic [ref=f1e2198]:
+              - heading "Китай" [level=3] [ref=f1e2200]
+              - heading "6,00 ₽" [level=3] [ref=f1e2205]
+            - generic [ref=f1e2207]:
+              - generic [ref=f1e2208]:
+                - heading "Бельгия" [level=3] [ref=f1e2209]
+                - heading "Куба" [level=3] [ref=f1e2213]
+                - heading "Дания" [level=3] [ref=f1e2217]
+                - heading "Финляндия" [level=3] [ref=f1e2221]
+                - heading "Исландия" [level=3] [ref=f1e2225]
+                - heading "Литва" [level=3] [ref=f1e2229]
+                - heading "Польша" [level=3] [ref=f1e2233]
+                - heading "Румыния" [level=3] [ref=f1e2237]
+                - heading "Россия" [level=3] [ref=f1e2241]
+                - heading "Сингапур" [level=3] [ref=f1e2245]
+                - heading "Словакия" [level=3] [ref=f1e2249]
+                - heading "Таиланд" [level=3] [ref=f1e2253]
+                - heading "Уругвай" [level=3] [ref=f1e2257]
+              - heading "7,00 ₽" [level=3] [ref=f1e2262]
+            - generic [ref=f1e2264]:
+              - generic [ref=f1e2265]:
+                - heading "Боливия" [level=3] [ref=f1e2266]
+                - heading "Тайвань" [level=3] [ref=f1e2270]
+                - heading "Грузия" [level=3] [ref=f1e2274]
+                - heading "Индия" [level=3] [ref=f1e2278]
+                - heading "Латвия" [level=3] [ref=f1e2282]
+                - heading "Новая Зеландия" [level=3] [ref=f1e2286]
+                - heading "Парагвай" [level=3] [ref=f1e2290]
+              - heading "8,00 ₽" [level=3] [ref=f1e2295]
+            - generic [ref=f1e2297]:
+              - generic [ref=f1e2298]:
+                - 'heading "Россия: ПАО \"Мобильные ТелеСистемы\"" [level=3] [ref=f1e2299]'
+                - 'heading "Россия: ПАО \"МегаФон\"" [level=3] [ref=f1e2303]'
+                - 'heading "Россия: ООО \"Скартел\"" [level=3] [ref=f1e2307]'
+              - heading "8,50 ₽" [level=3] [ref=f1e2312]
+            - generic [ref=f1e2314]:
+              - generic [ref=f1e2315]:
+                - 'heading "Россия: ПАО \"Вымпел-Коммуникации\"" [level=3] [ref=f1e2316]'
+                - 'heading "Россия: ООО \"Т2 Мобайл\"" [level=3] [ref=f1e2320]'
+              - heading "9,00 ₽" [level=3] [ref=f1e2325]
+            - generic [ref=f1e2327]:
+              - generic [ref=f1e2328]:
+                - heading "Аргентина" [level=3] [ref=f1e2329]
+                - heading "Австралия" [level=3] [ref=f1e2333]
+                - heading "Бразилия" [level=3] [ref=f1e2337]
+                - heading "Камбоджа" [level=3] [ref=f1e2341]
+                - heading "Камерун" [level=3] [ref=f1e2345]
+                - heading "Канада" [level=3] [ref=f1e2349]
+                - heading "Конго - Браззавиль" [level=3] [ref=f1e2353]
+                - heading "Хорватия" [level=3] [ref=f1e2357]
+                - heading "Гонконг" [level=3] [ref=f1e2361]
+                - heading "Ирландия" [level=3] [ref=f1e2365]
+                - heading "Кувейт" [level=3] [ref=f1e2369]
+                - heading "Мексика" [level=3] [ref=f1e2373]
+                - heading "Норвегия" [level=3] [ref=f1e2377]
+                - heading "Вьетнам" [level=3] [ref=f1e2381]
+                - heading "Северная Македония" [level=3] [ref=f1e2385]
+                - heading "Великобритания" [level=3] [ref=f1e2389]
+              - heading "10,00 ₽" [level=3] [ref=f1e2394]
+            - generic [ref=f1e2396]:
+              - heading "Словения" [level=3] [ref=f1e2398]
+              - heading "11,00 ₽" [level=3] [ref=f1e2403]
+            - generic [ref=f1e2405]:
+              - generic [ref=f1e2406]:
+                - heading "Туркменистан" [level=3] [ref=f1e2407]
+                - heading "Соединенные Штаты" [level=3] [ref=f1e2411]
+              - heading "12,00 ₽" [level=3] [ref=f1e2416]
+            - generic [ref=f1e2418]:
+              - generic [ref=f1e2419]:
+                - heading "Армения" [level=3] [ref=f1e2420]
+                - heading "Индонезия" [level=3] [ref=f1e2424]
+                - heading "Саудовская Аравия" [level=3] [ref=f1e2428]
+              - heading "13,00 ₽" [level=3] [ref=f1e2433]
+            - generic [ref=f1e2435]:
+              - generic [ref=f1e2436]:
+                - heading "Болгария" [level=3] [ref=f1e2437]
+                - heading "Черногория" [level=3] [ref=f1e2441]
+              - heading "15,00 ₽" [level=3] [ref=f1e2446]
+            - generic [ref=f1e2448]:
+              - generic [ref=f1e2449]:
+                - heading "Монголия" [level=3] [ref=f1e2450]
+                - heading "Непал" [level=3] [ref=f1e2454]
+              - heading "18,00 ₽" [level=3] [ref=f1e2459]
+            - generic [ref=f1e2461]:
+              - generic [ref=f1e2462]:
+                - heading "Беларусь" [level=3] [ref=f1e2463]
+                - heading "Венесуэла" [level=3] [ref=f1e2467]
+              - heading "21,00 ₽" [level=3] [ref=f1e2472]
+            - generic [ref=f1e2474]:
+              - heading "Босния и Герцеговина" [level=3] [ref=f1e2476]
+              - heading "22,00 ₽" [level=3] [ref=f1e2481]
+            - generic [ref=f1e2483]:
+              - generic [ref=f1e2484]:
+                - heading "Малайзия" [level=3] [ref=f1e2485]
+                - heading "Филиппины" [level=3] [ref=f1e2489]
+                - heading "ОАЭ" [level=3] [ref=f1e2493]
+              - heading "25,00 ₽" [level=3] [ref=f1e2498]
+            - generic [ref=f1e2500]:
+              - generic [ref=f1e2501]:
+                - heading "Другие страны" [level=3] [ref=f1e2502]
+                - heading "Киргизия" [level=3] [ref=f1e2506]
+                - heading "Узбекистан" [level=3] [ref=f1e2510]
+              - heading "30,00 ₽" [level=3] [ref=f1e2515]
+        - paragraph [ref=f1e2517]: "Как подключить тарифный план:"
+        - list [ref=f1e2518]:
+          - listitem [ref=f1e2519]: Включается по умолчанию при создании аккаунта.
+        - heading "Запросить индивидуальный тариф" [level=2] [ref=f1e2521]
+        - paragraph [ref=f1e2522]:
+          - text: Пользователям с большими объёмами ежемесячных СМС-рассылок BYTEHAND может предоставить индивидуальный тариф.
+          - link "Напишите запрос в службу поддержки" [ref=f1e2523] [cursor=pointer]:
+            - /url: /contacts
+          - text: ", в письме укажите планируемый объём СМС в месяц и основные направления (страны) рассылок. Также укажите название вашей компании и ваш сайт. Запрос будет рассмотрен в течение одного рабочего дня."
+        - generic [ref=f1e2525]:
+          - img [aria-hidden] [ref=f1e2526]: payments
+          - paragraph [ref=f1e2527]:
+            - generic [ref=f1e2528]:
+              - link "Для представителей компаний" [ref=f1e2529] [cursor=pointer]:
+                - /url: /representatives
+              - text: существует партнёрская программа, по которой мы выплачиваем ПОСТОЯННОЕ ЛИЧНОЕ ВОЗНАГРАЖДЕНИЕ человеку, подключившему свою компанию к BYTEHAND.
+        - heading "Принципы тарификации" [level=2] [ref=f1e2531]
+        - list [ref=f1e2533]:
+          - listitem [ref=f1e2534]: Подключение к сервису, клиентскому интерфейсу и API СМС-рассылок бесплатное;
+          - listitem [ref=f1e2535]: Все цены указаны с учетом налогов и являются конечными;
+          - listitem [ref=f1e2536]: Все платежи не имеют срока использования;
+          - listitem [ref=f1e2537]: Консультации и поддержка предоставляются бесплатно;
+          - listitem [ref=f1e2538]: Абонентская плата за использование сервиса отсутствует;
+          - listitem [ref=f1e2539]: Абонентская плата за подписи СМС списывается в последних числах каждого календарного месяца;
+          - listitem [ref=f1e2540]: При недостатке средств на абонентскую плату в момент списания баланс аккаунта уходит в минус, а подпись отправляется на отключение у операторов связи;
+          - listitem [ref=f1e2541]: Цена СМС при агрегации трафика нескольких кампаний под единой подписью может быть установлена по повышенному тарифу.
+        - separator
+        - separator [ref=f1e2542]
+        - generic [ref=f1e2543]:
+          - generic [ref=f1e2544]: Нужна помощь? Посетите нашу страницу поддержки
+          - button "Связаться с нами" [ref=f1e2545]
+    - generic [ref=f1e52]:
+      - generic [ref=f1e53]:
+        - generic [ref=f1e54]:
+          - generic [ref=f1e55]:
+            - heading "BYTEHAND" [level=2] [ref=f1e56]
+            - list [ref=f1e57]:
+              - listitem [ref=f1e58]:
+                - link "Новости" [ref=f1e59] [cursor=pointer]:
+                  - /url: /news
+              - listitem [ref=f1e60]:
+                - link "О проекте" [ref=f1e61] [cursor=pointer]:
+                  - /url: /about
+              - listitem [ref=f1e62]:
+                - link "Условия использования" [ref=f1e63] [cursor=pointer]:
+                  - /url: /terms
+              - listitem [ref=f1e64]:
+                - link "Политика безопасности" [ref=f1e65] [cursor=pointer]:
+                  - /url: /privacy
+              - listitem [ref=f1e66]:
+                - link "Контакты" [ref=f1e67] [cursor=pointer]:
+                  - /url: /contacts
+          - generic [ref=f1e68]:
+            - heading "Информация" [level=2] [ref=f1e69]
+            - list [ref=f1e70]:
+              - listitem [ref=f1e71]:
+                - link "Тарифы для всех стран" [ref=f1e72] [cursor=pointer]:
+                  - /url: /pricing
+              - listitem [ref=f1e73]:
+                - link "Вопросы и ответы" [ref=f1e74] [cursor=pointer]:
+                  - /url: /faq
+              - listitem [ref=f1e75]:
+                - link "Рассылки" [ref=f1e76] [cursor=pointer]:
+                  - /url: /campaigns
+              - listitem [ref=f1e77]:
+                - link "Наши клиенты" [ref=f1e78] [cursor=pointer]:
+                  - /url: /customers
+              - listitem [ref=f1e79]:
+                - link "Карта сайта" [ref=f1e80] [cursor=pointer]:
+                  - /url: /site-map
+        - generic [ref=f1e81]:
+          - generic [ref=f1e82]:
+            - heading "С чего начать?" [level=2] [ref=f1e83]
+            - list [ref=f1e84]:
+              - listitem [ref=f1e85]:
+                - link "Варианты использования" [ref=f1e86] [cursor=pointer]:
+                  - /url: /cases
+              - listitem [ref=f1e87]:
+                - link "Услуги" [ref=f1e88] [cursor=pointer]:
+                  - /url: /services
+              - listitem [ref=f1e89]:
+                - link "Разработчикам" [ref=f1e90] [cursor=pointer]:
+                  - /url: /developers
+              - listitem [ref=f1e91]:
+                - link "Готовые решения" [ref=f1e92] [cursor=pointer]:
+                  - /url: /solutions
+              - listitem [ref=f1e93]:
+                - link "Связаться с нами" [ref=f1e94] [cursor=pointer]:
+                  - /url: /contact-us
+          - generic [ref=f1e95]:
+            - heading "Сотрудничество" [level=2] [ref=f1e96]
+            - list [ref=f1e97]:
+              - listitem [ref=f1e98]:
+                - link "Наши преимущества" [ref=f1e99] [cursor=pointer]:
+                  - /url: /advantages
+              - listitem [ref=f1e100]:
+                - link "Запросить индивидуальный тариф" [ref=f1e101] [cursor=pointer]:
+                  - /url: /request-quote
+              - listitem [ref=f1e102]:
+                - link "Партнёрская программа" [ref=f1e103] [cursor=pointer]:
+                  - /url: /affiliates
+              - listitem [ref=f1e104]:
+                - link "Представителям компаний" [ref=f1e105] [cursor=pointer]:
+                  - /url: /representatives
+              - listitem [ref=f1e106]:
+                - link "СМС-шлюзам" [ref=f1e107] [cursor=pointer]:
+                  - /url: /resellers
+      - generic [ref=f1e109]:
+        - heading "СМС-рассылки по всему миру! - SMSC, SMS-шлюз, HTTP REST API, SMPP-сервер" [level=3] [ref=f1e110]
+        - heading [level=3] [ref=f1e111]:
+          - text: Copyright © BYTEHAND.COM 2007 - 2026,
+          - link "Лицензия связи №177869" [ref=f1e112] [cursor=pointer]:
+            - /url: assets/images/license_telecom.jpg
+  - button [ref=f1e114] [cursor=pointer]:
+    - img [aria-hidden] [ref=f1e115]: keyboard_arrow_up

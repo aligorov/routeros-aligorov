@@ -1,0 +1,211 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - progressbar [ref=e4]
+    - generic [ref=e12]:
+      - link [ref=e13] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e15]:
+        - button "Услуги" [ref=e16]
+        - button "Тарифы" [ref=e20]
+        - button "Готовые решения" [ref=e24]
+        - button "Разработчикам" [ref=e28]
+        - button "Вопросы и ответы" [ref=e32]
+      - button "Войти в аккаунт" [ref=e37]
+      - button [ref=e41] [cursor=pointer]
+    - generic [ref=e121]:
+      - generic [ref=e125]:
+        - link "BYTEHAND API v2" [ref=e126] [cursor=pointer]:
+          - /url: /developers/v2
+        - link "Начало работы" [ref=e128] [cursor=pointer]:
+          - /url: /developers/v2/getting-started
+        - link "Авторизация" [ref=e130] [cursor=pointer]:
+          - /url: /developers/v2/authorization
+        - button "Права доступа" [ref=e133] [cursor=pointer]
+        - generic [ref=e138]:
+          - button "Список методов" [expanded] [ref=e139] [cursor=pointer]
+          - region "Список методов" [ref=e145]:
+            - list [ref=e147]:
+              - listitem [ref=e148]:
+                - link "Обзор" [ref=e149] [cursor=pointer]:
+                  - /url: /developers/v2/methods
+              - listitem [ref=e151]:
+                - img [aria-hidden] [ref=e153] [cursor=pointer]: arrow_drop_down
+                - link "OAuth" [ref=e154] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/oauth
+              - listitem [ref=e156]:
+                - img [aria-hidden] [ref=e158] [cursor=pointer]: arrow_drop_down
+                - link "Пользователи" [ref=e159] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/users
+              - listitem [ref=e161]:
+                - img [aria-hidden] [ref=e163] [cursor=pointer]: arrow_drop_down
+                - link "СМС сообщения" [ref=e164] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/sms
+              - listitem [ref=e166]:
+                - img [aria-hidden] [ref=e168] [cursor=pointer]: arrow_drop_down
+                - link "СМС рассылки" [ref=e169] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/sms-campaigns
+              - listitem [ref=e171]:
+                - img [aria-hidden] [ref=e173] [cursor=pointer]: arrow_drop_down
+                - link "Подписи отправителя СМС" [ref=e174] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/sms-senders
+              - listitem [ref=e176]:
+                - img [aria-hidden] [ref=e178] [cursor=pointer]: arrow_drop_down
+                - link "Шаблоны СМС" [ref=e179] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/sms-templates
+              - listitem [ref=e181]:
+                - img [aria-hidden] [ref=e183] [cursor=pointer]: arrow_drop_down
+                - link "Контакты" [ref=e184] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/contacts
+              - listitem [ref=e186]:
+                - img [aria-hidden] [ref=e188] [cursor=pointer]: arrow_drop_down
+                - link "История" [ref=e189] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/history
+              - listitem [ref=e191]:
+                - img [aria-hidden] [ref=e193] [cursor=pointer]: arrow_drop_down
+                - link "Платежи" [ref=e194] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/payments
+              - listitem [ref=e196]:
+                - img [aria-hidden] [ref=e198] [cursor=pointer]: arrow_drop_down
+                - link "Тарифные планы" [ref=e199] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/billing-plans
+              - listitem [ref=e201]:
+                - img [aria-hidden] [ref=e203] [cursor=pointer]: arrow_drop_down
+                - link "Новости" [ref=e204] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/news
+              - listitem [ref=e206]:
+                - img [aria-hidden] [ref=e208] [cursor=pointer]: arrow_drop_down
+                - link "Приложения" [ref=e209] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/applications
+              - listitem [ref=e211]:
+                - img [aria-hidden] [ref=e213] [cursor=pointer]: arrow_drop_down
+                - link "Другое" [ref=e214] [cursor=pointer]:
+                  - /url: /developers/v2/methods/group/misc
+        - button "Список объектов" [ref=e217] [cursor=pointer]
+        - link "Поисковые запросы" [ref=e222] [cursor=pointer]:
+          - /url: /developers/v2/query
+        - link "Обработка ошибок" [ref=e224] [cursor=pointer]:
+          - /url: /developers/v2/errors
+      - generic [ref=e228]:
+        - list [ref=e229]:
+          - listitem [ref=e230]:
+            - generic [ref=e231]: BYTEHAND API v2
+        - heading "BYTEHAND API v2" [level=1] [ref=e232]
+        - generic [ref=e233]:
+          - paragraph [ref=e234]: В этом руководстве вы найдете информацию о принципах работы BYTEHAND API v2 и о подготовке к его использованию. Если вы уже работали с нашим API или с аналогичными сервисами других платформ, и знаете, какое приложение хотите создать, мы рекомендуем вам перейти в соответствующий раздел документации.
+          - term [ref=e235]:
+            - link "Начало работы" [ref=e236] [cursor=pointer]:
+              - /url: /developers/v2/getting-started
+          - definition [ref=e237]: Этот раздел содержит информацию о том, как начать использование BYTEHAND API v2, описаны основные понятия и то, на что стоит обратить особое внимание.
+          - term [ref=e238]:
+            - link "Авторизация" [ref=e239] [cursor=pointer]:
+              - /url: /developers/v2/authorization
+          - definition [ref=e240]: Для выполнения большинства запросов BYTEHAND API v2 требуется авторизация пользователя, этот раздел описывает различные способы авторизации и особенности их использования.
+          - term [ref=e241]:
+            - link "Права доступа" [ref=e242] [cursor=pointer]:
+              - /url: /developers/v2/scopes
+          - definition [ref=e243]: В разделе перечислены все возможные права доступа и запросы BYTEHAND API v2, которые требуют их наличия.
+          - term [ref=e244]:
+            - link "Список методов" [ref=e245] [cursor=pointer]:
+              - /url: /developers/v2/methods
+          - definition [ref=e246]: Описание публичных методов BYTEHAND API v2, их параметров и возвращаемых данных. Раздел рассчитан на разработчиков, знакомых с Web-программированием и объектно-ориентированной парадигмой разработки.
+          - term [ref=e247]:
+            - link "Список объектов" [ref=e248] [cursor=pointer]:
+              - /url: /developers/v2/objects
+          - definition [ref=e249]: В разделе описаны объекты BYTEHAND API v2 и даны ссылки на использующие их методы API.
+          - term [ref=e250]:
+            - link "Поисковые запросы" [ref=e251] [cursor=pointer]:
+              - /url: /developers/v2/query
+          - definition [ref=e252]: В разделе описывается семантика использования поисковых запросов.
+          - term [ref=e253]:
+            - link "Обработка ошибок" [ref=e254] [cursor=pointer]:
+              - /url: /developers/v2/errors
+          - definition [ref=e255]: Описание ошибок и их коды.
+        - separator
+        - separator [ref=e256]
+        - generic [ref=e257]:
+          - generic [ref=e258]: Нужна помощь? Посетите нашу страницу поддержки
+          - button "Связаться с нами" [ref=e259]
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - heading "BYTEHAND" [level=2] [ref=e56]
+            - list [ref=e57]:
+              - listitem [ref=e58]:
+                - link "Новости" [ref=e59] [cursor=pointer]:
+                  - /url: /news
+              - listitem [ref=e60]:
+                - link "О проекте" [ref=e61] [cursor=pointer]:
+                  - /url: /about
+              - listitem [ref=e62]:
+                - link "Условия использования" [ref=e63] [cursor=pointer]:
+                  - /url: /terms
+              - listitem [ref=e64]:
+                - link "Политика безопасности" [ref=e65] [cursor=pointer]:
+                  - /url: /privacy
+              - listitem [ref=e66]:
+                - link "Контакты" [ref=e67] [cursor=pointer]:
+                  - /url: /contacts
+          - generic [ref=e68]:
+            - heading "Информация" [level=2] [ref=e69]
+            - list [ref=e70]:
+              - listitem [ref=e71]:
+                - link "Тарифы для всех стран" [ref=e72] [cursor=pointer]:
+                  - /url: /pricing
+              - listitem [ref=e73]:
+                - link "Вопросы и ответы" [ref=e74] [cursor=pointer]:
+                  - /url: /faq
+              - listitem [ref=e75]:
+                - link "Рассылки" [ref=e76] [cursor=pointer]:
+                  - /url: /campaigns
+              - listitem [ref=e77]:
+                - link "Наши клиенты" [ref=e78] [cursor=pointer]:
+                  - /url: /customers
+              - listitem [ref=e79]:
+                - link "Карта сайта" [ref=e80] [cursor=pointer]:
+                  - /url: /site-map
+        - generic [ref=e81]:
+          - generic [ref=e82]:
+            - heading "С чего начать?" [level=2] [ref=e83]
+            - list [ref=e84]:
+              - listitem [ref=e85]:
+                - link "Варианты использования" [ref=e86] [cursor=pointer]:
+                  - /url: /cases
+              - listitem [ref=e87]:
+                - link "Услуги" [ref=e88] [cursor=pointer]:
+                  - /url: /services
+              - listitem [ref=e89]:
+                - link "Разработчикам" [ref=e90] [cursor=pointer]:
+                  - /url: /developers
+              - listitem [ref=e91]:
+                - link "Готовые решения" [ref=e92] [cursor=pointer]:
+                  - /url: /solutions
+              - listitem [ref=e93]:
+                - link "Связаться с нами" [ref=e94] [cursor=pointer]:
+                  - /url: /contact-us
+          - generic [ref=e95]:
+            - heading "Сотрудничество" [level=2] [ref=e96]
+            - list [ref=e97]:
+              - listitem [ref=e98]:
+                - link "Наши преимущества" [ref=e99] [cursor=pointer]:
+                  - /url: /advantages
+              - listitem [ref=e100]:
+                - link "Запросить индивидуальный тариф" [ref=e101] [cursor=pointer]:
+                  - /url: /request-quote
+              - listitem [ref=e102]:
+                - link "Партнёрская программа" [ref=e103] [cursor=pointer]:
+                  - /url: /affiliates
+              - listitem [ref=e104]:
+                - link "Представителям компаний" [ref=e105] [cursor=pointer]:
+                  - /url: /representatives
+              - listitem [ref=e106]:
+                - link "СМС-шлюзам" [ref=e107] [cursor=pointer]:
+                  - /url: /resellers
+      - generic [ref=e109]:
+        - heading "СМС-рассылки по всему миру! - SMSC, SMS-шлюз, HTTP REST API, SMPP-сервер" [level=3] [ref=e110]
+        - heading [level=3] [ref=e111]:
+          - text: Copyright © BYTEHAND.COM 2007 - 2026,
+          - link "Лицензия связи №177869" [ref=e112] [cursor=pointer]:
+            - /url: assets/images/license_telecom.jpg
+  - button [ref=e114] [cursor=pointer]:
+    - img [aria-hidden] [ref=e115]: keyboard_arrow_up

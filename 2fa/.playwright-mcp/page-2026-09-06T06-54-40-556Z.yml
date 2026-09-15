@@ -1,0 +1,188 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - progressbar [ref=e4]
+    - generic [ref=e12]:
+      - link [ref=e13] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e15]:
+        - button "Услуги" [ref=e16]
+        - button "Тарифы" [ref=e20]
+        - button "Готовые решения" [ref=e24]
+        - button "Разработчикам" [ref=e28]
+        - button "Вопросы и ответы" [ref=e32]
+      - button "Войти в аккаунт" [ref=e37]
+      - button [ref=e41] [cursor=pointer]
+    - generic [ref=e51]:
+      - generic [ref=e54]:
+        - heading "СМС-рассылки по всему миру!" [level=1] [ref=e55]
+        - heading "BYTEHAND — это надёжный сервис рассылки СМС сообщений. Низкие цены и отзывчивая поддержка помогают создавать и развивать сайты, сервисы, приложения и игры, которые нравятся пользователям." [level=3] [ref=e56]
+        - generic [ref=e57]:
+          - button "Создать аккаунт" [ref=e58]
+          - button "Войти в аккаунт" [ref=e62]
+      - generic [ref=e67]:
+        - heading "Вот только некоторые из тысяч клиентов, которые используют BYTEHAND!" [level=2] [ref=e68]
+        - button "Узнать больше" [ref=e101]
+      - generic [ref=e108]:
+        - heading "Что говорят о BYTEHAND?" [level=2] [ref=e109]
+        - generic [ref=e111]:
+          - button [ref=e112] [cursor=pointer]:
+            - img [aria-hidden] [ref=e113]: navigate_before
+          - generic [ref=e116]:
+            - generic [ref=e117]:
+              - img [aria-hidden] [ref=e118] [cursor=pointer]: radio_button_checked
+              - img [aria-hidden] [ref=e119] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e120] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e121] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e122] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e123] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e124] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e125] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e126] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e127] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e128] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e129] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e130] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e131] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e132] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e133] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e134] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e135] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e136] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e137] [cursor=pointer]: radio_button_unchecked
+              - img [aria-hidden] [ref=e138] [cursor=pointer]: radio_button_unchecked
+            - img [aria-hidden] [ref=e139]: format_quote
+            - generic [ref=e141]:
+              - tabpanel "0" [ref=e142]:
+                - generic [ref=e143]:
+                  - paragraph [ref=e144]: "Нам нужна была надежная компания, которая возьмет на себя информационную поддержку по всему нашему функционалу. Очень важно, чтобы система работала динамично и не давала сбоев, ведь наши СМС – коды и подтверждения платежей. Ребята отлично справляются: все четко, своевременно, серьезно подходят к информационной безопасности. Недавно проводили опрос клиентов о работе сервиса. Очень понравился один комментарий: «Если ты не замечаешь, как это работает, значит, все работает отлично!»."
+                  - heading "– Яндекс.Деньги" [level=3] [ref=e145]
+              - tabpanel [aria-hidden] [ref=e146]
+              - tabpanel [aria-hidden] [ref=e147]
+              - tabpanel [aria-hidden] [ref=e148]
+              - tabpanel [aria-hidden] [ref=e149]
+              - tabpanel [aria-hidden] [ref=e150]
+              - tabpanel [aria-hidden] [ref=e151]
+              - tabpanel [aria-hidden] [ref=e152]
+              - tabpanel [aria-hidden] [ref=e153]
+              - tabpanel [aria-hidden] [ref=e154]
+              - tabpanel [aria-hidden] [ref=e155]
+              - tabpanel [aria-hidden] [ref=e156]
+              - tabpanel [aria-hidden] [ref=e157]
+              - tabpanel [aria-hidden] [ref=e158]
+              - tabpanel [aria-hidden] [ref=e159]
+              - tabpanel [aria-hidden] [ref=e160]
+              - tabpanel [aria-hidden] [ref=e161]
+              - tabpanel [aria-hidden] [ref=e162]
+              - tabpanel [aria-hidden] [ref=e163]
+              - tabpanel [aria-hidden] [ref=e164]
+              - tabpanel [aria-hidden] [ref=e165]
+          - button [ref=e166] [cursor=pointer]:
+            - img [aria-hidden] [ref=e167]: navigate_next
+      - generic [ref=e171]:
+        - heading "Новости" [level=2] [ref=e172]
+        - generic [ref=e177]:
+          - link [ref=e178] [cursor=pointer]:
+            - /url: /news/137
+            - heading "Изменение тарифов Билайн и МТС с 1 сентября 2026" [level=2] [ref=e179]
+          - paragraph [ref=e180]: 24 августа
+          - paragraph [ref=e181]: Уважаемые клиенты BYTEHAND! Сообщаем об изменении тарифов операторами Билайн и МТС с 1 сентября 2026 года.
+          - button "Читать далее" [ref=e182]
+        - generic [ref=e190]:
+          - link [ref=e191] [cursor=pointer]:
+            - /url: /news/136
+            - heading "Отключение авторизации через форму Gmail" [level=2] [ref=e192]
+          - paragraph [ref=e193]: 15 июня
+          - paragraph [ref=e194]: Уважаемые пользователи BYTEHAND. Уведомляем вас о вступлении в силу закона о запрете авторизации на российских веб-сайтах через иностранные сервисы.
+          - button "Читать далее" [ref=e195]
+        - generic [ref=e203]:
+          - link [ref=e204] [cursor=pointer]:
+            - /url: /news/135
+            - heading "Обновления условий СМС с 1 апреля 2026 года" [level=2] [ref=e205]
+          - paragraph [ref=e206]: 23 марта
+          - paragraph [ref=e207]: Добрый день, уважаемые клиенты BYTEHAND. Сообщаем вам, что с 1 апреля 2026 года меняются тарифы на отправку СМС операторам Теле2 и Мегафон.
+          - button "Читать далее" [ref=e208]
+        - button "Показать все новости" [ref=e214]
+    - generic [ref=e219]:
+      - generic [ref=e220]:
+        - generic [ref=e221]:
+          - generic [ref=e222]:
+            - heading "BYTEHAND" [level=2] [ref=e223]
+            - list [ref=e224]:
+              - listitem [ref=e225]:
+                - link "Новости" [ref=e226] [cursor=pointer]:
+                  - /url: /news
+              - listitem [ref=e227]:
+                - link "О проекте" [ref=e228] [cursor=pointer]:
+                  - /url: /about
+              - listitem [ref=e229]:
+                - link "Условия использования" [ref=e230] [cursor=pointer]:
+                  - /url: /terms
+              - listitem [ref=e231]:
+                - link "Политика безопасности" [ref=e232] [cursor=pointer]:
+                  - /url: /privacy
+              - listitem [ref=e233]:
+                - link "Контакты" [ref=e234] [cursor=pointer]:
+                  - /url: /contacts
+          - generic [ref=e235]:
+            - heading "Информация" [level=2] [ref=e236]
+            - list [ref=e237]:
+              - listitem [ref=e238]:
+                - link "Тарифы для всех стран" [ref=e239] [cursor=pointer]:
+                  - /url: /pricing
+              - listitem [ref=e240]:
+                - link "Вопросы и ответы" [ref=e241] [cursor=pointer]:
+                  - /url: /faq
+              - listitem [ref=e242]:
+                - link "Рассылки" [ref=e243] [cursor=pointer]:
+                  - /url: /campaigns
+              - listitem [ref=e244]:
+                - link "Наши клиенты" [ref=e245] [cursor=pointer]:
+                  - /url: /customers
+              - listitem [ref=e246]:
+                - link "Карта сайта" [ref=e247] [cursor=pointer]:
+                  - /url: /site-map
+        - generic [ref=e248]:
+          - generic [ref=e249]:
+            - heading "С чего начать?" [level=2] [ref=e250]
+            - list [ref=e251]:
+              - listitem [ref=e252]:
+                - link "Варианты использования" [ref=e253] [cursor=pointer]:
+                  - /url: /cases
+              - listitem [ref=e254]:
+                - link "Услуги" [ref=e255] [cursor=pointer]:
+                  - /url: /services
+              - listitem [ref=e256]:
+                - link "Разработчикам" [ref=e257] [cursor=pointer]:
+                  - /url: /developers
+              - listitem [ref=e258]:
+                - link "Готовые решения" [ref=e259] [cursor=pointer]:
+                  - /url: /solutions
+              - listitem [ref=e260]:
+                - link "Связаться с нами" [ref=e261] [cursor=pointer]:
+                  - /url: /contact-us
+          - generic [ref=e262]:
+            - heading "Сотрудничество" [level=2] [ref=e263]
+            - list [ref=e264]:
+              - listitem [ref=e265]:
+                - link "Наши преимущества" [ref=e266] [cursor=pointer]:
+                  - /url: /advantages
+              - listitem [ref=e267]:
+                - link "Запросить индивидуальный тариф" [ref=e268] [cursor=pointer]:
+                  - /url: /request-quote
+              - listitem [ref=e269]:
+                - link "Партнёрская программа" [ref=e270] [cursor=pointer]:
+                  - /url: /affiliates
+              - listitem [ref=e271]:
+                - link "Представителям компаний" [ref=e272] [cursor=pointer]:
+                  - /url: /representatives
+              - listitem [ref=e273]:
+                - link "СМС-шлюзам" [ref=e274] [cursor=pointer]:
+                  - /url: /resellers
+      - generic [ref=e276]:
+        - heading "СМС-рассылки по всему миру! - SMSC, SMS-шлюз, HTTP REST API, SMPP-сервер" [level=3] [ref=e277]
+        - heading [level=3] [ref=e278]:
+          - text: Copyright © BYTEHAND.COM 2007 - 2026,
+          - link "Лицензия связи №177869" [ref=e279] [cursor=pointer]:
+            - /url: assets/images/license_telecom.jpg
+  - button [ref=e281] [cursor=pointer]:
+    - img [aria-hidden] [ref=e282]: keyboard_arrow_up

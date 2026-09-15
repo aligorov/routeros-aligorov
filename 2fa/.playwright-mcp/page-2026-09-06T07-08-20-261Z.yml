@@ -1,0 +1,43 @@
+- generic [ref=f12e2]:
+  - complementary [ref=f12e3]:
+    - link "2FA twofa" [ref=f12e4] [cursor=pointer]:
+      - /url: /me
+      - generic [ref=f12e5]: 2FA
+      - text: twofa
+    - navigation [ref=f12e6]:
+      - generic [ref=f12e7]: Кабинет
+      - link "Профиль" [ref=f12e8] [cursor=pointer]:
+        - /url: /me
+      - link "Приложение TOTP" [ref=f12e9] [cursor=pointer]:
+        - /url: /me/totp
+      - link "Резервные коды" [ref=f12e10] [cursor=pointer]:
+        - /url: /me/backup
+      - link "Telegram" [ref=f12e11] [cursor=pointer]:
+        - /url: /me/telegram
+      - link "Passkeys" [ref=f12e12] [cursor=pointer]:
+        - /url: /me/passkeys
+      - link "Устройства" [ref=f12e13] [cursor=pointer]:
+        - /url: /me/devices
+      - generic [ref=f12e14]: Админ
+      - link "Пользователи" [ref=f12e15] [cursor=pointer]:
+        - /url: /admin/users
+      - link "Аудит" [ref=f12e16] [cursor=pointer]:
+        - /url: /admin/audit
+      - link "Активные challenge" [ref=f12e17] [cursor=pointer]:
+        - /url: /admin/challenges
+      - link "Настройки" [ref=f12e18] [cursor=pointer]:
+        - /url: /admin/settings
+    - generic [ref=f12e19]:
+      - generic "admin" [ref=f12e20]
+      - button "Выйти" [ref=f12e22] [cursor=pointer]
+  - generic [ref=f12e23]:
+    - main [ref=f12e24]:
+      - generic [ref=f12e25]:
+        - heading "Приложение TOTP" [level=1] [ref=f12e26]
+        - paragraph [ref=f12e27]: Google Authenticator, Aegis, 1Password и другие приложения с шестизначными кодами.
+      - generic [ref=f12e28]:
+        - generic [ref=f12e29]:
+          - heading "TOTP не привязан" [level=2] [ref=f12e30]
+          - paragraph [ref=f12e31]: Нажмите кнопку — сервер выдаст секрет, который нужно отсканировать приложением и подтвердить кодом.
+        - button "Привязать приложение" [ref=f12e34] [cursor=pointer]
+    - contentinfo [ref=f12e35]: twofa

@@ -1,0 +1,137 @@
+- generic [ref=f5e2]:
+  - complementary [ref=f5e3]:
+    - link "2FA twofa" [ref=f5e4] [cursor=pointer]:
+      - /url: /me
+      - generic [ref=f5e5]: 2FA
+      - text: twofa
+    - navigation [ref=f5e6]:
+      - generic [ref=f5e7]: Кабинет
+      - link "Профиль" [ref=f5e8] [cursor=pointer]:
+        - /url: /me
+      - link "Приложение TOTP" [ref=f5e9] [cursor=pointer]:
+        - /url: /me/totp
+      - link "Резервные коды" [ref=f5e10] [cursor=pointer]:
+        - /url: /me/backup
+      - link "Telegram" [ref=f5e11] [cursor=pointer]:
+        - /url: /me/telegram
+      - link "Passkeys" [ref=f5e12] [cursor=pointer]:
+        - /url: /me/passkeys
+      - link "Устройства" [ref=f5e13] [cursor=pointer]:
+        - /url: /me/devices
+      - generic [ref=f5e14]: Админ
+      - link "Пользователи" [ref=f5e15] [cursor=pointer]:
+        - /url: /admin/users
+      - link "Аудит" [ref=f5e16] [cursor=pointer]:
+        - /url: /admin/audit
+      - link "Активные challenge" [ref=f5e17] [cursor=pointer]:
+        - /url: /admin/challenges
+      - link "Настройки" [ref=f5e18] [cursor=pointer]:
+        - /url: /admin/settings
+    - generic [ref=f5e19]:
+      - generic "admin" [ref=f5e20]
+      - button "Выйти" [ref=f5e22] [cursor=pointer]
+  - generic [ref=f5e23]:
+    - main [ref=f5e24]:
+      - generic [ref=f5e25]:
+        - heading "Профиль" [level=1] [ref=f5e26]
+        - paragraph [ref=f5e27]: Контакты, каналы доставки кодов и смена пароля.
+      - generic [ref=f5e28]:
+        - generic [ref=f5e29]:
+          - heading "Статус каналов" [level=2] [ref=f5e30]
+          - paragraph [ref=f5e31]: Какие второй факторы привязаны и где ими управлять.
+        - table [ref=f5e33]:
+          - rowgroup [ref=f5e34]:
+            - row [ref=f5e35]:
+              - columnheader "Канал" [ref=f5e36]
+              - columnheader "Статус" [ref=f5e37]
+              - columnheader [ref=f5e38]
+            - row [ref=f5e39]:
+              - cell "TOTP-приложение" [ref=f5e40]
+              - cell "не привязан" [ref=f5e41]
+              - cell [ref=f5e43]:
+                - link "Управлять" [ref=f5e44] [cursor=pointer]:
+                  - /url: /me/totp
+            - row [ref=f5e45]:
+              - cell "Резервные коды" [ref=f5e46]
+              - 'cell "осталось: 0" [ref=f5e47]'
+              - cell [ref=f5e49]:
+                - link "Управлять" [ref=f5e50] [cursor=pointer]:
+                  - /url: /me/backup
+            - row [ref=f5e51]:
+              - cell "Telegram" [ref=f5e52]
+              - cell "не привязан" [ref=f5e53]
+              - cell [ref=f5e55]:
+                - link "Управлять" [ref=f5e56] [cursor=pointer]:
+                  - /url: /me/telegram
+            - row [ref=f5e57]:
+              - cell "Passkeys" [ref=f5e58]
+              - 'cell "ключей: 0" [ref=f5e59]'
+              - cell [ref=f5e61]:
+                - link "Управлять" [ref=f5e62] [cursor=pointer]:
+                  - /url: /me/passkeys
+      - generic [ref=f5e63]:
+        - generic [ref=f5e64]:
+          - heading "Контакты" [level=2] [ref=f5e65]
+          - paragraph [ref=f5e66]: Смена email или телефона требует код подтверждения на старый канал (или резервный код).
+        - generic [ref=f5e67]:
+          - generic [ref=f5e68]:
+            - generic [ref=f5e69]:
+              - generic [ref=f5e70]: Email
+              - textbox "Email Адрес, на который приходят коды." [ref=f5e71]
+              - generic [ref=f5e72]: Адрес, на который приходят коды.
+            - generic [ref=f5e73]:
+              - generic [ref=f5e74]: Телефон
+              - textbox "Телефон В международном формате, для SMS." [ref=f5e75]:
+                - /placeholder: "+79990001122"
+              - generic [ref=f5e76]: В международном формате, для SMS.
+          - generic [ref=f5e77]:
+            - generic [ref=f5e78]: Код подтверждения
+            - textbox "Код подтверждения Запросите код кнопкой рядом и введите его сюда." [ref=f5e79]
+            - generic [ref=f5e80]: Запросите код кнопкой рядом и введите его сюда.
+          - button "Сохранить контакты" [ref=f5e82] [cursor=pointer]
+        - generic [ref=f5e84]:
+          - generic [ref=f5e85]:
+            - generic [ref=f5e86]: Отправить код подтверждения на канал
+            - combobox "Отправить код подтверждения на канал Пришлём одноразовый код для подтверждения смены контактов." [ref=f5e87]:
+              - option "Email" [selected]
+              - option "SMS"
+              - option "Telegram"
+            - generic [ref=f5e88]: Пришлём одноразовый код для подтверждения смены контактов.
+          - button "Отправить код подтверждения" [ref=f5e90] [cursor=pointer]
+      - generic [ref=f5e91]:
+        - generic [ref=f5e92]:
+          - heading "Каналы второго фактора" [level=2] [ref=f5e93]
+          - paragraph [ref=f5e94]: В каком порядке пробовать каналы при входе.
+        - generic [ref=f5e95]:
+          - generic [ref=f5e96]:
+            - generic [ref=f5e97] [cursor=pointer]:
+              - checkbox "TOTP-приложение" [checked] [ref=f5e98]
+              - generic [ref=f5e99]: TOTP-приложение
+            - generic [ref=f5e100] [cursor=pointer]:
+              - checkbox "Telegram" [ref=f5e101]
+              - generic [ref=f5e102]: Telegram
+            - generic [ref=f5e103] [cursor=pointer]:
+              - checkbox "Email" [checked] [ref=f5e104]
+              - generic [ref=f5e105]: Email
+            - generic [ref=f5e106] [cursor=pointer]:
+              - checkbox "SMS" [checked] [ref=f5e107]
+              - generic [ref=f5e108]: SMS
+          - button "Сохранить каналы" [ref=f5e110] [cursor=pointer]
+      - generic [ref=f5e111]:
+        - generic [ref=f5e112]:
+          - heading "Смена пароля" [level=2] [ref=f5e113]
+          - paragraph [ref=f5e114]: После смены пароля все сессии и доверенные устройства отзываются.
+        - generic [ref=f5e115]:
+          - generic [ref=f5e116]:
+            - generic [ref=f5e117]:
+              - generic [ref=f5e118]: Текущий пароль
+              - textbox "Текущий пароль" [ref=f5e119]
+            - generic [ref=f5e120]:
+              - generic [ref=f5e121]: Новый пароль
+              - textbox "Новый пароль Минимум 8 символов." [ref=f5e122]
+              - generic [ref=f5e123]: Минимум 8 символов.
+          - generic [ref=f5e124]:
+            - generic [ref=f5e125]: Новый пароль ещё раз
+            - textbox "Новый пароль ещё раз" [ref=f5e126]
+          - button "Сменить пароль" [ref=f5e128] [cursor=pointer]
+    - contentinfo [ref=f5e129]: twofa

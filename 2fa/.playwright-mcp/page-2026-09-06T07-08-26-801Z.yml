@@ -1,0 +1,64 @@
+- generic [ref=f13e2]:
+  - complementary [ref=f13e3]:
+    - link "2FA twofa" [ref=f13e4] [cursor=pointer]:
+      - /url: /me
+      - generic [ref=f13e5]: 2FA
+      - text: twofa
+    - navigation [ref=f13e6]:
+      - generic [ref=f13e7]: Кабинет
+      - link "Профиль" [ref=f13e8] [cursor=pointer]:
+        - /url: /me
+      - link "Приложение TOTP" [ref=f13e9] [cursor=pointer]:
+        - /url: /me/totp
+      - link "Резервные коды" [ref=f13e10] [cursor=pointer]:
+        - /url: /me/backup
+      - link "Telegram" [ref=f13e11] [cursor=pointer]:
+        - /url: /me/telegram
+      - link "Passkeys" [ref=f13e12] [cursor=pointer]:
+        - /url: /me/passkeys
+      - link "Устройства" [ref=f13e13] [cursor=pointer]:
+        - /url: /me/devices
+      - generic [ref=f13e14]: Админ
+      - link "Пользователи" [ref=f13e15] [cursor=pointer]:
+        - /url: /admin/users
+      - link "Аудит" [ref=f13e16] [cursor=pointer]:
+        - /url: /admin/audit
+      - link "Активные challenge" [ref=f13e17] [cursor=pointer]:
+        - /url: /admin/challenges
+      - link "Настройки" [ref=f13e18] [cursor=pointer]:
+        - /url: /admin/settings
+    - generic [ref=f13e19]:
+      - generic "admin" [ref=f13e20]
+      - button "Выйти" [ref=f13e22] [cursor=pointer]
+  - generic [ref=f13e23]:
+    - main [ref=f13e24]:
+      - generic [ref=f13e25]:
+        - generic [ref=f13e26]: ✅
+        - text: "Секрет выдан: отсканируйте QR и введите код."
+      - generic [ref=f13e27]:
+        - heading "Приложение TOTP" [level=1] [ref=f13e28]
+        - paragraph [ref=f13e29]: Google Authenticator, Aegis, 1Password и другие приложения с шестизначными кодами.
+      - generic [ref=f13e30]:
+        - generic [ref=f13e31]:
+          - heading "Шаг 1. Отсканируйте QR-код" [level=2] [ref=f13e32]
+          - paragraph [ref=f13e33]: Откройте приложение-аутентификатор и добавьте аккаунт по QR-коду.
+        - img "QR-код TOTP" [ref=f13e35]
+        - generic [ref=f13e36]:
+          - code [ref=f13e37]: otpauth://totp/twofa:admin?digits=6&issuer=twofa&period=30&secret=NGVCNDTZ5HTXSYON5DVTMPWCSTCEZASJ
+          - button "Скопировать" [ref=f13e38] [cursor=pointer]
+        - paragraph [ref=f13e39]: Не сканируется? Скопируйте ссылку и вставьте в приложение вручную.
+      - generic [ref=f13e40]:
+        - generic [ref=f13e41]:
+          - heading "Шаг 2. Введите код из приложения" [level=2] [ref=f13e42]
+          - paragraph [ref=f13e43]: Код подтверждает, что приложение сохранило секрет верно.
+        - generic [ref=f13e44]:
+          - generic [ref=f13e45]:
+            - generic [ref=f13e46]: Код из приложения
+            - textbox "Код из приложения" [active] [ref=f13e47]
+          - button "Подтвердить" [ref=f13e49] [cursor=pointer]
+      - generic [ref=f13e50]:
+        - generic [ref=f13e51]:
+          - heading "Шаг 3. Сохраните резервные коды" [level=2] [ref=f13e52]
+          - paragraph [ref=f13e53]: Сразу после подтверждения сервер покажет резервные коды — они отображаются только один раз.
+        - button "Выдать новый секрет заново" [ref=f13e55] [cursor=pointer]
+    - contentinfo [ref=f13e56]: twofa

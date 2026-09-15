@@ -1,0 +1,127 @@
+- generic [ref=f4e2]:
+  - complementary [ref=f4e3]:
+    - link "2FA twofa" [ref=f4e4] [cursor=pointer]:
+      - /url: /me
+      - generic [ref=f4e5]: 2FA
+      - text: twofa
+    - navigation [ref=f4e6]:
+      - generic [ref=f4e7]: Кабинет
+      - link "Профиль" [ref=f4e8] [cursor=pointer]:
+        - /url: /me
+      - link "Приложение TOTP" [ref=f4e9] [cursor=pointer]:
+        - /url: /me/totp
+      - link "Резервные коды" [ref=f4e10] [cursor=pointer]:
+        - /url: /me/backup
+      - link "Telegram" [ref=f4e11] [cursor=pointer]:
+        - /url: /me/telegram
+      - link "Passkeys" [ref=f4e12] [cursor=pointer]:
+        - /url: /me/passkeys
+      - link "Устройства" [ref=f4e13] [cursor=pointer]:
+        - /url: /me/devices
+      - generic [ref=f4e14]: Админ
+      - link "Пользователи" [ref=f4e15] [cursor=pointer]:
+        - /url: /admin/users
+      - link "Аудит" [ref=f4e16] [cursor=pointer]:
+        - /url: /admin/audit
+      - link "Активные challenge" [ref=f4e17] [cursor=pointer]:
+        - /url: /admin/challenges
+      - link "Настройки" [ref=f4e18] [cursor=pointer]:
+        - /url: /admin/settings
+    - generic [ref=f4e19]:
+      - generic "admin" [ref=f4e20]
+      - button "Выйти" [ref=f4e22] [cursor=pointer]
+  - generic [ref=f4e23]:
+    - main [ref=f4e24]:
+      - generic [ref=f4e25]:
+        - heading "Пользователи" [level=1] [ref=f4e26]
+        - paragraph [ref=f4e27]: "Все учётные записи сервера: роли, каналы кодов и чувствительные действия."
+      - generic [ref=f4e28]:
+        - generic [ref=f4e29]:
+          - heading "Список" [level=2] [ref=f4e30]
+          - paragraph [ref=f4e31]: Действия применяются сразу; удаление необратимо.
+        - table [ref=f4e33]:
+          - rowgroup [ref=f4e34]:
+            - row [ref=f4e35]:
+              - columnheader "Имя" [ref=f4e36]
+              - columnheader "Роль" [ref=f4e37]
+              - columnheader "Включён" [ref=f4e38]
+              - columnheader "Каналы" [ref=f4e39]
+              - columnheader "RADIUS Push" [ref=f4e40]
+              - columnheader "Действия" [ref=f4e41]
+            - row [ref=f4e42]:
+              - cell "admin" [ref=f4e43]
+              - cell "admin" [ref=f4e44]
+              - cell "да" [ref=f4e46]
+              - cell "totp email sms" [ref=f4e48]:
+                - generic [ref=f4e49]: totp
+                - generic [ref=f4e50]: email
+                - generic [ref=f4e51]: sms
+              - cell "нет" [ref=f4e52]
+              - cell [ref=f4e54]:
+                - link "Редактировать" [ref=f4e55] [cursor=pointer]:
+                  - /url: /admin/users/65bc9801-cdd5-4269-99d7-1570cb4ba93a
+                - button "Сброс TOTP" [ref=f4e57] [cursor=pointer]
+                - button "Сброс passkeys" [ref=f4e59] [cursor=pointer]
+                - button "Отвязать Telegram" [ref=f4e61] [cursor=pointer]
+                - button "Отозвать устройства" [ref=f4e63] [cursor=pointer]
+                - button "Удалить" [ref=f4e65] [cursor=pointer]
+      - generic [ref=f4e66]:
+        - generic [ref=f4e67]:
+          - heading "Новый пользователь" [level=2] [ref=f4e68]
+          - paragraph [ref=f4e69]: Имя и пароль обязательны; остальное можно изменить позже.
+        - generic [ref=f4e70]:
+          - generic [ref=f4e71]:
+            - generic [ref=f4e72]:
+              - generic [ref=f4e73]: Имя пользователя
+              - textbox "Имя пользователя" [ref=f4e74]
+            - generic [ref=f4e75]:
+              - generic [ref=f4e76]:
+                - text: Пароль
+                - generic [ref=f4e77]: (пусто — не менять)
+              - textbox "Пароль (пусто — не менять)" [ref=f4e78]
+          - generic [ref=f4e79]:
+            - generic [ref=f4e80]:
+              - generic [ref=f4e81]: Роль
+              - combobox "Роль admin видит раздел «Админ» и управляет настройками." [ref=f4e82]:
+                - option "user" [selected]
+                - option "admin"
+              - generic [ref=f4e83]: admin видит раздел «Админ» и управляет настройками.
+            - generic [ref=f4e84]:
+              - generic [ref=f4e85]: Доступ
+              - generic [ref=f4e86] [cursor=pointer]:
+                - checkbox "Включён" [checked] [ref=f4e87]
+                - generic [ref=f4e88]: Включён
+              - generic [ref=f4e89]: Отключённый не может войти, его сессии моментально отзываются.
+          - generic [ref=f4e90]:
+            - generic [ref=f4e91]:
+              - generic [ref=f4e92]: Email
+              - textbox "Email" [ref=f4e93]
+            - generic [ref=f4e94]:
+              - generic [ref=f4e95]: Телефон
+              - textbox "Телефон" [ref=f4e96]:
+                - /placeholder: "+79990001122"
+          - group "Каналы второго фактора" [ref=f4e97]:
+            - generic [ref=f4e99] [cursor=pointer]:
+              - checkbox "TOTP" [ref=f4e100]
+              - generic [ref=f4e101]: TOTP
+            - generic [ref=f4e102] [cursor=pointer]:
+              - checkbox "Telegram" [ref=f4e103]
+              - generic [ref=f4e104]: Telegram
+            - generic [ref=f4e105] [cursor=pointer]:
+              - checkbox "Email" [ref=f4e106]
+              - generic [ref=f4e107]: Email
+            - generic [ref=f4e108] [cursor=pointer]:
+              - checkbox "SMS" [ref=f4e109]
+              - generic [ref=f4e110]: SMS
+          - generic [ref=f4e111] [cursor=pointer]:
+            - checkbox "RADIUS Push — Telegram-подтверждение вместо кода" [ref=f4e112]
+            - generic [ref=f4e113]: RADIUS Push — Telegram-подтверждение вместо кода
+          - generic [ref=f4e114]:
+            - generic [ref=f4e115]:
+              - text: RADIUS Reply
+              - generic [ref=f4e116]: (JSON)
+            - textbox "RADIUS Reply (JSON) Атрибуты Access-Accept для этого пользователя." [ref=f4e117]:
+              - /placeholder: "{\"Mikrotik-Group\": \"vpn\"}"
+            - generic [ref=f4e118]: Атрибуты Access-Accept для этого пользователя.
+          - button "Сохранить" [ref=f4e120] [cursor=pointer]
+    - contentinfo [ref=f4e121]: twofa

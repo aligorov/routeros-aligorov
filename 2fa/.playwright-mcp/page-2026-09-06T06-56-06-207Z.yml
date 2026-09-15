@@ -1,0 +1,167 @@
+- generic [ref=f2e2]:
+  - generic [ref=f2e3]:
+    - progressbar [ref=f2e4]
+    - generic [ref=f2e12]:
+      - link [ref=f2e13] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f2e15]:
+        - button "Услуги" [ref=f2e16]
+        - button "Тарифы" [ref=f2e20]
+        - button "Готовые решения" [ref=f2e24]
+        - button "Разработчикам" [ref=f2e28]
+        - button "Вопросы и ответы" [ref=f2e32]
+      - button "Войти в аккаунт" [ref=f2e37]
+      - button [ref=f2e41] [cursor=pointer]
+    - generic [ref=f2e53]:
+      - generic [ref=f2e57]:
+        - link "BYTEHAND" [ref=f2e58] [cursor=pointer]:
+          - /url: /
+        - link "Тарифы" [ref=f2e60] [cursor=pointer]:
+          - /url: /pricing
+        - link "Варианты использования" [ref=f2e62] [cursor=pointer]:
+          - /url: /cases
+        - link "Готовые решения" [ref=f2e64] [cursor=pointer]:
+          - /url: /solutions
+        - generic [ref=f2e66]:
+          - button "Руководство разработчика" [expanded] [ref=f2e67] [cursor=pointer]
+          - region "Руководство разработчика" [ref=f2e73]:
+            - list [ref=f2e75]:
+              - listitem [ref=f2e76]:
+                - link "Обзор" [ref=f2e77] [cursor=pointer]:
+                  - /url: /developers
+              - listitem [ref=f2e79]:
+                - link "BYTEHAND API v2" [ref=f2e80] [cursor=pointer]:
+                  - /url: /developers/v2
+              - listitem [ref=f2e82]:
+                - link "BYTEHAND API v1" [ref=f2e83] [cursor=pointer]:
+                  - /url: /developers/v1
+              - listitem [ref=f2e85]:
+                - link "SMPP шлюз" [ref=f2e86] [cursor=pointer]:
+                  - /url: /developers/smpp
+        - link "Вопросы и ответы" [ref=f2e88] [cursor=pointer]:
+          - /url: /faq
+        - link "Связаться с нами" [ref=f2e90] [cursor=pointer]:
+          - /url: /contact-us
+      - generic [ref=f2e94]:
+        - list [ref=f2e95]:
+          - listitem [ref=f2e96]:
+            - link "BYTEHAND" [ref=f2e97] [cursor=pointer]:
+              - /url: /
+          - listitem [ref=f2e98]:
+            - generic [ref=f2e99]: Руководство разработчика
+        - heading "Руководство разработчика" [level=1] [ref=f2e100]
+        - heading "Текущая версия" [level=2] [ref=f2e102]
+        - paragraph [ref=f2e103]: BYTEHAND API v2 реализован в архитектурном стиле RESTful веб-API, обмен данными происходит в формате JSON. Это самая новая версия API, рекомендуется к использованию.
+        - paragraph [ref=f2e104]: "BYTEHAND API v2 является гибким инструментом и позволяет совершать все действия, доступные пользователю из его личного кабинета, например:"
+        - list [ref=f2e105]:
+          - listitem [ref=f2e106]: Отправлять СМС сообщения и СМС рассылки;
+          - listitem [ref=f2e107]: Получать статусы отправленных СМС сообщений;
+          - listitem [ref=f2e108]: Управлять списками контактов;
+          - listitem [ref=f2e109]: Получать необходимую статистику и отчёты;
+          - listitem [ref=f2e110]: Контролировать и управлять балансом аккаунта.
+        - paragraph [ref=f2e111]:
+          - text: Для того чтобы получить подробную информацию о доступных операциях и структурах данных, ознакомьтесь с
+          - link "руководством для разработчиков по BYTEHAND API v2" [ref=f2e112] [cursor=pointer]:
+            - /url: /developers/v2
+          - text: .
+        - heading "Предыдущая версия" [level=2] [ref=f2e114]
+        - paragraph [ref=f2e115]:
+          - text: BYTEHAND API v1 является устаревшей версией API и не поддерживает многих операций, не рекомендуется к использованию. Используйте, только если стороннее решение, созданное для старой версии API, требует её. Ознакомиться с
+          - link "руководством для разработчиков по BYTEHAND API v1" [ref=f2e116] [cursor=pointer]:
+            - /url: /developers/v1
+          - text: .
+        - heading "SMPP шлюз" [level=2] [ref=f2e118]
+        - paragraph [ref=f2e119]:
+          - text: Воспользовавшись сервисом BYTEHAND, вы получаете в своё распоряжение собственный высокоскоростной SMPP шлюз для отправки СМС сообщений и получения их статусов. Ознакомиться с
+          - link "руководством по использованию SMPP шлюза BYTEHAND" [ref=f2e120] [cursor=pointer]:
+            - /url: /developers/smpp
+          - text: .
+        - separator
+        - separator [ref=f2e121]
+        - generic [ref=f2e122]:
+          - generic [ref=f2e123]: Нужна помощь? Посетите нашу страницу поддержки
+          - button "Связаться с нами" [ref=f2e124]
+    - generic [ref=f2e129]:
+      - generic [ref=f2e130]:
+        - generic [ref=f2e131]:
+          - generic [ref=f2e132]:
+            - heading "BYTEHAND" [level=2] [ref=f2e133]
+            - list [ref=f2e134]:
+              - listitem [ref=f2e135]:
+                - link "Новости" [ref=f2e136] [cursor=pointer]:
+                  - /url: /news
+              - listitem [ref=f2e137]:
+                - link "О проекте" [ref=f2e138] [cursor=pointer]:
+                  - /url: /about
+              - listitem [ref=f2e139]:
+                - link "Условия использования" [ref=f2e140] [cursor=pointer]:
+                  - /url: /terms
+              - listitem [ref=f2e141]:
+                - link "Политика безопасности" [ref=f2e142] [cursor=pointer]:
+                  - /url: /privacy
+              - listitem [ref=f2e143]:
+                - link "Контакты" [ref=f2e144] [cursor=pointer]:
+                  - /url: /contacts
+          - generic [ref=f2e145]:
+            - heading "Информация" [level=2] [ref=f2e146]
+            - list [ref=f2e147]:
+              - listitem [ref=f2e148]:
+                - link "Тарифы для всех стран" [ref=f2e149] [cursor=pointer]:
+                  - /url: /pricing
+              - listitem [ref=f2e150]:
+                - link "Вопросы и ответы" [ref=f2e151] [cursor=pointer]:
+                  - /url: /faq
+              - listitem [ref=f2e152]:
+                - link "Рассылки" [ref=f2e153] [cursor=pointer]:
+                  - /url: /campaigns
+              - listitem [ref=f2e154]:
+                - link "Наши клиенты" [ref=f2e155] [cursor=pointer]:
+                  - /url: /customers
+              - listitem [ref=f2e156]:
+                - link "Карта сайта" [ref=f2e157] [cursor=pointer]:
+                  - /url: /site-map
+        - generic [ref=f2e158]:
+          - generic [ref=f2e159]:
+            - heading "С чего начать?" [level=2] [ref=f2e160]
+            - list [ref=f2e161]:
+              - listitem [ref=f2e162]:
+                - link "Варианты использования" [ref=f2e163] [cursor=pointer]:
+                  - /url: /cases
+              - listitem [ref=f2e164]:
+                - link "Услуги" [ref=f2e165] [cursor=pointer]:
+                  - /url: /services
+              - listitem [ref=f2e166]:
+                - link "Разработчикам" [ref=f2e167] [cursor=pointer]:
+                  - /url: /developers
+              - listitem [ref=f2e168]:
+                - link "Готовые решения" [ref=f2e169] [cursor=pointer]:
+                  - /url: /solutions
+              - listitem [ref=f2e170]:
+                - link "Связаться с нами" [ref=f2e171] [cursor=pointer]:
+                  - /url: /contact-us
+          - generic [ref=f2e172]:
+            - heading "Сотрудничество" [level=2] [ref=f2e173]
+            - list [ref=f2e174]:
+              - listitem [ref=f2e175]:
+                - link "Наши преимущества" [ref=f2e176] [cursor=pointer]:
+                  - /url: /advantages
+              - listitem [ref=f2e177]:
+                - link "Запросить индивидуальный тариф" [ref=f2e178] [cursor=pointer]:
+                  - /url: /request-quote
+              - listitem [ref=f2e179]:
+                - link "Партнёрская программа" [ref=f2e180] [cursor=pointer]:
+                  - /url: /affiliates
+              - listitem [ref=f2e181]:
+                - link "Представителям компаний" [ref=f2e182] [cursor=pointer]:
+                  - /url: /representatives
+              - listitem [ref=f2e183]:
+                - link "СМС-шлюзам" [ref=f2e184] [cursor=pointer]:
+                  - /url: /resellers
+      - generic [ref=f2e186]:
+        - heading "СМС-рассылки по всему миру! - SMSC, SMS-шлюз, HTTP REST API, SMPP-сервер" [level=3] [ref=f2e187]
+        - heading [level=3] [ref=f2e188]:
+          - text: Copyright © BYTEHAND.COM 2007 - 2026,
+          - link "Лицензия связи №177869" [ref=f2e189] [cursor=pointer]:
+            - /url: assets/images/license_telecom.jpg
+  - button [ref=f2e191] [cursor=pointer]:
+    - img [aria-hidden] [ref=f2e192]: keyboard_arrow_up

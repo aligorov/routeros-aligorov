@@ -1,0 +1,257 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - link "2FA twofa" [ref=e4] [cursor=pointer]:
+      - /url: /me
+      - generic [ref=e5]: 2FA
+      - text: twofa
+    - navigation [ref=e6]:
+      - generic [ref=e7]: Кабинет
+      - link "Профиль" [ref=e8] [cursor=pointer]:
+        - /url: /me
+      - link "Приложение TOTP" [ref=e9] [cursor=pointer]:
+        - /url: /me/totp
+      - link "Резервные коды" [ref=e10] [cursor=pointer]:
+        - /url: /me/backup
+      - link "Telegram" [ref=e11] [cursor=pointer]:
+        - /url: /me/telegram
+      - link "Passkeys" [ref=e12] [cursor=pointer]:
+        - /url: /me/passkeys
+      - link "Устройства" [ref=e13] [cursor=pointer]:
+        - /url: /me/devices
+      - generic [ref=e14]: Админ
+      - link "Пользователи" [ref=e15] [cursor=pointer]:
+        - /url: /admin/users
+      - link "Аудит" [ref=e16] [cursor=pointer]:
+        - /url: /admin/audit
+      - link "Активные challenge" [ref=e17] [cursor=pointer]:
+        - /url: /admin/challenges
+      - link "Настройки" [ref=e18] [cursor=pointer]:
+        - /url: /admin/settings
+    - generic [ref=e19]:
+      - generic "admin" [ref=e20]
+      - button "Выйти" [ref=e22] [cursor=pointer]
+  - generic [ref=e23]:
+    - main [ref=e24]:
+      - generic [ref=e25]:
+        - heading "Настройки сервера" [level=1] [ref=e26]
+        - paragraph [ref=e27]: Каждая секция сохраняется отдельно. Секретные поля показывают только факт «задано»; чтобы изменить — введите новое значение, пустое поле не меняет текущее.
+      - generic [ref=e28]:
+        - generic [ref=e29]:
+          - heading "📡 Слушатели нужен перезапуск" [level=2] [ref=e30]:
+            - generic [ref=e31]: 📡
+            - text: Слушатели
+            - generic [ref=e32]: нужен перезапуск
+          - paragraph [ref=e33]: Адреса, на которых сервер принимает соединения.
+        - generic [ref=e34]:
+          - generic [ref=e35]:
+            - generic [ref=e36]:
+              - generic [ref=e37]: HTTP
+              - textbox "HTTP Веб-интерфейс и REST API." [ref=e38]: :8080
+              - generic [ref=e39]: Веб-интерфейс и REST API.
+            - generic [ref=e40]:
+              - generic [ref=e41]: RADIUS Auth
+              - textbox "RADIUS Auth" [ref=e42]: :1812
+            - generic [ref=e43]:
+              - generic [ref=e44]: RADIUS Acct
+              - textbox "RADIUS Acct Учётный порт (accounting)." [ref=e45]: :1813
+              - generic [ref=e46]: Учётный порт (accounting).
+          - button "Сохранить секцию" [ref=e48] [cursor=pointer]
+      - generic [ref=e49]:
+        - generic [ref=e50]:
+          - heading "🔑 RADIUS" [level=2] [ref=e51]:
+            - generic [ref=e52]: 🔑
+            - text: RADIUS
+          - paragraph [ref=e53]: "Параметры протокола для NAS-устройств: секрет, коды, ограничения."
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - generic [ref=e56]:
+              - generic [ref=e57]:
+                - text: Секрет
+                - generic [ref=e58]: •••• (задано)
+              - textbox "Секрет •••• (задано) Общий секрет с NAS-устройствами." [ref=e59]:
+                - /placeholder: введите новое, чтобы изменить
+              - generic [ref=e60]: Общий секрет с NAS-устройствами.
+            - generic [ref=e61]:
+              - generic [ref=e62]: Длины кодов (JSON)
+              - textbox "Длины кодов (JSON)" [ref=e63]: "[ 6, 8]"
+            - generic [ref=e64]:
+              - generic [ref=e65]: Макс. неудач на пользователя
+              - spinbutton "Макс. неудач на пользователя" [ref=e66]: "10"
+            - generic [ref=e67]:
+              - generic [ref=e68]: Окно неудач (duration)
+              - textbox "Окно неудач (duration)" [ref=e69]: 5m0s
+            - generic [ref=e70]:
+              - generic [ref=e71]: Ожидание push (duration)
+              - textbox "Ожидание push (duration)" [ref=e72]: 20s
+          - generic [ref=e73]:
+            - generic [ref=e74]: Reply-атрибуты Accept (JSON)
+            - textbox "Reply-атрибуты Accept (JSON) Атрибуты, добавляемые в Access-Accept всем пользователям." [ref=e75]: "{}"
+            - generic [ref=e76]: Атрибуты, добавляемые в Access-Accept всем пользователям.
+          - generic [ref=e77]:
+            - button "Сохранить секцию" [ref=e78] [cursor=pointer]
+            - button "Перегенерировать секрет" [ref=e79] [cursor=pointer]
+      - generic [ref=e80]:
+        - generic [ref=e81]:
+          - heading "🎫 Токены доступа" [level=2] [ref=e82]:
+            - generic [ref=e83]: 🎫
+            - text: Токены доступа
+          - paragraph [ref=e84]:
+            - text: admin_token — Bearer-токен REST API
+            - code [ref=e85]: /api/v1/admin/*
+            - text: . Новое значение показывается один раз; интеграции со старым токеном перестанут работать сразу после перегенерации.
+        - button "Перегенерировать admin_token" [ref=e88] [cursor=pointer]
+      - generic [ref=e89]:
+        - generic [ref=e90]:
+          - heading "✉️ SMTP SIGHUP" [level=2] [ref=e91]:
+            - generic [ref=e92]: ✉️
+            - text: SMTP
+            - generic [ref=e93]: SIGHUP
+          - paragraph [ref=e94]: Отправка кодов по email; применяется после SIGHUP или перезапуска.
+        - generic [ref=e95]:
+          - generic [ref=e96]:
+            - generic [ref=e97]:
+              - generic [ref=e98]: Хост
+              - textbox "Хост" [ref=e99]
+            - generic [ref=e100]:
+              - generic [ref=e101]: Порт
+              - spinbutton "Порт" [ref=e102]: "0"
+            - generic [ref=e103]:
+              - generic [ref=e104]: Пользователь
+              - textbox "Пользователь" [ref=e105]
+            - generic [ref=e106]:
+              - generic [ref=e107]: Пароль
+              - textbox "Пароль" [ref=e108]:
+                - /placeholder: введите новое, чтобы изменить
+            - generic [ref=e109]:
+              - generic [ref=e110]: От кого
+              - textbox "От кого" [ref=e111]
+            - generic [ref=e112]:
+              - generic [ref=e113]: Тема письма
+              - textbox "Тема письма" [ref=e114]
+            - generic [ref=e115]:
+              - generic [ref=e116]: Таймаут (duration)
+              - textbox "Таймаут (duration)" [ref=e117]: 0s
+            - generic [ref=e118]:
+              - generic [ref=e119]: Шифрование
+              - generic [ref=e120] [cursor=pointer]:
+                - checkbox "STARTTLS" [ref=e121]
+                - generic [ref=e122]: STARTTLS
+          - button "Сохранить секцию" [ref=e124] [cursor=pointer]
+      - generic [ref=e125]:
+        - generic [ref=e126]:
+          - heading "📱 SMS-шлюз SIGHUP" [level=2] [ref=e127]:
+            - generic [ref=e128]: 📱
+            - text: SMS-шлюз
+            - generic [ref=e129]: SIGHUP
+          - paragraph [ref=e130]: HTTP-шлюз отправки SMS; применяется после SIGHUP или перезапуска.
+        - generic [ref=e131]:
+          - generic [ref=e132]:
+            - generic [ref=e133]: Шлюз (JSON)
+            - textbox "Шлюз (JSON)" [ref=e134]:
+              - /placeholder: preset, method, url, headers, body, content_type, success
+              - text: "{}"
+          - generic [ref=e135]:
+            - generic [ref=e136]: Пресеты (JSON)
+            - textbox "Пресеты (JSON) Готовые наборы параметров шлюза по имени." [ref=e137]: "{}"
+            - generic [ref=e138]: Готовые наборы параметров шлюза по имени.
+          - button "Сохранить секцию" [ref=e140] [cursor=pointer]
+      - generic [ref=e141]:
+        - generic [ref=e142]:
+          - heading "📨 Telegram смена токена — перезапуск" [level=2] [ref=e143]:
+            - generic [ref=e144]: 📨
+            - text: Telegram
+            - generic [ref=e145]: смена токена — перезапуск
+          - paragraph [ref=e146]: Чат-бот для кодов и push-подтверждений.
+        - generic [ref=e147]:
+          - generic [ref=e148]:
+            - generic [ref=e149]:
+              - text: Токен бота
+              - generic [ref=e150]: не задан — бот выключен
+            - textbox "Токен бота не задан — бот выключен" [ref=e151]:
+              - /placeholder: введите новое, чтобы изменить
+          - button "Сохранить секцию" [ref=e153] [cursor=pointer]
+      - generic [ref=e154]:
+        - generic [ref=e155]:
+          - heading "🔢 TOTP" [level=2] [ref=e156]:
+            - generic [ref=e157]: 🔢
+            - text: TOTP
+          - paragraph [ref=e158]: Параметры кодов приложений-аутентификаторов.
+        - generic [ref=e159]:
+          - generic [ref=e160]:
+            - generic [ref=e161]:
+              - generic [ref=e162]: Издатель (issuer)
+              - textbox "Издатель (issuer) Отображается в приложении над аккаунтом." [ref=e163]: twofa
+              - generic [ref=e164]: Отображается в приложении над аккаунтом.
+            - generic [ref=e165]:
+              - generic [ref=e166]: Цифр в коде
+              - spinbutton "Цифр в коде" [ref=e167]: "6"
+            - generic [ref=e168]:
+              - generic [ref=e169]: Период, сек
+              - spinbutton "Период, сек" [ref=e170]: "30"
+            - generic [ref=e171]:
+              - generic [ref=e172]: Skew (шагов допуска)
+              - spinbutton "Skew (шагов допуска) Насколько шагов вперёд/назад принимает код." [ref=e173]: "1"
+              - generic [ref=e174]: Насколько шагов вперёд/назад принимает код.
+          - button "Сохранить секцию" [ref=e176] [cursor=pointer]
+      - generic [ref=e177]:
+        - generic [ref=e178]:
+          - heading "🔐 WebAuthn" [level=2] [ref=e179]:
+            - generic [ref=e180]: 🔐
+            - text: WebAuthn
+          - paragraph [ref=e181]: Домен и имя сервиса для passkeys.
+        - generic [ref=e182]:
+          - generic [ref=e183]:
+            - generic [ref=e184]:
+              - generic [ref=e185]: RP ID (домен сервера)
+              - textbox "RP ID (домен сервера)" [ref=e186]
+            - generic [ref=e187]:
+              - generic [ref=e188]: RP Name (отображаемое имя)
+              - textbox "RP Name (отображаемое имя)" [ref=e189]: twofa
+          - paragraph [ref=e190]: Смена RP ID отвязывает существующие passkeys — миграция описана в README.
+          - button "Сохранить секцию" [ref=e192] [cursor=pointer]
+      - generic [ref=e193]:
+        - generic [ref=e194]:
+          - heading "🛡️ Политики" [level=2] [ref=e195]:
+            - generic [ref=e196]: 🛡️
+            - text: Политики
+          - paragraph [ref=e197]: Сроки жизни кодов, лимиты попыток и блокировки.
+        - generic [ref=e198]:
+          - generic [ref=e199]:
+            - generic [ref=e200]:
+              - generic [ref=e201]: Время жизни кода
+              - textbox "Время жизни кода" [ref=e202]: 5m0s
+            - generic [ref=e203]:
+              - generic [ref=e204]: Длина кода
+              - spinbutton "Длина кода" [ref=e205]: "6"
+            - generic [ref=e206]:
+              - generic [ref=e207]: Попыток ввода
+              - spinbutton "Попыток ввода" [ref=e208]: "5"
+            - generic [ref=e209]:
+              - generic [ref=e210]: Cooldown повторной отправки
+              - textbox "Cooldown повторной отправки" [ref=e211]: 1m0s
+            - generic [ref=e212]:
+              - generic [ref=e213]: Cooldown push
+              - textbox "Cooldown push" [ref=e214]: 30s
+            - generic [ref=e215]:
+              - generic [ref=e216]: Push в час
+              - spinbutton "Push в час" [ref=e217]: "10"
+            - generic [ref=e218]:
+              - generic [ref=e219]: Срок доверия устройству
+              - textbox "Срок доверия устройству" [ref=e220]: 720h0m0s
+            - generic [ref=e221]:
+              - generic [ref=e222]: Неудач до блокировки
+              - spinbutton "Неудач до блокировки" [ref=e223]: "5"
+            - generic [ref=e224]:
+              - generic [ref=e225]: Окно неудач
+              - textbox "Окно неудач" [ref=e226]: 5m0s
+            - generic [ref=e227]:
+              - generic [ref=e228]: Время блокировки
+              - textbox "Время блокировки" [ref=e229]: 15m0s
+            - generic [ref=e230]:
+              - generic [ref=e231]: Сессия web (duration)
+              - textbox "Сессия web (duration)" [ref=e232]: 12h0m0s
+            - generic [ref=e233]:
+              - generic [ref=e234]: Каналы по умолчанию (JSON)
+              - textbox "Каналы по умолчанию (JSON)" [ref=e235]: "[ \"totp\", \"telegram\", \"email\", \"sms\"]"
+          - button "Сохранить секцию" [ref=e237] [cursor=pointer]
+    - contentinfo [ref=e238]: twofa

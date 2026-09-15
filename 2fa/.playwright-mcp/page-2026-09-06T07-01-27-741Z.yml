@@ -1,0 +1,98 @@
+- generic [ref=f5e2]:
+  - generic [ref=f5e3]:
+    - progressbar [ref=f5e4]
+    - generic [ref=f5e12]:
+      - link [ref=f5e13] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f5e15]:
+        - button "Услуги" [ref=f5e16]
+        - button "Тарифы" [ref=f5e20]
+        - button "Готовые решения" [ref=f5e24]
+        - button "Разработчикам" [ref=f5e28]
+        - button "Вопросы и ответы" [ref=f5e32]
+      - button "Войти в аккаунт" [ref=f5e37]
+      - button [ref=f5e41] [cursor=pointer]
+    - generic [ref=f5e52]:
+      - generic [ref=f5e53]:
+        - generic [ref=f5e54]:
+          - generic [ref=f5e55]:
+            - heading "BYTEHAND" [level=2] [ref=f5e56]
+            - list [ref=f5e57]:
+              - listitem [ref=f5e58]:
+                - link "Новости" [ref=f5e59] [cursor=pointer]:
+                  - /url: /news
+              - listitem [ref=f5e60]:
+                - link "О проекте" [ref=f5e61] [cursor=pointer]:
+                  - /url: /about
+              - listitem [ref=f5e62]:
+                - link "Условия использования" [ref=f5e63] [cursor=pointer]:
+                  - /url: /terms
+              - listitem [ref=f5e64]:
+                - link "Политика безопасности" [ref=f5e65] [cursor=pointer]:
+                  - /url: /privacy
+              - listitem [ref=f5e66]:
+                - link "Контакты" [ref=f5e67] [cursor=pointer]:
+                  - /url: /contacts
+          - generic [ref=f5e68]:
+            - heading "Информация" [level=2] [ref=f5e69]
+            - list [ref=f5e70]:
+              - listitem [ref=f5e71]:
+                - link "Тарифы для всех стран" [ref=f5e72] [cursor=pointer]:
+                  - /url: /pricing
+              - listitem [ref=f5e73]:
+                - link "Вопросы и ответы" [ref=f5e74] [cursor=pointer]:
+                  - /url: /faq
+              - listitem [ref=f5e75]:
+                - link "Рассылки" [ref=f5e76] [cursor=pointer]:
+                  - /url: /campaigns
+              - listitem [ref=f5e77]:
+                - link "Наши клиенты" [ref=f5e78] [cursor=pointer]:
+                  - /url: /customers
+              - listitem [ref=f5e79]:
+                - link "Карта сайта" [ref=f5e80] [cursor=pointer]:
+                  - /url: /site-map
+        - generic [ref=f5e81]:
+          - generic [ref=f5e82]:
+            - heading "С чего начать?" [level=2] [ref=f5e83]
+            - list [ref=f5e84]:
+              - listitem [ref=f5e85]:
+                - link "Варианты использования" [ref=f5e86] [cursor=pointer]:
+                  - /url: /cases
+              - listitem [ref=f5e87]:
+                - link "Услуги" [ref=f5e88] [cursor=pointer]:
+                  - /url: /services
+              - listitem [ref=f5e89]:
+                - link "Разработчикам" [ref=f5e90] [cursor=pointer]:
+                  - /url: /developers
+              - listitem [ref=f5e91]:
+                - link "Готовые решения" [ref=f5e92] [cursor=pointer]:
+                  - /url: /solutions
+              - listitem [ref=f5e93]:
+                - link "Связаться с нами" [ref=f5e94] [cursor=pointer]:
+                  - /url: /contact-us
+          - generic [ref=f5e95]:
+            - heading "Сотрудничество" [level=2] [ref=f5e96]
+            - list [ref=f5e97]:
+              - listitem [ref=f5e98]:
+                - link "Наши преимущества" [ref=f5e99] [cursor=pointer]:
+                  - /url: /advantages
+              - listitem [ref=f5e100]:
+                - link "Запросить индивидуальный тариф" [ref=f5e101] [cursor=pointer]:
+                  - /url: /request-quote
+              - listitem [ref=f5e102]:
+                - link "Партнёрская программа" [ref=f5e103] [cursor=pointer]:
+                  - /url: /affiliates
+              - listitem [ref=f5e104]:
+                - link "Представителям компаний" [ref=f5e105] [cursor=pointer]:
+                  - /url: /representatives
+              - listitem [ref=f5e106]:
+                - link "СМС-шлюзам" [ref=f5e107] [cursor=pointer]:
+                  - /url: /resellers
+      - generic [ref=f5e109]:
+        - heading "СМС-рассылки по всему миру! - SMSC, SMS-шлюз, HTTP REST API, SMPP-сервер" [level=3] [ref=f5e110]
+        - heading [level=3] [ref=f5e111]:
+          - text: Copyright © BYTEHAND.COM 2007 - 2026,
+          - link "Лицензия связи №177869" [ref=f5e112] [cursor=pointer]:
+            - /url: assets/images/license_telecom.jpg
+  - button [ref=f5e114] [cursor=pointer]:
+    - img [aria-hidden] [ref=f5e115]: keyboard_arrow_up
