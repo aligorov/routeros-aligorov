@@ -1,0 +1,242 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - link "L Ligament" [ref=e4] [cursor=pointer]:
+      - /url: /me
+      - generic [ref=e5]: L
+      - text: Ligament
+    - navigation [ref=e6]:
+      - generic [ref=e7]: Кабинет
+      - link "Профиль" [ref=e8] [cursor=pointer]:
+        - /url: /me
+      - link "Приложение TOTP" [ref=e9] [cursor=pointer]:
+        - /url: /me/totp
+      - link "Резервные коды" [ref=e10] [cursor=pointer]:
+        - /url: /me/backup
+      - link "Мессенджеры" [ref=e11] [cursor=pointer]:
+        - /url: /me/messengers
+      - link "Passkeys" [ref=e12] [cursor=pointer]:
+        - /url: /me/passkeys
+      - link "Устройства" [ref=e13] [cursor=pointer]:
+        - /url: /me/devices
+      - link "Бастион (SSH)" [ref=e14] [cursor=pointer]:
+        - /url: /bastion
+      - link "📲 Приложения ↗" [ref=e15] [cursor=pointer]:
+        - /url: https://github.com/aligorov/ligament-apps/releases
+      - generic [ref=e16]: Поддержка
+      - link "Удаленная помощь (SOS)" [ref=e17] [cursor=pointer]:
+        - /url: /admin/support
+      - generic [ref=e18]: Админ
+      - link "Дашборд" [ref=e19] [cursor=pointer]:
+        - /url: /admin
+      - link "Пользователи" [ref=e20] [cursor=pointer]:
+        - /url: /admin/users
+      - link "Группы" [ref=e21] [cursor=pointer]:
+        - /url: /admin/groups
+      - link "Узлы Relay" [ref=e22] [cursor=pointer]:
+        - /url: /admin/relays
+      - 'link "Бастион: цели и сессии" [ref=e23] [cursor=pointer]':
+        - /url: /admin/bastion
+      - link "Аудит" [ref=e24] [cursor=pointer]:
+        - /url: /admin/audit
+      - link "Шлюз уведомлений" [ref=e25] [cursor=pointer]:
+        - /url: /admin/notifications
+      - link "RADIUS-сессии" [ref=e26] [cursor=pointer]:
+        - /url: /admin/radius/sessions
+      - link "Файрвол" [ref=e27] [cursor=pointer]:
+        - /url: /admin/firewall
+      - link "OIDC" [ref=e28] [cursor=pointer]:
+        - /url: /admin/oidc
+      - link "SAML" [ref=e29] [cursor=pointer]:
+        - /url: /admin/saml
+      - link "Активные challenge" [ref=e30] [cursor=pointer]:
+        - /url: /admin/challenges
+      - link "Настройки" [ref=e31] [cursor=pointer]:
+        - /url: /admin/settings
+      - link "Лицензия" [ref=e32] [cursor=pointer]:
+        - /url: /admin/license
+      - link "API" [ref=e33] [cursor=pointer]:
+        - /url: /api/docs
+    - combobox [ref=e35] [cursor=pointer]
+    - generic [ref=e36]:
+      - generic "admin" [ref=e37]
+      - button "Выйти" [ref=e39] [cursor=pointer]
+  - generic [ref=e40]:
+    - main [ref=e41]:
+      - generic [ref=e42]:
+        - heading "📬 Шлюз уведомлений" [level=1] [ref=e43]
+        - paragraph [ref=e44]: Доставка сообщений внешних систем пользователю — по его верифицированным каналам 2FA. Мониторинг, CRM или HR-бот отправляет сообщение одним API-запросом — Ligament доставляет его на почту, в мессенджер и на телефон сотрудника.
+      - generic [ref=e45]:
+        - heading "📖 Как это работает" [level=2] [ref=e47]
+        - list [ref=e48]:
+          - listitem [ref=e49]:
+            - strong [ref=e50]: Внешняя система
+            - text: вызывает
+            - code [ref=e51]: POST /api/v1/notify
+            - text: со своим API-токеном (scope
+            - code [ref=e52]: notify
+            - text: ), передавая получателя, тему и текст.
+          - listitem [ref=e53]:
+            - strong [ref=e54]: Ligament определяет каналы
+            - text: пользователя — только те, что привязаны и подтверждены в 2FA. Пустой список каналов = все привязанные (кроме платной SMS).
+          - listitem [ref=e55]:
+            - strong [ref=e56]: Очередь доставляет
+            - text: сообщение в каждый канал; при сбое канала — повторы через 1с / 4с / 16с, затем фиксируется финальный статус.
+          - listitem [ref=e57]:
+            - strong [ref=e58]: Журнал ниже
+            - text: показывает результат по каждому каналу; внешняя система может получить его callback'ом с HMAC-подписью.
+        - table [ref=e60]:
+          - rowgroup [ref=e61]:
+            - row [ref=e62]:
+              - columnheader "Канал" [ref=e63]
+              - columnheader "Что доставляется" [ref=e64]
+              - columnheader "Условие" [ref=e65]
+            - row [ref=e66]:
+              - cell "email" [ref=e67]
+              - cell "Письмо (тема + текст)" [ref=e69]
+              - cell "У пользователя указан Email" [ref=e70]
+            - row [ref=e71]:
+              - cell "telegram" [ref=e72]
+              - cell "Сообщение от бота" [ref=e74]
+              - cell "Telegram привязан" [ref=e75]
+            - row [ref=e76]:
+              - cell "мессенджеры" [ref=e77]
+              - cell "eXpress, VK Teams, MAX, Mattermost, Slack, VK, Discord" [ref=e79]
+              - cell "Соответствующий мессенджер привязан" [ref=e80]
+            - row [ref=e81]:
+              - cell "sms" [ref=e82]
+              - cell "Текст SMS" [ref=e84]
+              - cell [ref=e85]:
+                - text: Указан телефон;
+                - strong [ref=e86]: только явным перечислением
+                - text: — платный трафик
+            - row [ref=e87]:
+              - cell "app" [ref=e88]
+              - cell "Онлайн-приложение / PWA (баннер)" [ref=e90]
+              - cell "Клиент подключен (WS/SSE)" [ref=e91]
+            - row [ref=e92]:
+              - cell "webpush" [ref=e93]
+              - cell "Push на экран телефона/браузера" [ref=e95]
+              - cell "Активная push-подписка PWA" [ref=e96]
+        - paragraph [ref=e97]: "Пользователь может отказаться от сообщений интеграций: /me → «Уведомления от внешних интеграций» или тот же тумблер в бот-кабинете. Отключено — API отвечает 422 consent_required."
+      - generic [ref=e98]:
+        - generic [ref=e99]:
+          - heading "🧪 Проверка доставки" [level=2] [ref=e100]
+          - paragraph [ref=e101]: Отправить тестовое сообщение через реальную очередь — результат появится в журнале ниже (обычно в течение секунды).
+        - generic [ref=e102]:
+          - generic [ref=e103]:
+            - generic [ref=e104]:
+              - generic [ref=e105]: Получатель
+              - textbox "Получатель Имя пользователя (username), как в списке «Пользователи»." [ref=e106]:
+                - /placeholder: например, admin
+              - generic [ref=e107]: Имя пользователя (username), как в списке «Пользователи».
+            - generic [ref=e108]:
+              - generic [ref=e109]: Тема
+              - textbox "Тема Первая строка письма/сообщения. Необязательно." [ref=e110]:
+                - /placeholder: Тест шлюза уведомлений
+              - generic [ref=e111]: Первая строка письма/сообщения. Необязательно.
+          - generic [ref=e112]:
+            - generic [ref=e113]: Текст сообщения
+            - textbox "Текст сообщения Оставьте пустым — уйдёт стандартный тестовый текст." [ref=e114]:
+              - /placeholder: Тестовое сообщение, отправлено администратором со страницы «Шлюз уведомлений».
+            - generic [ref=e115]: Оставьте пустым — уйдёт стандартный тестовый текст.
+          - generic [ref=e116]:
+            - generic [ref=e117]: Каналы
+            - 'textbox "Каналы Через запятую: email, telegram, sms, express, vkteams, max, mattermost, slack, vk, discord, app, webpush." [ref=e118]':
+              - /placeholder: "пусто = все привязанные; пример: telegram, email"
+            - generic [ref=e119]: "Через запятую: email, telegram, sms, express, vkteams, max, mattermost, slack, vk, discord, app, webpush."
+          - button "🧪 Отправить тест" [ref=e121] [cursor=pointer]
+      - generic [ref=e122]:
+        - generic [ref=e123]:
+          - heading "🔌 Подключение внешней системы" [level=2] [ref=e124]
+          - paragraph [ref=e125]:
+            - text: Токен создаётся в «Настройки → Токены доступа» со scope
+            - code [ref=e126]: notify
+            - text: . Повтор запроса с тем же
+            - code [ref=e127]: Idempotency-Key
+            - text: "не дублирует отправку. Лимиты: 60 запросов/мин на токен, 30/мин на пользователя."
+        - generic [ref=e128]: "curl -X POST https://ваш-сервер/api/v1/notify \\ -H \"Authorization: Bearer <API-токен>\" \\ -H \"Idempotency-Key: инцидент-421\" \\ -H \"Content-Type: application/json\" \\ -d '{\"username\":\"petrov\", \"subject\":\"Диск сервера заполнен на 91%\", \"body\":\"Сервер fs-01: /data 91%. Требуется чистка.\", \"channels\":[\"telegram\",\"email\"]}'"
+        - paragraph [ref=e129]:
+          - text: Отложенная отправка — поле
+          - code [ref=e130]: send_at
+          - text: (RFC3339). Уведомление о финальном статусе на ваш URL — поле
+          - code [ref=e131]: callback_url
+          - text: ": придёт POST с заголовком"
+          - code [ref=e132]: X-Ligament-Signature
+          - text: (HMAC-SHA256, ключ — одноразовый
+          - code [ref=e133]: callback_secret
+          - text: из ответа). Полный контракт —
+          - link "/api/docs" [ref=e134] [cursor=pointer]:
+            - /url: /api/docs
+          - text: ", тег Notify."
+      - generic [ref=e135]:
+        - generic [ref=e136]:
+          - heading "🗂 Журнал доставок" [level=2] [ref=e137]
+          - paragraph [ref=e138]:
+            - text: "Статусы:"
+            - generic [ref=e139]: done
+            - text: доставлено во все каналы ·
+            - generic [ref=e140]: partial
+            - text: часть каналов ·
+            - generic [ref=e141]: failed
+            - text: ни один ·
+            - generic [ref=e142]: queued
+            - text: в очереди/ждёт повтора. Записи хранятся 30 дней.
+        - generic [ref=e143]:
+          - textbox "Пользователь" [ref=e144]
+          - combobox [ref=e145]:
+            - option "все статусы" [selected]
+            - option "queued"
+            - option "sending"
+            - option "done"
+            - option "partial"
+            - option "failed"
+          - button "Фильтр" [ref=e146] [cursor=pointer]
+        - table [ref=e148]:
+          - rowgroup [ref=e149]:
+            - row [ref=e150]:
+              - columnheader "Время" [ref=e151]
+              - columnheader "Пользователь" [ref=e152]
+              - columnheader "Тема" [ref=e153]
+              - columnheader "Каналы" [ref=e154]
+              - columnheader "Статус" [ref=e155]
+              - columnheader "Попытки" [ref=e156]
+              - columnheader "Результаты" [ref=e157]
+              - columnheader "Источник" [ref=e158]
+            - row [ref=e159]:
+              - cell "18.09.2026 19:34" [ref=e160]
+              - cell "petrov" [ref=e161]
+              - cell "Диск сервера заполнен на 91%" [ref=e162]
+              - cell "telegram email webpush" [ref=e163]:
+                - generic [ref=e164]: telegram
+                - generic [ref=e165]: email
+                - generic [ref=e166]: webpush
+              - cell "done" [ref=e167]
+              - cell "1" [ref=e169]
+              - cell "telegram ✓ email ✓ webpush ✓" [ref=e170]:
+                - generic "tg-chat" [ref=e171]: telegram ✓
+                - generic "pet***ov" [ref=e172]: email ✓
+                - generic "webpush" [ref=e173]: webpush ✓
+              - cell "zabbix" [ref=e174]
+            - row [ref=e175]:
+              - cell "18.09.2026 19:33" [ref=e176]
+              - cell "ivanov" [ref=e177]
+              - cell "Заявка согласована" [ref=e178]
+              - cell "telegram sms" [ref=e179]:
+                - generic [ref=e180]: telegram
+                - generic [ref=e181]: sms
+              - cell "partial" [ref=e182]
+              - cell "4" [ref=e184]
+              - cell "telegram ✓ sms ✗" [ref=e185]:
+                - generic "tg-chat" [ref=e186]: telegram ✓
+                - 'generic "шлюз: HTTP 502" [ref=e187]': sms ✗
+              - cell "admin-ui" [ref=e188]
+            - row [ref=e189]:
+              - cell "18.09.2026 19:32" [ref=e190]
+              - cell "sidorov" [ref=e191]
+              - cell "—" [ref=e192]
+              - cell "email" [ref=e193]
+              - cell "queued" [ref=e195]
+              - cell "0" [ref=e197]
+              - cell [ref=e198]
+              - cell "hr-bot" [ref=e199]
+    - contentinfo [ref=e200]: Ligament

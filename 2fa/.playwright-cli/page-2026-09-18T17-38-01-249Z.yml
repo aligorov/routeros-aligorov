@@ -1,0 +1,163 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - link "L Ligament" [ref=e4] [cursor=pointer]:
+      - /url: /me
+      - generic [ref=e5]: L
+      - text: Ligament
+    - navigation [ref=e6]:
+      - generic [ref=e7]: Кабинет
+      - link "Профиль" [ref=e8] [cursor=pointer]:
+        - /url: /me
+      - link "Приложение TOTP" [ref=e9] [cursor=pointer]:
+        - /url: /me/totp
+      - link "Резервные коды" [ref=e10] [cursor=pointer]:
+        - /url: /me/backup
+      - link "Мессенджеры" [ref=e11] [cursor=pointer]:
+        - /url: /me/messengers
+      - link "Passkeys" [ref=e12] [cursor=pointer]:
+        - /url: /me/passkeys
+      - link "Устройства" [ref=e13] [cursor=pointer]:
+        - /url: /me/devices
+      - link "Бастион (SSH)" [ref=e14] [cursor=pointer]:
+        - /url: /bastion
+      - link "📲 Приложения ↗" [ref=e15] [cursor=pointer]:
+        - /url: https://github.com/aligorov/ligament-apps/releases
+      - generic [ref=e16]: Поддержка
+      - link "Удаленная помощь (SOS)" [ref=e17] [cursor=pointer]:
+        - /url: /admin/support
+      - generic [ref=e18]: Админ
+      - link "Дашборд" [ref=e19] [cursor=pointer]:
+        - /url: /admin
+      - link "Пользователи" [ref=e20] [cursor=pointer]:
+        - /url: /admin/users
+      - link "Группы" [ref=e21] [cursor=pointer]:
+        - /url: /admin/groups
+      - link "Узлы Relay" [ref=e22] [cursor=pointer]:
+        - /url: /admin/relays
+      - 'link "Бастион: цели и сессии" [ref=e23] [cursor=pointer]':
+        - /url: /admin/bastion
+      - link "Аудит" [ref=e24] [cursor=pointer]:
+        - /url: /admin/audit
+      - link "Шлюз уведомлений" [ref=e25] [cursor=pointer]:
+        - /url: /admin/notifications
+      - link "RADIUS-сессии" [ref=e26] [cursor=pointer]:
+        - /url: /admin/radius/sessions
+      - link "Файрвол" [ref=e27] [cursor=pointer]:
+        - /url: /admin/firewall
+      - link "OIDC" [ref=e28] [cursor=pointer]:
+        - /url: /admin/oidc
+      - link "SAML" [ref=e29] [cursor=pointer]:
+        - /url: /admin/saml
+      - link "Активные challenge" [ref=e30] [cursor=pointer]:
+        - /url: /admin/challenges
+      - link "Настройки" [ref=e31] [cursor=pointer]:
+        - /url: /admin/settings
+      - link "Лицензия" [ref=e32] [cursor=pointer]:
+        - /url: /admin/license
+      - link "API" [ref=e33] [cursor=pointer]:
+        - /url: /api/docs
+    - combobox [ref=e35] [cursor=pointer]
+    - generic [ref=e36]:
+      - generic "admin" [ref=e37]
+      - button "Выйти" [ref=e39] [cursor=pointer]
+  - generic [ref=e40]:
+    - main [ref=e41]:
+      - generic [ref=e42]:
+        - heading "Настройки сервера" [level=1] [ref=e43]
+        - paragraph [ref=e44]: Каждая секция сохраняется отдельно. Секретные поля показывают только факт «задано»; чтобы изменить — введите новое значение, пустое поле не меняет текущее.
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - heading "🧭 Как пользоваться этой страницей" [level=2] [ref=e47]
+          - paragraph [ref=e48]:
+            - text: Настройки разложены по
+            - strong [ref=e49]: вкладкам групп
+            - text: "— выберите группу ниже, на экране будут только её разделы (выбор запоминается). У каждой секции бейдж применения — когда изменение вступает в силу после «Сохранить»:"
+        - generic [ref=e50]:
+          - generic [ref=e51]:
+            - generic [ref=e52]: на лету
+            - text: — применяется сразу, без перезапуска
+          - generic [ref=e53]:
+            - generic [ref=e54]: SIGHUP
+            - text: "— применить без перезапуска:"
+            - code [ref=e55]: docker compose kill -s HUP twofa
+          - generic [ref=e56]:
+            - generic [ref=e57]: нужен перезапуск
+            - text: —
+            - code [ref=e58]: docker compose up -d twofa
+          - generic [ref=e59]:
+            - generic [ref=e60]: смена токена — перезапуск
+            - text: — действует только для смены токена бота/шлюза
+        - paragraph [ref=e61]: "Перейти к группе:"
+        - tablist [ref=e62]:
+          - button "🖧 Сеть и сервер" [ref=e63] [cursor=pointer]
+          - button "🔐 Вход и безопасность" [ref=e64] [cursor=pointer]
+          - button "📨 Каналы доставки" [ref=e65] [cursor=pointer]
+          - button "🔔 Уведомления" [ref=e66] [cursor=pointer]
+          - button "🏢 Каталог" [ref=e67] [cursor=pointer]
+          - button "🧩 Модули" [ref=e68] [cursor=pointer]
+          - button "⚙️ Администрирование" [ref=e69] [cursor=pointer]
+      - generic [ref=e70]:
+        - generic [ref=e71]:
+          - heading "🖧 Сеть и сервер" [level=2] [ref=e72]
+          - paragraph [ref=e73]: Адреса и порты, которые слушает сервер, обратный прокси перед ним и TLS-сертификаты (включая EAP для Wi-Fi 802.1X).
+        - generic [ref=e74]:
+          - generic [ref=e75]:
+            - heading "📡 Слушатели нужен перезапуск" [level=2] [ref=e76]:
+              - generic [ref=e77]: 📡
+              - text: Слушатели
+              - generic [ref=e78]: нужен перезапуск
+            - paragraph [ref=e79]: Адреса, на которых сервер принимает соединения.
+          - generic [ref=e80]:
+            - generic [ref=e81]:
+              - generic [ref=e82]:
+                - generic [ref=e83]: HTTP
+                - textbox "HTTP Веб-интерфейс и REST API." [ref=e84]: :8080
+                - generic [ref=e85]: Веб-интерфейс и REST API.
+              - generic [ref=e86]:
+                - generic [ref=e87]: RADIUS Auth
+                - textbox "RADIUS Auth" [ref=e88]: :1812
+              - generic [ref=e89]:
+                - generic [ref=e90]: RADIUS Acct
+                - textbox "RADIUS Acct Учётный порт (accounting)." [ref=e91]: :1813
+                - generic [ref=e92]: Учётный порт (accounting).
+            - button "Сохранить секцию" [ref=e94] [cursor=pointer]
+        - generic [ref=e95]:
+          - generic [ref=e96]:
+            - heading "🔀 Обратный прокси на лету" [level=2] [ref=e97]:
+              - generic [ref=e98]: 🔀
+              - text: Обратный прокси
+              - generic [ref=e99]: на лету
+            - paragraph [ref=e100]: "Доверенные сети прокси (NPM/nginx/Docker): с них принимаются заголовки X-Forwarded-For, X-Real-IP и CF-Connecting-IP — в аудит, уведомления и fail2ban попадают реальные внешние IP клиентов."
+          - generic [ref=e101]:
+            - generic [ref=e102]:
+              - generic [ref=e103]: Доверенные сети (CIDR/IP, по одному в строке; или none для отключения)
+              - textbox "Доверенные сети (CIDR/IP, по одному в строке; или none для отключения)" [ref=e104]:
+                - /placeholder: "172.16.0.0/12\n192.168.0.0/16"
+            - button "Сохранить секцию" [ref=e106] [cursor=pointer]
+        - generic [ref=e107]:
+          - generic [ref=e108]:
+            - heading "🔒 SSL/TLS Сертификат (EAP / 802.1X / Web)" [level=2] [ref=e109]:
+              - generic [ref=e110]: 🔒
+              - text: SSL/TLS Сертификат (EAP / 802.1X / Web)
+            - paragraph [ref=e111]: Автоматическое получение и продление сертификатов Let's Encrypt (ACME HTTP-01) для Wi-Fi (WPA-Enterprise) и Web.
+          - generic [ref=e112]:
+            - generic [ref=e113]:
+              - generic [ref=e114]:
+                - checkbox "Включить автообновление Let's Encrypt" [ref=e115]
+                - generic [ref=e116]: Включить автообновление Let's Encrypt
+              - generic [ref=e117]:
+                - generic [ref=e118]: Домен (FQDN)
+                - textbox "Домен (FQDN) A-запись домена должна указывать на IP этого сервера (HTTP-порт 80)." [ref=e119]:
+                  - /placeholder: wifi.example.com
+                - generic [ref=e120]: A-запись домена должна указывать на IP этого сервера (HTTP-порт 80).
+              - generic [ref=e121]:
+                - generic [ref=e122]: Email для уведомлений
+                - textbox "Email для уведомлений" [ref=e123]:
+                  - /placeholder: admin@example.com
+              - generic [ref=e124]:
+                - checkbox "Тестовый режим (Let's Encrypt Staging)" [ref=e125]
+                - generic [ref=e126]: Тестовый режим (Let's Encrypt Staging)
+            - generic [ref=e127]:
+              - button "Сохранить секцию" [ref=e128] [cursor=pointer]
+              - button "Обновить сертификат сейчас" [ref=e129] [cursor=pointer]
+    - contentinfo [ref=e130]: Ligament

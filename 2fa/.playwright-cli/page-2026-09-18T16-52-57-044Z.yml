@@ -1,0 +1,1012 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - link "L Ligament" [ref=e4] [cursor=pointer]:
+      - /url: /me
+      - generic [ref=e5]: L
+      - text: Ligament
+    - navigation [ref=e6]:
+      - generic [ref=e7]: Кабинет
+      - link "Профиль" [ref=e8] [cursor=pointer]:
+        - /url: /me
+      - link "Приложение TOTP" [ref=e9] [cursor=pointer]:
+        - /url: /me/totp
+      - link "Резервные коды" [ref=e10] [cursor=pointer]:
+        - /url: /me/backup
+      - link "Мессенджеры" [ref=e11] [cursor=pointer]:
+        - /url: /me/messengers
+      - link "Passkeys" [ref=e12] [cursor=pointer]:
+        - /url: /me/passkeys
+      - link "Устройства" [ref=e13] [cursor=pointer]:
+        - /url: /me/devices
+      - link "Бастион (SSH)" [ref=e14] [cursor=pointer]:
+        - /url: /bastion
+      - link "📲 Приложения ↗" [ref=e15] [cursor=pointer]:
+        - /url: https://github.com/aligorov/ligament-apps/releases
+      - generic [ref=e16]: Поддержка
+      - link "Удаленная помощь (SOS)" [ref=e17] [cursor=pointer]:
+        - /url: /admin/support
+      - generic [ref=e18]: Админ
+      - link "Дашборд" [ref=e19] [cursor=pointer]:
+        - /url: /admin
+      - link "Пользователи" [ref=e20] [cursor=pointer]:
+        - /url: /admin/users
+      - link "Группы" [ref=e21] [cursor=pointer]:
+        - /url: /admin/groups
+      - link "Узлы Relay" [ref=e22] [cursor=pointer]:
+        - /url: /admin/relays
+      - 'link "Бастион: цели и сессии" [ref=e23] [cursor=pointer]':
+        - /url: /admin/bastion
+      - link "Аудит" [ref=e24] [cursor=pointer]:
+        - /url: /admin/audit
+      - link "Шлюз уведомлений" [ref=e25] [cursor=pointer]:
+        - /url: /admin/notifications
+      - link "RADIUS-сессии" [ref=e26] [cursor=pointer]:
+        - /url: /admin/radius/sessions
+      - link "Файрвол" [ref=e27] [cursor=pointer]:
+        - /url: /admin/firewall
+      - link "OIDC" [ref=e28] [cursor=pointer]:
+        - /url: /admin/oidc
+      - link "SAML" [ref=e29] [cursor=pointer]:
+        - /url: /admin/saml
+      - link "Активные challenge" [ref=e30] [cursor=pointer]:
+        - /url: /admin/challenges
+      - link "Настройки" [ref=e31] [cursor=pointer]:
+        - /url: /admin/settings
+      - link "Лицензия" [ref=e32] [cursor=pointer]:
+        - /url: /admin/license
+      - link "API" [ref=e33] [cursor=pointer]:
+        - /url: /api/docs
+    - combobox [ref=e35] [cursor=pointer]
+    - generic [ref=e36]:
+      - generic "admin" [ref=e37]
+      - button "Выйти" [ref=e39] [cursor=pointer]
+  - generic [ref=e40]:
+    - main [ref=e41]:
+      - generic [ref=e42]:
+        - heading "Настройки сервера" [level=1] [ref=e43]
+        - paragraph [ref=e44]: Каждая секция сохраняется отдельно. Секретные поля показывают только факт «задано»; чтобы изменить — введите новое значение, пустое поле не меняет текущее.
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - heading "🧭 Как пользоваться этой страницей" [level=2] [ref=e47]
+          - paragraph [ref=e48]: "Настройки сгруппированы по назначению. У каждой секции свой значок и бейдж применения — когда изменение вступает в силу после «Сохранить»:"
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - generic [ref=e51]: на лету
+            - text: — применяется сразу, без перезапуска
+          - generic [ref=e52]:
+            - generic [ref=e53]: SIGHUP
+            - text: "— применить без перезапуска:"
+            - code [ref=e54]: docker compose kill -s HUP twofa
+          - generic [ref=e55]:
+            - generic [ref=e56]: нужен перезапуск
+            - text: —
+            - code [ref=e57]: docker compose up -d twofa
+          - generic [ref=e58]:
+            - generic [ref=e59]: смена токена — перезапуск
+            - text: — действует только для смены токена бота/шлюза
+        - generic [ref=e60]:
+          - link "🖧 Сеть и сервер" [ref=e61] [cursor=pointer]:
+            - /url: "#g-server"
+          - link "🔐 Вход и безопасность" [ref=e62] [cursor=pointer]:
+            - /url: "#g-auth"
+          - link "📨 Каналы доставки кодов" [ref=e63] [cursor=pointer]:
+            - /url: "#g-channels"
+          - link "🔔 Уведомления и интеграции" [ref=e64] [cursor=pointer]:
+            - /url: "#g-notify"
+          - link "🏢 Каталог пользователей" [ref=e65] [cursor=pointer]:
+            - /url: "#g-dir"
+          - link "🧩 Модули и оформление" [ref=e66] [cursor=pointer]:
+            - /url: "#g-modules"
+          - link "⚙️ Администрирование" [ref=e67] [cursor=pointer]:
+            - /url: "#g-admin"
+      - generic [ref=e68]:
+        - heading "🖧 Сеть и сервер" [level=2] [ref=e69]
+        - paragraph [ref=e70]: Адреса и порты, которые слушает сервер, обратный прокси перед ним и TLS-сертификаты (включая EAP для Wi-Fi 802.1X).
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - heading "📡 Слушатели нужен перезапуск" [level=2] [ref=e73]:
+            - generic [ref=e74]: 📡
+            - text: Слушатели
+            - generic [ref=e75]: нужен перезапуск
+          - paragraph [ref=e76]: Адреса, на которых сервер принимает соединения.
+        - generic [ref=e77]:
+          - generic [ref=e78]:
+            - generic [ref=e79]:
+              - generic [ref=e80]: HTTP
+              - textbox "HTTP Веб-интерфейс и REST API." [ref=e81]: :8080
+              - generic [ref=e82]: Веб-интерфейс и REST API.
+            - generic [ref=e83]:
+              - generic [ref=e84]: RADIUS Auth
+              - textbox "RADIUS Auth" [ref=e85]: :1812
+            - generic [ref=e86]:
+              - generic [ref=e87]: RADIUS Acct
+              - textbox "RADIUS Acct Учётный порт (accounting)." [ref=e88]: :1813
+              - generic [ref=e89]: Учётный порт (accounting).
+          - button "Сохранить секцию" [ref=e91] [cursor=pointer]
+      - generic [ref=e92]:
+        - generic [ref=e93]:
+          - heading "🔀 Обратный прокси на лету" [level=2] [ref=e94]:
+            - generic [ref=e95]: 🔀
+            - text: Обратный прокси
+            - generic [ref=e96]: на лету
+          - paragraph [ref=e97]: "Доверенные сети прокси (NPM/nginx/Docker): с них принимаются заголовки X-Forwarded-For, X-Real-IP и CF-Connecting-IP — в аудит, уведомления и fail2ban попадают реальные внешние IP клиентов."
+        - generic [ref=e98]:
+          - generic [ref=e99]:
+            - generic [ref=e100]: Доверенные сети (CIDR/IP, по одному в строке; или none для отключения)
+            - textbox "Доверенные сети (CIDR/IP, по одному в строке; или none для отключения)" [ref=e101]:
+              - /placeholder: "172.16.0.0/12\n192.168.0.0/16"
+          - button "Сохранить секцию" [ref=e103] [cursor=pointer]
+      - generic [ref=e104]:
+        - generic [ref=e105]:
+          - heading "🔒 SSL/TLS Сертификат (EAP / 802.1X / Web)" [level=2] [ref=e106]:
+            - generic [ref=e107]: 🔒
+            - text: SSL/TLS Сертификат (EAP / 802.1X / Web)
+          - paragraph [ref=e108]: Автоматическое получение и продление сертификатов Let's Encrypt (ACME HTTP-01) для Wi-Fi (WPA-Enterprise) и Web.
+        - generic [ref=e109]:
+          - generic [ref=e110]:
+            - generic [ref=e111]:
+              - checkbox "Включить автообновление Let's Encrypt" [ref=e112]
+              - generic [ref=e113]: Включить автообновление Let's Encrypt
+            - generic [ref=e114]:
+              - generic [ref=e115]: Домен (FQDN)
+              - textbox "Домен (FQDN) A-запись домена должна указывать на IP этого сервера (HTTP-порт 80)." [ref=e116]:
+                - /placeholder: wifi.example.com
+              - generic [ref=e117]: A-запись домена должна указывать на IP этого сервера (HTTP-порт 80).
+            - generic [ref=e118]:
+              - generic [ref=e119]: Email для уведомлений
+              - textbox "Email для уведомлений" [ref=e120]:
+                - /placeholder: admin@example.com
+            - generic [ref=e121]:
+              - checkbox "Тестовый режим (Let's Encrypt Staging)" [ref=e122]
+              - generic [ref=e123]: Тестовый режим (Let's Encrypt Staging)
+          - generic [ref=e124]:
+            - button "Сохранить секцию" [ref=e125] [cursor=pointer]
+            - button "Обновить сертификат сейчас" [ref=e126] [cursor=pointer]
+      - generic [ref=e127]:
+        - heading "🔐 Вход и безопасность" [level=2] [ref=e128]
+        - paragraph [ref=e129]: "Как пользователи проходят проверку: RADIUS (Wi-Fi/VPN), одноразовые коды TOTP, Passkey/WebAuthn, политики сессий и автоблокировка fail2ban."
+      - generic [ref=e130]:
+        - generic [ref=e131]:
+          - heading "🔑 RADIUS" [level=2] [ref=e132]:
+            - generic [ref=e133]: 🔑
+            - text: RADIUS
+          - paragraph [ref=e134]: "Параметры протокола для NAS-устройств: секрет, коды, ограничения."
+        - generic [ref=e135]:
+          - generic [ref=e136]:
+            - generic [ref=e137]:
+              - generic [ref=e138]:
+                - text: Секрет
+                - generic [ref=e139]: •••• (задано)
+              - generic [ref=e140]:
+                - textbox "Секрет •••• (задано) 👁️ 📋 Общий секрет с NAS-устройствами." [ref=e141]:
+                  - /placeholder: введите новое, чтобы изменить
+                - button "👁️" [ref=e142] [cursor=pointer]
+                - button "📋" [ref=e143] [cursor=pointer]
+              - generic [ref=e144]: Общий секрет с NAS-устройствами.
+            - generic [ref=e145]:
+              - generic [ref=e146]: Длины кодов (JSON)
+              - textbox "Длины кодов (JSON)" [ref=e147]: "[ 6, 8]"
+            - generic [ref=e148]:
+              - generic [ref=e149]: Макс. неудач на пользователя
+              - spinbutton "Макс. неудач на пользователя" [ref=e150]: "10"
+            - generic [ref=e151]:
+              - generic [ref=e152]: Окно неудач (duration)
+              - textbox "Окно неудач (duration)" [ref=e153]: 5m0s
+            - generic [ref=e154]:
+              - generic [ref=e155]: Ожидание push (duration)
+              - textbox "Ожидание push (duration)" [ref=e156]: 20s
+            - generic [ref=e157]:
+              - generic [ref=e158]: Требовать Message-Authenticator
+              - checkbox "Требовать Message-Authenticator Access-Request без валидного Message-Authenticator отклоняется (RFC 3579 / митигация BlastRADIUS). Отключайте только для очень старых NAS." [ref=e159]
+              - generic [ref=e160]: Access-Request без валидного Message-Authenticator отклоняется (RFC 3579 / митигация BlastRADIUS). Отключайте только для очень старых NAS.
+            - generic [ref=e161]:
+              - generic [ref=e162]: Лимит пакетов на NAS (pps)
+              - spinbutton "Лимит пакетов на NAS (pps) Token bucket пакетов в секунду с одного NAS до тяжёлой работы (argon2/БД). 0 — лимит выключен." [ref=e163]: "0"
+              - generic [ref=e164]: Token bucket пакетов в секунду с одного NAS до тяжёлой работы (argon2/БД). 0 — лимит выключен.
+          - generic [ref=e165]:
+            - generic [ref=e166]: Reply-атрибуты Accept (JSON)
+            - textbox "Reply-атрибуты Accept (JSON) Атрибуты, добавляемые в Access-Accept всем пользователям." [ref=e167]: "{\"Mikrotik-Group\":\"vpn\"}"
+            - generic [ref=e168]: Атрибуты, добавляемые в Access-Accept всем пользователям.
+          - generic [ref=e169]:
+            - generic [ref=e170]: 🏷️ Справочник VLAN / Сегменты сети (JSON)
+            - textbox "🏷️ Справочник VLAN / Сегменты сети (JSON) Сопоставление номеров VLAN с понятными названиями. Используется в выпадающих списках пользователей, групп AD и журнале аудита." [ref=e171]:
+              - /placeholder: "{\"10\": \"Accounting\", \"20\": \"IT\", \"30\": \"Guest\"}"
+            - generic [ref=e172]: Сопоставление номеров VLAN с понятными названиями. Используется в выпадающих списках пользователей, групп AD и журнале аудита.
+          - generic [ref=e173]:
+            - generic [ref=e174]: 📡 Инвентарь оборудования (NAS / Точки доступа / Коммутаторы) (JSON)
+            - textbox "📡 Инвентарь оборудования (NAS / Точки доступа / Коммутаторы) (JSON) Понятные имена точек доступа и серверов доступа по их IP-адресу или NAS-Identifier. Отображаются в уведомлениях Telegram и аудите." [ref=e175]:
+              - /placeholder: "{\"192.168.1.50\": \"UniFi AP-Pro Office\", \"10.0.0.1\": \"MikroTik CCR\"}"
+            - generic [ref=e176]: Понятные имена точек доступа и серверов доступа по их IP-адресу или NAS-Identifier. Отображаются в уведомлениях Telegram и аудите.
+          - generic [ref=e177]:
+            - button "Сохранить секцию" [ref=e178] [cursor=pointer]
+            - button "Перегенерировать секрет" [ref=e179] [cursor=pointer]
+      - generic [ref=e180]:
+        - generic [ref=e181]:
+          - heading "🔢 TOTP" [level=2] [ref=e182]:
+            - generic [ref=e183]: 🔢
+            - text: TOTP
+          - paragraph [ref=e184]: Параметры кодов приложений-аутентификаторов.
+        - generic [ref=e185]:
+          - generic [ref=e186]:
+            - generic [ref=e187]:
+              - generic [ref=e188]: Издатель (issuer)
+              - textbox "Издатель (issuer) Отображается в приложении над аккаунтом." [ref=e189]: twofa
+              - generic [ref=e190]: Отображается в приложении над аккаунтом.
+            - generic [ref=e191]:
+              - generic [ref=e192]: Цифр в коде
+              - spinbutton "Цифр в коде" [ref=e193]: "6"
+            - generic [ref=e194]:
+              - generic [ref=e195]: Период, сек
+              - spinbutton "Период, сек" [ref=e196]: "30"
+            - generic [ref=e197]:
+              - generic [ref=e198]: Skew (шагов допуска)
+              - spinbutton "Skew (шагов допуска) Насколько шагов вперёд/назад принимает код." [ref=e199]: "1"
+              - generic [ref=e200]: Насколько шагов вперёд/назад принимает код.
+          - button "Сохранить секцию" [ref=e202] [cursor=pointer]
+      - generic [ref=e203]:
+        - generic [ref=e204]:
+          - heading "🔐 WebAuthn" [level=2] [ref=e205]:
+            - generic [ref=e206]: 🔐
+            - text: WebAuthn
+          - paragraph [ref=e207]: Домен и имя сервиса для passkeys.
+        - generic [ref=e208]:
+          - generic [ref=e209]:
+            - generic [ref=e210]:
+              - generic [ref=e211]: RP ID (домен сервера)
+              - textbox "RP ID (домен сервера)" [ref=e212]: 2fa.example.com
+            - generic [ref=e213]:
+              - generic [ref=e214]: RP Name (отображаемое имя)
+              - textbox "RP Name (отображаемое имя)" [ref=e215]: twofa
+          - generic [ref=e216]:
+            - generic [ref=e217]: Origins (JSON-массив)
+            - textbox "Origins (JSON-массив) Пусто ([]) — origins выводятся из RP ID. Если web-UI открыт на нестандартном порту, перечислите точные origins." [ref=e218]:
+              - /placeholder: "[\"http://localhost:8080\"]"
+              - text: "[]"
+            - generic [ref=e219]: Пусто ([]) — origins выводятся из RP ID. Если web-UI открыт на нестандартном порту, перечислите точные origins.
+          - paragraph [ref=e220]: Смена RP ID отвязывает существующие passkeys — миграция описана в README. Изменения секции применяются после перезапуска сервера.
+          - button "Сохранить секцию" [ref=e222] [cursor=pointer]
+      - generic [ref=e223]:
+        - generic [ref=e224]:
+          - heading "🛡️ Политики" [level=2] [ref=e225]:
+            - generic [ref=e226]: 🛡️
+            - text: Политики
+          - paragraph [ref=e227]: Сроки жизни кодов, лимиты попыток и блокировки.
+        - generic [ref=e228]:
+          - generic [ref=e229]:
+            - generic [ref=e230]:
+              - generic [ref=e231]: Время жизни кода
+              - textbox "Время жизни кода" [ref=e232]: 5m0s
+            - generic [ref=e233]:
+              - generic [ref=e234]: Длина кода
+              - spinbutton "Длина кода" [ref=e235]: "6"
+            - generic [ref=e236]:
+              - generic [ref=e237]: Попыток ввода
+              - spinbutton "Попыток ввода" [ref=e238]: "5"
+            - generic [ref=e239]:
+              - generic [ref=e240]: Cooldown повторной отправки
+              - textbox "Cooldown повторной отправки" [ref=e241]: 1m0s
+            - generic [ref=e242]:
+              - generic [ref=e243]: Cooldown push
+              - textbox "Cooldown push" [ref=e244]: 30s
+            - generic [ref=e245]:
+              - generic [ref=e246]: Push в час
+              - spinbutton "Push в час" [ref=e247]: "10"
+            - generic [ref=e248]:
+              - generic [ref=e249]: Срок доверия устройству
+              - textbox "Срок доверия устройству" [ref=e250]: 720h0m0s
+            - generic [ref=e251]:
+              - generic [ref=e252]: Неудач до блокировки
+              - spinbutton "Неудач до блокировки" [ref=e253]: "5"
+            - generic [ref=e254]:
+              - generic [ref=e255]: Окно неудач
+              - textbox "Окно неудач" [ref=e256]: 5m0s
+            - generic [ref=e257]:
+              - generic [ref=e258]: Время блокировки
+              - textbox "Время блокировки" [ref=e259]: 15m0s
+            - generic [ref=e260]:
+              - generic [ref=e261]: Сессия web (duration)
+              - textbox "Сессия web (duration)" [ref=e262]: 12h0m0s
+            - generic [ref=e263]:
+              - generic [ref=e264]: Idle-таймаут сессии (0 = выкл)
+              - textbox "Idle-таймаут сессии (0 = выкл)" [ref=e265]: 0s
+            - generic [ref=e266]:
+              - generic [ref=e267]: Лимит сессий на юзера (0 = без лимита)
+              - spinbutton "Лимит сессий на юзера (0 = без лимита)" [ref=e268]: "0"
+            - generic [ref=e269]:
+              - generic [ref=e270]: Каналы по умолчанию (JSON)
+              - textbox "Каналы по умолчанию (JSON)" [ref=e271]: "[ \"totp\", \"telegram\", \"email\", \"sms\"]"
+          - button "Сохранить секцию" [ref=e273] [cursor=pointer]
+      - generic [ref=e274]:
+        - generic [ref=e275]:
+          - heading "🛡️ Файрвол / fail2ban на лету" [level=2] [ref=e276]:
+            - generic [ref=e277]: 🛡️
+            - text: Файрвол / fail2ban
+            - generic [ref=e278]: на лету
+          - paragraph [ref=e279]: Автоблокировка IP по неудачам входа/кода/RADIUS; списки — на странице «Файрвол».
+        - generic [ref=e280]:
+          - generic [ref=e281]:
+            - generic [ref=e282]:
+              - generic [ref=e283]: Автобан включён
+              - generic [ref=e284] [cursor=pointer]:
+                - checkbox "считать неудачи и банить IP" [ref=e285]
+                - generic [ref=e286]: считать неудачи и банить IP
+            - generic [ref=e287]:
+              - generic [ref=e288]: Неудач до бана
+              - spinbutton "Неудач до бана" [ref=e289]: "0"
+            - generic [ref=e290]:
+              - generic [ref=e291]: Окно (duration)
+              - textbox "Окно (duration)" [ref=e292]: 0s
+            - generic [ref=e293]:
+              - generic [ref=e294]: Срок бана (duration)
+              - textbox "Срок бана (duration)" [ref=e295]: 0s
+          - button "Сохранить секцию" [ref=e297] [cursor=pointer]
+      - generic [ref=e298]:
+        - heading "📨 Каналы доставки кодов" [level=2] [ref=e299]
+        - paragraph [ref=e300]: "Шлюзы, которыми коды 2FA приходят пользователям: почта, SMS, голосовой звонок и мессенджеры. Достаточно настроить те, что используете."
+      - generic [ref=e301]:
+        - generic [ref=e302]:
+          - heading "✉️ SMTP SIGHUP" [level=2] [ref=e303]:
+            - generic [ref=e304]: ✉️
+            - text: SMTP
+            - generic [ref=e305]: SIGHUP
+          - paragraph [ref=e306]: Отправка кодов по email; применяется после SIGHUP или перезапуска.
+        - generic [ref=e307]:
+          - generic [ref=e308]:
+            - generic [ref=e309]:
+              - generic [ref=e310]: Хост
+              - textbox "Хост" [ref=e311]: smtp.example.com
+            - generic [ref=e312]:
+              - generic [ref=e313]: Порт
+              - spinbutton "Порт" [ref=e314]: "587"
+            - generic [ref=e315]:
+              - generic [ref=e316]: Пользователь
+              - textbox "Пользователь" [ref=e317]: postmaster
+            - generic [ref=e318]:
+              - generic [ref=e319]:
+                - text: Пароль
+                - generic [ref=e320]: •••• (задано)
+              - textbox "Пароль •••• (задано)" [ref=e321]:
+                - /placeholder: введите новое, чтобы изменить
+            - generic [ref=e322]:
+              - generic [ref=e323]: От кого
+              - textbox "От кого" [ref=e324]: 2fa@example.com
+            - generic [ref=e325]:
+              - generic [ref=e326]: Тема письма
+              - textbox "Тема письма" [ref=e327]: Код подтверждения
+            - generic [ref=e328]:
+              - generic [ref=e329]: Таймаут (duration)
+              - textbox "Таймаут (duration)" [ref=e330]: 10s
+            - generic [ref=e331]:
+              - generic [ref=e332]: Шифрование
+              - generic [ref=e333] [cursor=pointer]:
+                - checkbox "STARTTLS" [checked] [ref=e334]
+                - generic [ref=e335]: STARTTLS
+          - button "Сохранить секцию" [ref=e337] [cursor=pointer]
+      - generic [ref=e338]:
+        - generic [ref=e339]:
+          - heading "📱 SMS-шлюз SIGHUP" [level=2] [ref=e340]:
+            - generic [ref=e341]: 📱
+            - text: SMS-шлюз
+            - generic [ref=e342]: SIGHUP
+          - paragraph [ref=e343]: HTTP-шлюз отправки SMS; применяется после SIGHUP или перезапуска.
+        - generic [ref=e344]:
+          - generic [ref=e345]:
+            - generic [ref=e346]: Шлюз (JSON)
+            - textbox "Шлюз (JSON) Учётные данные скрыты маской «••••» — оставьте поле как есть (креды сохранятся) или введите новые значения." [ref=e347]:
+              - /placeholder: preset, method, url, headers, body, content_type, success
+              - text: "{\"method\":\"POST\"}"
+            - generic [ref=e348]: Учётные данные скрыты маской «••••» — оставьте поле как есть (креды сохранятся) или введите новые значения.
+          - generic [ref=e349]:
+            - generic [ref=e350]: Пресеты (JSON)
+            - textbox "Пресеты (JSON) Готовые наборы параметров шлюза по имени." [ref=e351]: "{\"smsc\":{}}"
+            - generic [ref=e352]: Готовые наборы параметров шлюза по имени.
+          - button "Сохранить секцию" [ref=e354] [cursor=pointer]
+      - generic [ref=e355]:
+        - generic [ref=e356]:
+          - heading "📞 Голосовые звонки (TTS) SIGHUP" [level=2] [ref=e357]:
+            - generic [ref=e358]: 📞
+            - text: Голосовые звонки (TTS)
+            - generic [ref=e359]: SIGHUP
+          - paragraph [ref=e360]: Шлюз голосовых вызовов (TTS) — код подтверждения произносится роботом в телефонный звонок; RU-провайдеры с HTTP-API. Применяется после SIGHUP или перезапуска.
+        - generic [ref=e361]:
+          - generic [ref=e362]:
+            - generic [ref=e363]: Шлюз (JSON)
+            - 'textbox "Шлюз (JSON) url — шаблон с плейсхолдерами {phone}, {code}, {ttl}; method GET подставляет их в URL, POST — дополнительно в form-тело (имена полей phone_param/code_param); extra_headers — заголовки провайдера; ok_status — точный HTTP-статус успеха (0 — любой 2xx). Номер берётся из телефона пользователя. Пустой url — канал выключен." [ref=e364]':
+              - /placeholder: "{\"url\":\"https://gw.example.ru/api/call?phone={phone}&code={code}\",\"method\":\"GET\",\"code_param\":\"code\",\"phone_param\":\"phone\",\"extra_headers\":{},\"ok_status\":0}"
+            - generic [ref=e365]: "url — шаблон с плейсхолдерами {phone}, {code}, {ttl}; method GET подставляет их в URL, POST — дополнительно в form-тело (имена полей phone_param/code_param); extra_headers — заголовки провайдера; ok_status — точный HTTP-статус успеха (0 — любой 2xx). Номер берётся из телефона пользователя. Пустой url — канал выключен."
+          - button "Сохранить секцию" [ref=e367] [cursor=pointer]
+      - generic [ref=e368]:
+        - generic [ref=e369]:
+          - heading "📨 Telegram смена токена — перезапуск" [level=2] [ref=e370]:
+            - generic [ref=e371]: 📨
+            - text: Telegram
+            - generic [ref=e372]: смена токена — перезапуск
+          - paragraph [ref=e373]: Чат-бот для кодов и push-подтверждений.
+        - generic [ref=e374]:
+          - generic [ref=e375]:
+            - generic [ref=e376]:
+              - text: Токен бота
+              - generic [ref=e377]: •••• (задано)
+            - textbox "Токен бота •••• (задано)" [ref=e378]:
+              - /placeholder: введите новое, чтобы изменить
+          - button "Сохранить секцию" [ref=e380] [cursor=pointer]
+      - generic [ref=e381]:
+        - generic [ref=e382]:
+          - heading "💬 VK Teams смена токена — перезапуск" [level=2] [ref=e383]:
+            - generic [ref=e384]: 💬
+            - text: VK Teams
+            - generic [ref=e385]: смена токена — перезапуск
+          - paragraph [ref=e386]: Бот VK Teams (myteam.mail.ru) для доставки кодов 2FA.
+        - generic [ref=e387]:
+          - generic [ref=e388]:
+            - generic [ref=e389]:
+              - text: Bot Token
+              - generic [ref=e390]: не задан — бот выключен
+            - textbox "Bot Token не задан — бот выключен" [ref=e391]:
+              - /placeholder: введите новое, чтобы изменить
+          - generic [ref=e392]:
+            - generic [ref=e393]: API Base URL
+            - textbox "API Base URL" [ref=e394]:
+              - /placeholder: https://myteam.mail.ru/bot/v1
+          - button "Сохранить секцию" [ref=e396] [cursor=pointer]
+      - generic [ref=e397]:
+        - generic [ref=e398]:
+          - heading "💬 eXpress смена токена — перезапуск" [level=2] [ref=e399]:
+            - generic [ref=e400]: 💬
+            - text: eXpress
+            - generic [ref=e401]: смена токена — перезапуск
+          - paragraph [ref=e402]: Бот eXpress для доставки кодов 2FA.
+        - generic [ref=e403]:
+          - generic [ref=e404]:
+            - generic [ref=e405]: Base URL
+            - textbox "Base URL" [ref=e406]:
+              - /placeholder: https://express.example.com
+          - generic [ref=e407]:
+            - generic [ref=e408]: Bot ID
+            - textbox "Bot ID" [ref=e409]:
+              - /placeholder: bot-uuid
+          - generic [ref=e410]:
+            - generic [ref=e411]:
+              - text: Bot Secret
+              - generic [ref=e412]: не задан — бот выключен
+            - textbox "Bot Secret не задан — бот выключен" [ref=e413]:
+              - /placeholder: введите новое, чтобы изменить
+          - button "Сохранить секцию" [ref=e415] [cursor=pointer]
+      - generic [ref=e416]:
+        - generic [ref=e417]:
+          - heading "💬 MAX (VK Teams Open) смена токена — перезапуск" [level=2] [ref=e418]:
+            - generic [ref=e419]: 💬
+            - text: MAX (VK Teams Open)
+            - generic [ref=e420]: смена токена — перезапуск
+          - paragraph [ref=e421]: Бот MAX (ранее VK Teams Open) для доставки кодов 2FA.
+        - generic [ref=e422]:
+          - generic [ref=e423]:
+            - generic [ref=e424]:
+              - text: Bot Token
+              - generic [ref=e425]: не задан — бот выключен
+            - textbox "Bot Token не задан — бот выключен" [ref=e426]:
+              - /placeholder: введите новое, чтобы изменить
+          - generic [ref=e427]:
+            - generic [ref=e428]: API Base URL
+            - textbox "API Base URL" [ref=e429]:
+              - /placeholder: https://api.max.ru/bot/v1
+          - button "Сохранить секцию" [ref=e431] [cursor=pointer]
+      - generic [ref=e432]:
+        - generic [ref=e433]:
+          - heading "💬 Mattermost смена токена — перезапуск" [level=2] [ref=e434]:
+            - generic [ref=e435]: 💬
+            - text: Mattermost
+            - generic [ref=e436]: смена токена — перезапуск
+          - paragraph [ref=e437]: Бот Mattermost для доставки кодов 2FA.
+        - generic [ref=e438]:
+          - generic [ref=e439]:
+            - generic [ref=e440]: Server URL
+            - textbox "Server URL" [ref=e441]:
+              - /placeholder: https://mattermost.example.com
+          - generic [ref=e442]:
+            - generic [ref=e443]:
+              - text: Bot Token
+              - generic [ref=e444]: не задан — бот выключен
+            - textbox "Bot Token не задан — бот выключен" [ref=e445]:
+              - /placeholder: введите новое, чтобы изменить
+          - button "Сохранить секцию" [ref=e447] [cursor=pointer]
+      - generic [ref=e448]:
+        - generic [ref=e449]:
+          - heading "💬 Slack смена токена — перезапуск" [level=2] [ref=e450]:
+            - generic [ref=e451]: 💬
+            - text: Slack
+            - generic [ref=e452]: смена токена — перезапуск
+          - paragraph [ref=e453]: Бот Slack для доставки кодов 2FA.
+        - generic [ref=e454]:
+          - generic [ref=e455]:
+            - generic [ref=e456]:
+              - text: Bot Token
+              - generic [ref=e457]: не задан — бот выключен
+            - textbox "Bot Token не задан — бот выключен" [ref=e458]:
+              - /placeholder: введите новое, чтобы изменить
+          - generic [ref=e459]:
+            - generic [ref=e460]: Signing Secret
+            - textbox "Signing Secret" [ref=e461]:
+              - /placeholder: введите новое, чтобы изменить
+          - button "Сохранить секцию" [ref=e463] [cursor=pointer]
+      - generic [ref=e464]:
+        - generic [ref=e465]:
+          - heading "💬 ВКонтакте смена токена — перезапуск" [level=2] [ref=e466]:
+            - generic [ref=e467]: 💬
+            - text: ВКонтакте
+            - generic [ref=e468]: смена токена — перезапуск
+          - paragraph [ref=e469]: Бот ВКонтакте для доставки кодов 2FA.
+        - generic [ref=e470]:
+          - generic [ref=e471]:
+            - generic [ref=e472]: Group ID
+            - spinbutton "Group ID" [ref=e473]: "0"
+          - generic [ref=e474]:
+            - generic [ref=e475]:
+              - text: Token
+              - generic [ref=e476]: не задан — бот выключен
+            - textbox "Token не задан — бот выключен" [ref=e477]:
+              - /placeholder: введите новое, чтобы изменить
+          - button "Сохранить секцию" [ref=e479] [cursor=pointer]
+      - generic [ref=e480]:
+        - generic [ref=e481]:
+          - heading "💬 Discord смена токена — перезапуск" [level=2] [ref=e482]:
+            - generic [ref=e483]: 💬
+            - text: Discord
+            - generic [ref=e484]: смена токена — перезапуск
+          - paragraph [ref=e485]: Бот Discord для доставки кодов 2FA.
+        - generic [ref=e486]:
+          - generic [ref=e487]:
+            - generic [ref=e488]:
+              - text: Bot Token
+              - generic [ref=e489]: не задан — бот выключен
+            - textbox "Bot Token не задан — бот выключен" [ref=e490]:
+              - /placeholder: введите новое, чтобы изменить
+          - generic [ref=e491]:
+            - generic [ref=e492]: Public Key
+            - textbox "Public Key" [ref=e493]:
+              - /placeholder: hex public key
+          - button "Сохранить секцию" [ref=e495] [cursor=pointer]
+      - generic [ref=e496]:
+        - heading "🔔 Уведомления и интеграции" [level=2] [ref=e497]
+        - paragraph [ref=e498]: "Тексты сообщений и оповещения для администрации: шаблоны, письма/чаты админу, исходящие вебхуки событий аудита и SIEM."
+      - generic [ref=e499]:
+        - generic [ref=e500]:
+          - heading "🌐 Домен, часовой пояс и шаблоны сообщений SIGHUP" [level=2] [ref=e501]:
+            - generic [ref=e502]: 🌐
+            - text: Домен, часовой пояс и шаблоны сообщений
+            - generic [ref=e503]: SIGHUP
+          - paragraph [ref=e504]: Публичный адрес сервера, часовой пояс и тексты сообщений с кодами; применяются после SIGHUP или перезапуска.
+        - generic [ref=e505]:
+          - generic [ref=e506]:
+            - generic [ref=e507]:
+              - generic [ref=e508]: Домен сервера (базовый URL)
+              - 'textbox "Домен сервера (базовый URL) Подставляется в шаблоны как {domain} (без слэша на конце)." [ref=e509]':
+                - /placeholder: https://2fa.example.com
+              - generic [ref=e510]: "Подставляется в шаблоны как {domain} (без слэша на конце)."
+            - generic [ref=e511]:
+              - generic [ref=e512]: Часовой пояс сервера
+              - 'combobox "Часовой пояс сервера Используется в веб-интерфейсе, уведомлениях и журналах (по умолчанию: Europe/Moscow)." [ref=e513]'
+              - generic [ref=e514]: "Используется в веб-интерфейсе, уведомлениях и журналах (по умолчанию: Europe/Moscow)."
+          - generic [ref=e515]:
+            - generic [ref=e516]: Тело письма (email)
+            - textbox "Тело письма (email)" [ref=e517]
+          - generic [ref=e518]:
+            - generic [ref=e519]: Текст SMS
+            - 'textbox "Текст SMS Одна строка: некоторые шлюзы режут длинные SMS и переводы строк." [ref=e520]'
+            - generic [ref=e521]: "Одна строка: некоторые шлюзы режут длинные SMS и переводы строк."
+          - generic [ref=e522]:
+            - generic [ref=e523]:
+              - generic [ref=e524]: "Telegram: сообщение с кодом"
+              - 'textbox "Telegram: сообщение с кодом" [ref=e525]'
+            - generic [ref=e526]:
+              - generic [ref=e527]: "Telegram: push-подтверждение входа"
+              - 'textbox "Telegram: push-подтверждение входа" [ref=e528]'
+          - paragraph [ref=e529]: "Плейсхолдеры: {code} — код, {ttl} — срок жизни кода, {domain} — домен сервера; в push-шаблоне дополнительно {username}, {ip}, {ua}, {time}. Тема письма — в секции SMTP."
+          - button "Сохранить секцию" [ref=e531] [cursor=pointer]
+      - generic [ref=e532]:
+        - generic [ref=e533]:
+          - heading "🔔 Уведомления админу" [level=2] [ref=e534]:
+            - generic [ref=e535]: 🔔
+            - text: Уведомления админу
+          - paragraph [ref=e536]: "Серверные алерты: истекающие лицензия и сертификат, переполнение очереди SIEM, всплеск неудачных входов. Проверка раз в час, дедупликация — одно письмо на тип события в сутки."
+        - generic [ref=e537]:
+          - generic [ref=e538]:
+            - generic [ref=e539]:
+              - generic [ref=e540]: E-mail администратора
+              - textbox "E-mail администратора Пусто — почтовый канал выключен (нужен настроенный SMTP)." [ref=e541]:
+                - /placeholder: admin@company.local
+              - generic [ref=e542]: Пусто — почтовый канал выключен (нужен настроенный SMTP).
+            - generic [ref=e543]:
+              - generic [ref=e544]: Telegram Chat ID
+              - textbox "Telegram Chat ID Числовой ID чата или группы; пусто — Telegram-канал выключен (нужен токен бота)." [ref=e545]:
+                - /placeholder: "-1001234567890"
+              - generic [ref=e546]: Числовой ID чата или группы; пусто — Telegram-канал выключен (нужен токен бота).
+          - button "Сохранить секцию" [ref=e548] [cursor=pointer]
+      - generic [ref=e549]:
+        - generic [ref=e550]:
+          - heading "🔔 Вебхуки событий" [level=2] [ref=e551]:
+            - generic [ref=e552]: 🔔
+            - text: Вебхуки событий
+          - paragraph [ref=e553]: "Исходящие HTTP-уведомления о событиях аудита (login_fail, radius_fail, …): POST JSON {event, username, result, ip, ts, detail} каждому получателю. Асинхронно: очередь 1000, до 3 повторов (1с/4с/16с)."
+        - generic [ref=e554]:
+          - generic [ref=e555]:
+            - generic [ref=e556]: Вебхуки (JSON-массив)
+            - 'textbox "Вебхуки (JSON-массив) Элементы: url, auth_header (значение заголовка Authorization, напр. «Bearer xyz»), events — фильтр типов (пусто = все события), enabled. Конфигурация читается на лету (SIGHUP). «Тест» отправляет событие webhook_test по сохранённой конфигурации." [ref=e557]':
+              - /placeholder: "[{\"url\":\"https://mm.example.com/hooks/xxx\",\"auth_header\":\"\",\"events\":[\"login_fail\",\"radius_fail\"],\"enabled\":true}]"
+            - generic [ref=e558]: "Элементы: url, auth_header (значение заголовка Authorization, напр. «Bearer xyz»), events — фильтр типов (пусто = все события), enabled. Конфигурация читается на лету (SIGHUP). «Тест» отправляет событие webhook_test по сохранённой конфигурации."
+          - generic [ref=e559]:
+            - button "Сохранить секцию" [ref=e560] [cursor=pointer]
+            - button "Тест" [ref=e561] [cursor=pointer]
+      - generic [ref=e562]:
+        - generic [ref=e563]:
+          - heading "🛡️ Интеграция с SIEM 🔒 Требуется лицензия Enterprise (модуль siem)" [level=2] [ref=e564]:
+            - generic [ref=e565]: 🛡️
+            - text: Интеграция с SIEM
+            - generic [ref=e566]: 🔒 Требуется лицензия Enterprise (модуль siem)
+          - paragraph [ref=e567]: Потоковый экспорт событий безопасности в MaxPatrol SIEM, Kaspersky KUMA, RuSIEM, IBM QRadar, Splunk, ELK.
+        - generic [ref=e568]:
+          - generic [ref=e569]: 🔒
+          - generic [ref=e570]: Модуль экспорта в SIEM доступен в корпоративной версии (Enterprise) или в течение 30-дневного пробного периода. Обратитесь к вендору для заказа лицензии.
+        - generic [ref=e571]:
+          - generic [ref=e572]:
+            - generic [ref=e573] [cursor=pointer]:
+              - checkbox "Включить экспорт событий в SIEM" [ref=e574]
+              - strong [ref=e576]: Включить экспорт событий в SIEM
+            - generic [ref=e577]: События входа, ошибок, смены паролей и блокировок отправляются в коллектор асинхронно без задержки пользователей.
+          - generic [ref=e578]:
+            - generic [ref=e579]:
+              - generic [ref=e580]: Протокол передачи
+              - combobox "Протокол передачи Syslog UDP (514), TCP (514), TLS (6514) или HTTP Webhook / Splunk HEC (8088)." [ref=e581]:
+                - option "Syslog UDP (RFC 3164/5424)" [selected]
+                - option "Syslog TCP (RFC 5424)"
+                - option "Syslog TLS (RFC 5425 Secure)"
+                - option "HTTP Webhook / Splunk HEC"
+              - generic [ref=e582]: Syslog UDP (514), TCP (514), TLS (6514) или HTTP Webhook / Splunk HEC (8088).
+            - generic [ref=e583]:
+              - generic [ref=e584]: Хост / IP SIEM коллектора
+              - textbox "Хост / IP SIEM коллектора IP-адрес или DNS-имя сервера-приёмника." [ref=e585]:
+                - /placeholder: siem.corp.local или 10.0.0.50
+              - generic [ref=e586]: IP-адрес или DNS-имя сервера-приёмника.
+            - generic [ref=e587]:
+              - generic [ref=e588]: Порт коллектора
+              - 'spinbutton "Порт коллектора Стандартные порты: 514 для Syslog, 6514 для TLS, 8088 для Splunk HEC." [ref=e589]': "0"
+              - generic [ref=e590]: "Стандартные порты: 514 для Syslog, 6514 для TLS, 8088 для Splunk HEC."
+            - generic [ref=e591]:
+              - generic [ref=e592]: Формат сообщений
+              - combobox "Формат сообщений CEF для MaxPatrol/KUMA/RuSIEM; JSON ECS для ELK/Wazuh; LEEF 2.0 для QRadar." [ref=e593]:
+                - option "CEF (MaxPatrol SIEM / KUMA / RuSIEM / ArcSight)" [selected]
+                - option "JSON ECS (ELK / OpenSearch / Wazuh / Graylog)"
+                - option "LEEF 2.0 (IBM QRadar)"
+              - generic [ref=e594]: CEF для MaxPatrol/KUMA/RuSIEM; JSON ECS для ELK/Wazuh; LEEF 2.0 для QRadar.
+          - generic [ref=e595]:
+            - generic [ref=e596]:
+              - generic [ref=e597]: Syslog Facility
+              - textbox "Syslog Facility authpriv (по умолчанию), auth, local0..local7." [ref=e598]:
+                - /placeholder: authpriv
+              - generic [ref=e599]: authpriv (по умолчанию), auth, local0..local7.
+            - generic [ref=e600]:
+              - generic [ref=e601]: Минимальный уровень важности
+              - combobox "Минимальный уровень важности Фильтрация событий по шкале важности 1..10." [ref=e602]:
+                - option "Все события безопасности (1+)" [selected]
+                - option "Информационные и выше (3+)"
+                - option "Предупреждения и ошибки (5+)"
+                - option "Только блокировки и атаки (7+)"
+              - generic [ref=e603]: Фильтрация событий по шкале важности 1..10.
+            - generic [ref=e604]:
+              - generic [ref=e605]: Размер пакета (батча)
+              - spinbutton "Размер пакета (батча) Количество событий для накопления перед отправкой (по умолчанию 50)." [ref=e606]: "0"
+              - generic [ref=e607]: Количество событий для накопления перед отправкой (по умолчанию 50).
+            - generic [ref=e608]:
+              - generic [ref=e609]: Таймаут сброса батча (мс)
+              - spinbutton "Таймаут сброса батча (мс) Максимальное время удержания событий в очереди перед отправкой (по умолчанию 500 мс)." [ref=e610]: "0"
+              - generic [ref=e611]: Максимальное время удержания событий в очереди перед отправкой (по умолчанию 500 мс).
+          - generic [ref=e612]:
+            - generic [ref=e613]:
+              - generic [ref=e614]: Проверка TLS-сертификата
+              - generic [ref=e615] [cursor=pointer]:
+                - checkbox "Пропускать проверку имени хоста TLS (InsecureSkipVerify)" [ref=e616]
+                - generic [ref=e617]: Пропускать проверку имени хоста TLS (InsecureSkipVerify)
+              - generic [ref=e618]: Используйте только при самоподписанных сертификатах коллектора.
+            - generic [ref=e619]:
+              - generic [ref=e620]: Токен авторизации (Splunk HEC / Bearer)
+              - textbox "Токен авторизации (Splunk HEC / Bearer) Заголовок Authorization для HTTP Webhook или Splunk HEC." [ref=e621]:
+                - /placeholder: введите новое, чтобы изменить
+              - generic [ref=e622]: Заголовок Authorization для HTTP Webhook или Splunk HEC.
+          - generic [ref=e623]:
+            - generic [ref=e624]: Корневой сертификат CA (PEM)
+            - textbox "Корневой сертификат CA (PEM) Необязательно. Корпоративный CA-сертификат для проверки подлинности сервера при Syslog TLS." [ref=e625]:
+              - /placeholder: "-----BEGIN CERTIFICATE----- ... -----END CERTIFICATE-----"
+            - generic [ref=e626]: Необязательно. Корпоративный CA-сертификат для проверки подлинности сервера при Syslog TLS.
+          - generic [ref=e627]:
+            - button "Сохранить секцию" [ref=e628] [cursor=pointer]
+            - button "🧪 Отправить тестовое событие в SIEM" [ref=e629] [cursor=pointer]
+      - generic [ref=e630]:
+        - heading "🏢 Каталог пользователей" [level=2] [ref=e631]
+        - paragraph [ref=e632]: "LDAP / Active Directory: вход по паролю домена, автопровижининг учёток, группы и роли."
+      - generic [ref=e633]:
+        - generic [ref=e634]:
+          - heading "🏢 LDAP / Active Directory SIGHUP" [level=2] [ref=e635]:
+            - generic [ref=e636]: 🏢
+            - text: LDAP / Active Directory
+            - generic [ref=e637]: SIGHUP
+          - paragraph [ref=e638]: "Внешний каталог первым фактором: пароль проверяется bind-ом в AD, пользователи создаются автоматически при первом входе, атрибуты и роли групп синхронизируются."
+        - generic [ref=e639]:
+          - generic [ref=e640]:
+            - generic [ref=e641]:
+              - generic [ref=e642]: "Пресеты каталога:"
+              - button "Active Directory" [ref=e643] [cursor=pointer]
+              - button "FreeIPA" [ref=e644] [cursor=pointer]
+              - button "ALD Pro" [ref=e645] [cursor=pointer]
+            - generic [ref=e646]: Заполняют фильтр пользователя/групп и атрибуты контактов под тип каталога — форма не отправляется, проверьте значения и сохраните секцию. URL, Bind DN и Base DN остаются как есть. Для ALD Pro сверьте имена атрибутов с вашей версией (диалект Samba/AD).
+          - generic [ref=e647]:
+            - generic [ref=e648]:
+              - generic [ref=e649]: URL сервера
+              - textbox "URL сервера ldaps:// (порт 636) рекомендуется; ldap:// — только с STARTTLS." [ref=e650]:
+                - /placeholder: ldaps://dc1.example.com:636
+              - generic [ref=e651]: ldaps:// (порт 636) рекомендуется; ldap:// — только с STARTTLS.
+            - generic [ref=e652]:
+              - generic [ref=e653]: Шифрование
+              - generic [ref=e654] [cursor=pointer]:
+                - checkbox "STARTTLS поверх ldap://" [ref=e655]
+                - generic [ref=e656]: STARTTLS поверх ldap://
+          - generic [ref=e657]:
+            - generic [ref=e658]:
+              - generic [ref=e659]: Сервисный Bind DN
+              - textbox "Сервисный Bind DN Учётка для поиска пользователей; пусто — анонимный поиск." [ref=e660]:
+                - /placeholder: CN=svc-twofa,OU=Service,DC=example,DC=com
+              - generic [ref=e661]: Учётка для поиска пользователей; пусто — анонимный поиск.
+            - generic [ref=e662]:
+              - generic [ref=e663]: Пароль сервисной учётки
+              - textbox "Пароль сервисной учётки" [ref=e664]:
+                - /placeholder: введите новое, чтобы изменить
+          - generic [ref=e665]:
+            - generic [ref=e666]:
+              - generic [ref=e667]: Base DN
+              - textbox "Base DN" [ref=e668]:
+                - /placeholder: DC=example,DC=com
+            - generic [ref=e669]:
+              - generic [ref=e670]: Base DN групп
+              - textbox "Base DN групп" [ref=e671]:
+                - /placeholder: пусто — как Base DN
+          - generic [ref=e672]:
+            - generic [ref=e673]: Фильтр пользователя
+            - 'textbox "Фильтр пользователя «{login}» заменяется логином (экранируется по RFC 4515)." [ref=e674]'
+            - generic [ref=e675]: "«{login}» заменяется логином (экранируется по RFC 4515)."
+          - generic [ref=e676]:
+            - generic [ref=e677]: Фильтр групп
+            - 'textbox "Фильтр групп «{dn}» заменяется DN найденного пользователя." [ref=e678]'
+            - generic [ref=e679]: "«{dn}» заменяется DN найденного пользователя."
+          - generic [ref=e680]:
+            - generic [ref=e681]:
+              - generic [ref=e682]: "Атрибут: email"
+              - 'textbox "Атрибут: email" [ref=e683]'
+            - generic [ref=e684]:
+              - generic [ref=e685]: "Атрибут: телефон"
+              - 'textbox "Атрибут: телефон" [ref=e686]'
+            - generic [ref=e687]:
+              - generic [ref=e688]: "Атрибут: отображаемое имя"
+              - 'textbox "Атрибут: отображаемое имя" [ref=e689]'
+          - generic [ref=e690]:
+            - generic [ref=e691]: Разрешённые группы (JSON)
+            - 'textbox "Разрешённые группы (JSON) Массив DN: вход только участникам хотя бы одной группы; пустой массив [] — все найденные в каталоге." [ref=e692]'
+            - generic [ref=e693]: "Массив DN: вход только участникам хотя бы одной группы; пустой массив [] — все найденные в каталоге."
+          - generic [ref=e694]:
+            - generic [ref=e695]: Роли по группам (JSON)
+            - textbox "Роли по группам (JSON) Объект «DN или CN группы → роль» (admin/user). Роль синхронизируется при каждом входе." [ref=e696]
+            - generic [ref=e697]: Объект «DN или CN группы → роль» (admin/user). Роль синхронизируется при каждом входе.
+          - generic [ref=e698]:
+            - generic [ref=e700]:
+              - generic [ref=e701]:
+                - text: 🎯 RADIUS-атрибуты по группам Active Directory
+                - generic [ref=e702]: визуальный редактор
+              - text: Автоматическая выдача параметров (Filter-Id, VLAN, права MikroTik, пулы, таймауты) в Access-Accept для участников групп AD.
+            - generic [ref=e703]:
+              - generic [ref=e704]: "Быстрые шаблоны:"
+              - button "➕ VPN-доступ (Filter-Id)" [ref=e705] [cursor=pointer]
+              - button "➕ MikroTik Full Admin" [ref=e706] [cursor=pointer]
+              - button "➕ Wi-Fi Корпоративный VLAN" [ref=e707] [cursor=pointer]
+              - button "➕ Добавить группу AD" [ref=e708] [cursor=pointer]
+            - group [ref=e709]:
+              - generic "🔍 Показать сгенерированный JSON (для проверки)" [ref=e710] [cursor=pointer]
+          - generic [ref=e711]:
+            - generic [ref=e712]: Бэкенд
+            - generic [ref=e713] [cursor=pointer]:
+              - checkbox "Включить проверку пароля в LDAP/AD" [ref=e714]
+              - generic [ref=e715]: Включить проверку пароля в LDAP/AD
+            - generic [ref=e716]: Локальные пользователи продолжают входить по локальному паролю; включение применяется сразу.
+          - generic [ref=e717]:
+            - generic [ref=e718]: ⚡ Диагностика подключения и синхронизация
+            - paragraph [ref=e720]: Проверьте сетевой доступ, авторизацию сервисной учётной записи (Bind DN) или протестируйте сопоставление прав пользователя перед синхронизацией.
+            - generic [ref=e721]:
+              - button "🔌 Проверить подключение к LDAP" [ref=e722] [cursor=pointer]
+              - button "🔄 Синхронизировать пользователей сейчас" [ref=e723] [cursor=pointer]
+            - generic [ref=e724]:
+              - generic [ref=e725]:
+                - generic [ref=e726]: "Проверить пользователя в Active Directory:"
+                - textbox "Проверить пользователя в Active Directory:" [ref=e727]:
+                  - /placeholder: логин (sAMAccountName, например ivanov или admin)
+              - button "🔍 Проверить пользователя" [ref=e728] [cursor=pointer]
+          - button "Сохранить секцию" [ref=e730] [cursor=pointer]
+      - generic [ref=e731]:
+        - heading "🧩 Модули и оформление" [level=2] [ref=e732]
+        - paragraph [ref=e733]: "Платные модули и внешний вид: белый лейбл (брендинг), реклама в бесплатной версии, удалённая поддержка SOS."
+      - generic [ref=e734]:
+        - generic [ref=e735]:
+          - heading "🎨 Брендинг платная лицензия" [level=2] [ref=e736]:
+            - generic [ref=e737]: 🎨
+            - text: Брендинг
+            - generic [ref=e738]: платная лицензия
+          - paragraph [ref=e739]: Корпоративный бренд вместо Ligament. Действует ТОЛЬКО при активной платной лицензии — на free/trial интерфейс остаётся стандартным.
+        - generic [ref=e740]:
+          - generic [ref=e741]:
+            - generic [ref=e742]:
+              - generic [ref=e743]: Название продукта
+              - textbox "Название продукта" [ref=e744]:
+                - /placeholder: MyCompany SSO
+            - generic [ref=e745]:
+              - generic [ref=e746]: Буква маркера (вместо L)
+              - textbox "Буква маркера (вместо L)" [ref=e747]:
+                - /placeholder: R
+          - generic [ref=e748]:
+            - generic [ref=e749]: Логотип (URL или data:URI)
+            - textbox "Логотип (URL или data:URI) data:URI хранит картинку прямо в базе — работает без внешних хостов." [ref=e750]:
+              - /placeholder: https://…/logo.png
+            - generic [ref=e751]: data:URI хранит картинку прямо в базе — работает без внешних хостов.
+          - generic [ref=e752]:
+            - generic [ref=e753]: Описание на странице входа
+            - textbox "Описание на странице входа" [ref=e754]:
+              - /placeholder: Corporate SSO Portal
+          - button "Сохранить секцию" [ref=e756] [cursor=pointer]
+      - generic [ref=e757]:
+        - generic [ref=e758]:
+          - heading "📢 Реклама (РСЯ) на лету" [level=2] [ref=e759]:
+            - generic [ref=e760]: 📢
+            - text: Реклама (РСЯ)
+            - generic [ref=e761]: на лету
+          - paragraph [ref=e762]: "Блоки Рекламной сети Яндекса: слева/справа на странице входа и в сайдбаре после входа. Показываются ТОЛЬКО на бесплатной лицензии — платная отключает рекламу полностью."
+        - generic [ref=e763]:
+          - generic [ref=e764]:
+            - generic [ref=e765]: Реклама включена
+            - generic [ref=e766] [cursor=pointer]:
+              - checkbox "показывать блоки РСЯ на free/trial" [ref=e767]
+              - generic [ref=e768]: показывать блоки РСЯ на free/trial
+          - generic [ref=e769]:
+            - generic [ref=e770]:
+              - generic [ref=e771]: Провайдер
+              - 'combobox "Провайдер Direct-link — Monetag / Adsterra / PropellerAds: одна ссылка работает на любом домене клиента." [ref=e772]':
+                - option "РСЯ (RTB-блоки, нужен домен-площадка)" [selected]
+                - option "Direct-link (любые домены, без модерации)"
+              - generic [ref=e773]: "Direct-link — Monetag / Adsterra / PropellerAds: одна ссылка работает на любом домене клиента."
+            - generic [ref=e774]:
+              - generic [ref=e775]: "Direct-link: URL"
+              - 'textbox "Direct-link: URL" [ref=e776]':
+                - /placeholder: https://…
+            - generic [ref=e777]:
+              - generic [ref=e778]: Подпись в email/Telegram (бесплатная лицензия)
+              - 'textbox "Подпись в email/Telegram (бесплатная лицензия) {url} — случайная ссылка из пула; пусто — без подписи. SMS и push не затрагиваются." [ref=e779]':
+                - /placeholder: "Ad: {url}"
+              - generic [ref=e780]: "{url} — случайная ссылка из пула; пусто — без подписи. SMS и push не затрагиваются."
+            - generic [ref=e781]:
+              - generic [ref=e782]: "Direct-link: пул ссылок (ротация)"
+              - 'textbox "Direct-link: пул ссылок (ротация) Слот берёт случайную ссылку из пула при каждой загрузке страницы." [ref=e783]':
+                - /placeholder: https://... (one per line)
+              - generic [ref=e784]: Слот берёт случайную ссылку из пула при каждой загрузке страницы.
+            - generic [ref=e785]:
+              - generic [ref=e786]: "Direct-link: надпись слота"
+              - 'textbox "Direct-link: надпись слота" [ref=e787]':
+                - /placeholder: Ad
+            - generic [ref=e788]:
+              - generic [ref=e789]: "Direct-link: картинка (URL, опц.)"
+              - 'textbox "Direct-link: картинка (URL, опц.)" [ref=e790]':
+                - /placeholder: https://…/banner.png
+            - generic [ref=e791]:
+              - generic [ref=e792]: Блок слева от входа (ID)
+              - textbox "Блок слева от входа (ID)" [ref=e793]:
+                - /placeholder: R-123456-1
+            - generic [ref=e794]:
+              - generic [ref=e795]: Блок справа от входа (ID)
+              - textbox "Блок справа от входа (ID)" [ref=e796]:
+                - /placeholder: R-123456-2
+            - generic [ref=e797]:
+              - generic [ref=e798]: Блок в сайдбаре (ID)
+              - textbox "Блок в сайдбаре (ID)" [ref=e799]:
+                - /placeholder: R-123456-3
+          - button "Сохранить секцию" [ref=e801] [cursor=pointer]
+      - generic [ref=e802]:
+        - generic [ref=e803]:
+          - heading "🛟 Удаленная поддержка (SOS)" [level=2] [ref=e804]:
+            - generic [ref=e805]: 🛟
+            - text: Удаленная поддержка (SOS)
+          - paragraph [ref=e806]: Настройка экстренных запросов удаленной помощи (IT-служба и специалисты по 1С).
+        - generic [ref=e807]:
+          - generic [ref=e808]:
+            - generic [ref=e809]: Модуль удаленной помощи
+            - generic [ref=e810] [cursor=pointer]:
+              - checkbox "включить прием SOS-запросов на удаленный доступ от сотрудников" [ref=e811]
+              - generic [ref=e812]: включить прием SOS-запросов на удаленный доступ от сотрудников
+          - generic [ref=e813]:
+            - generic [ref=e814]:
+              - generic [ref=e815]: Email IT-поддержки (уведомления)
+              - textbox "Email IT-поддержки (уведомления) Адреса почты инженеров IT-службы (через запятую или по одному на строку)." [ref=e816]:
+                - /placeholder: it-help@company.local, sysadmin@company.local
+              - generic [ref=e817]: Адреса почты инженеров IT-службы (через запятую или по одному на строку).
+            - generic [ref=e818]:
+              - generic [ref=e819]: Email поддержки 1С (уведомления)
+              - textbox "Email поддержки 1С (уведомления) Адреса специалистов по 1С (через запятую или по одному на строку)." [ref=e820]:
+                - /placeholder: 1c-support@company.local, account@company.local
+              - generic [ref=e821]: Адреса специалистов по 1С (через запятую или по одному на строку).
+            - generic [ref=e822]:
+              - generic [ref=e823]: Telegram Chat ID (IT-служба)
+              - textbox "Telegram Chat ID (IT-служба) ID группы или чата дежурных IT-специалистов." [ref=e824]:
+                - /placeholder: "-1001234567890"
+              - generic [ref=e825]: ID группы или чата дежурных IT-специалистов.
+            - generic [ref=e826]:
+              - generic [ref=e827]: Telegram Chat ID (Поддержка 1С)
+              - textbox "Telegram Chat ID (Поддержка 1С) ID группы или чата специалистов по 1С." [ref=e828]:
+                - /placeholder: "-1009876543210"
+              - generic [ref=e829]: ID группы или чата специалистов по 1С.
+          - button "Сохранить секцию" [ref=e831] [cursor=pointer]
+      - generic [ref=e832]:
+        - heading "⚙️ Администрирование" [level=2] [ref=e833]
+        - paragraph [ref=e834]: "Токены API, резервные копии настроек и обслуживание сервера: ретеншн журналов, мастер-ключ."
+      - generic [ref=e835]:
+        - generic [ref=e836]:
+          - heading "🎫 Токены доступа" [level=2] [ref=e837]:
+            - generic [ref=e838]: 🎫
+            - text: Токены доступа
+          - paragraph [ref=e839]: admin_token — Bearer-токен REST API /api/v1/admin/*. Новое значение показывается один раз; интеграции со старым токеном перестанут работать сразу после перегенерации.
+        - button "Перегенерировать admin_token" [ref=e842] [cursor=pointer]
+      - generic [ref=e843]:
+        - generic [ref=e844]:
+          - heading "🎫 API-токены" [level=2] [ref=e845]:
+            - generic [ref=e846]: 🎫
+            - text: API-токены
+          - paragraph [ref=e847]: Именованные Bearer-токены для REST-админки с узкими scope. Значение показывается один раз при создании; в базе хранится только хеш. Легаси admin_token продолжает работать как полный доступ.
+        - table [ref=e849]:
+          - rowgroup [ref=e850]:
+            - row [ref=e851]:
+              - columnheader "Имя" [ref=e852]
+              - columnheader "Scope" [ref=e853]
+              - columnheader "Последнее использование" [ref=e854]
+              - columnheader "Статус" [ref=e855]
+              - columnheader "Действия" [ref=e856]
+          - rowgroup [ref=e857]:
+            - row [ref=e858]:
+              - cell "API-токенов пока нет." [ref=e859]
+        - generic [ref=e860]:
+          - generic [ref=e861]:
+            - generic [ref=e862]: Имя нового токена
+            - textbox "Имя нового токена Значение токена показывается ровно один раз после создания — сохраните его сразу." [ref=e863]:
+              - /placeholder: zabbix-monitoring
+            - generic [ref=e864]: Значение токена показывается ровно один раз после создания — сохраните его сразу.
+          - group "Права (scope)" [ref=e865]
+          - button "Создать токен" [ref=e868] [cursor=pointer]
+      - generic [ref=e869]:
+        - generic [ref=e870]:
+          - heading "🧳 Экспорт и импорт настроек" [level=2] [ref=e871]:
+            - generic [ref=e872]: 🧳
+            - text: Экспорт и импорт настроек
+          - paragraph [ref=e873]: Перенос конфигурации между инсталляциями. Файл экспорта содержит секреты — храните его как секрет.
+        - link "Экспорт настроек" [ref=e875] [cursor=pointer]:
+          - /url: /admin/settings/export
+        - generic [ref=e876]:
+          - generic [ref=e877]:
+            - generic [ref=e878]: Файл экспорта (JSON)
+            - button "Файл экспорта (JSON) Или вставьте содержимое файла в поле ниже." [ref=e879]
+            - generic [ref=e880]: Или вставьте содержимое файла в поле ниже.
+          - generic [ref=e881]:
+            - generic [ref=e882]: JSON импорта
+            - textbox "JSON импорта Неизвестный ключ отклоняет импорт целиком; маски «••••», null и отсутствующие ключи пропускаются." [ref=e883]:
+              - /placeholder: "{\"settings\":{...}}"
+            - generic [ref=e884]: Неизвестный ключ отклоняет импорт целиком; маски «••••», null и отсутствующие ключи пропускаются.
+          - button "Импортировать" [ref=e886] [cursor=pointer]
+      - generic [ref=e887]:
+        - generic [ref=e888]:
+          - heading "🗄️ Обслуживание" [level=2] [ref=e889]:
+            - generic [ref=e890]: 🗄️
+            - text: Обслуживание
+          - paragraph [ref=e891]: "Логический бэкап базы одним SQL-файлом: пользователи, TOTP-секреты (шифротексты), сессии, настройки и журнал аудита."
+        - link "Скачать бэкап" [ref=e893] [cursor=pointer]:
+          - /url: /admin/backup
+        - paragraph [ref=e894]: "Восстановление (в уже мигрированную БД): docker compose exec -T db psql -U twofa -d twofa < backup.sql."
+    - contentinfo [ref=e895]: Ligament

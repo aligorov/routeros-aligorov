@@ -1,0 +1,99 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - link "L Ligament" [ref=e4] [cursor=pointer]:
+      - /url: /me
+      - generic [ref=e5]: L
+      - text: Ligament
+    - navigation [ref=e6]:
+      - generic [ref=e7]: Кабинет
+      - link "Профиль" [ref=e8] [cursor=pointer]:
+        - /url: /me
+      - link "Приложение TOTP" [ref=e9] [cursor=pointer]:
+        - /url: /me/totp
+      - link "Резервные коды" [ref=e10] [cursor=pointer]:
+        - /url: /me/backup
+      - link "Мессенджеры" [ref=e11] [cursor=pointer]:
+        - /url: /me/messengers
+      - link "Passkeys" [ref=e12] [cursor=pointer]:
+        - /url: /me/passkeys
+      - link "Устройства" [ref=e13] [cursor=pointer]:
+        - /url: /me/devices
+      - link "Бастион (SSH)" [ref=e14] [cursor=pointer]:
+        - /url: /bastion
+      - link "📲 Приложения ↗" [ref=e15] [cursor=pointer]:
+        - /url: https://github.com/aligorov/ligament-apps/releases
+      - generic [ref=e16]: Поддержка
+      - link "Удаленная помощь (SOS)" [ref=e17] [cursor=pointer]:
+        - /url: /admin/support
+      - generic [ref=e18]: Админ
+      - link "Дашборд" [ref=e19] [cursor=pointer]:
+        - /url: /admin
+      - link "Пользователи" [ref=e20] [cursor=pointer]:
+        - /url: /admin/users
+      - link "Группы" [ref=e21] [cursor=pointer]:
+        - /url: /admin/groups
+      - link "Узлы Relay" [ref=e22] [cursor=pointer]:
+        - /url: /admin/relays
+      - 'link "Бастион: цели и сессии" [ref=e23] [cursor=pointer]':
+        - /url: /admin/bastion
+      - link "Аудит" [ref=e24] [cursor=pointer]:
+        - /url: /admin/audit
+      - link "Шлюз уведомлений" [ref=e25] [cursor=pointer]:
+        - /url: /admin/notifications
+      - link "RADIUS-сессии" [ref=e26] [cursor=pointer]:
+        - /url: /admin/radius/sessions
+      - link "Файрвол" [ref=e27] [cursor=pointer]:
+        - /url: /admin/firewall
+      - link "OIDC" [ref=e28] [cursor=pointer]:
+        - /url: /admin/oidc
+      - link "SAML" [ref=e29] [cursor=pointer]:
+        - /url: /admin/saml
+      - link "Активные challenge" [ref=e30] [cursor=pointer]:
+        - /url: /admin/challenges
+      - link "Настройки" [ref=e31] [cursor=pointer]:
+        - /url: /admin/settings
+      - link "Лицензия" [ref=e32] [cursor=pointer]:
+        - /url: /admin/license
+      - link "API" [ref=e33] [cursor=pointer]:
+        - /url: /api/docs
+    - combobox [ref=e35] [cursor=pointer]
+    - generic [ref=e36]:
+      - generic "admin" [ref=e37]
+      - button "Выйти" [ref=e39] [cursor=pointer]
+  - generic [ref=e40]:
+    - main [ref=e41]:
+      - generic [ref=e42]:
+        - heading "Настройки сервера" [level=1] [ref=e43]
+        - paragraph [ref=e44]: Каждая секция сохраняется отдельно. Секретные поля показывают только факт «задано»; чтобы изменить — введите новое значение, пустое поле не меняет текущее.
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - heading "🧭 Как пользоваться этой страницей" [level=2] [ref=e47]
+          - paragraph [ref=e48]:
+            - text: Настройки разложены по
+            - strong [ref=e49]: вкладкам групп
+            - text: "— выберите группу ниже, на экране будут только её разделы (выбор запоминается). У каждой секции бейдж применения — когда изменение вступает в силу после «Сохранить»:"
+        - generic [ref=e50]:
+          - generic [ref=e51]:
+            - generic [ref=e52]: на лету
+            - text: — применяется сразу, без перезапуска
+          - generic [ref=e53]:
+            - generic [ref=e54]: SIGHUP
+            - text: "— применить без перезапуска:"
+            - code [ref=e55]: docker compose kill -s HUP twofa
+          - generic [ref=e56]:
+            - generic [ref=e57]: нужен перезапуск
+            - text: —
+            - code [ref=e58]: docker compose up -d twofa
+          - generic [ref=e59]:
+            - generic [ref=e60]: смена токена — перезапуск
+            - text: — действует только для смены токена бота/шлюза
+        - paragraph [ref=e61]: "Перейти к группе:"
+        - tablist [ref=e62]:
+          - button "🖧 Сеть и сервер" [ref=e63] [cursor=pointer]
+          - button "🔐 Вход и безопасность" [ref=e64] [cursor=pointer]
+          - button "📨 Каналы доставки" [active] [ref=e65] [cursor=pointer]
+          - button "🔔 Уведомления" [ref=e66] [cursor=pointer]
+          - button "🏢 Каталог" [ref=e67] [cursor=pointer]
+          - button "🧩 Модули" [ref=e68] [cursor=pointer]
+          - button "⚙️ Администрирование" [ref=e69] [cursor=pointer]
+    - contentinfo [ref=e70]: Ligament
