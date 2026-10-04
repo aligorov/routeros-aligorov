@@ -136,7 +136,7 @@
       restart: unless-stopped
 - name: A-vpn-manager
   descr: 'VPN user manager for MikroTik: WireGuard/OpenVPN/VLESS provisioning, AD
-    sync, FreeRADIUS, self-service portal'
+    sync, external RADIUS auth (Ligament 2FA), self-service portal'
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/vpn-manager
   category: security
   icon: https://aligorov.github.io/routeros-aligorov/apps/vpn-manager/icon.png
@@ -153,7 +153,7 @@
       - pgdata:/var/lib/postgresql/data
       restart: unless-stopped
     app:
-      image: ghcr.io/aligorov/routeros-aligorov/vpn-app:1.0.3
+      image: ghcr.io/aligorov/routeros-aligorov/vpn-app:1.0.4
       ports:
       - 3000:3000/tcp:web
       environment:
@@ -164,20 +164,10 @@
         ADMIN_DEFAULT_USERNAME: admin
         ADMIN_DEFAULT_PASSWORD: change-me
       volumes:
-      - radius-cfg:/app/freeradius
       - app-data:/app/data
       - downloads:/app/public/portal/downloads
       restart: unless-stopped
-    freeradius:
-      image: ghcr.io/aligorov/routeros-aligorov/vpn-freeradius:1.0.4
-      ports:
-      - 1812:1812/udp:radius-auth
-      - 1813:1813/udp:radius-acct
-      volumes:
-      - radius-cfg:/radius-cfg:ro
-      restart: unless-stopped
   volumes:
     pgdata: {}
-    radius-cfg: {}
     app-data: {}
     downloads: {}

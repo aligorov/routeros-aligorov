@@ -1,14 +1,17 @@
 # vpn-manager
 
 Полный стек управления VPN-пользователями для MikroTik RouterOS — ставится
-одним приложением из App Store: **админ-панель (Next.js) + PostgreSQL +
-FreeRADIUS**.
+одним приложением из App Store: **админ-панель (Next.js) + PostgreSQL**.
 
 Возможности: провижининг пользователей WireGuard/OpenVPN/VLESS на роутере
-(REST API RouterOS), синк с Active Directory (группы → тарифы/тиры), доступ
-по RADIUS через ваш AD, self-service портал для пользователей (конфиги,
-подписки, инструкции), Telegram-уведомления, Access Control (address-lists),
-шифрование ключей в БД.
+(REST API RouterOS), синк с Active Directory (группы → тарифы/тиры),
+аутентификация OpenVPN через внешний RADIUS-сервер (Ligament 2FA → AD),
+self-service портал для пользователей (конфиги, подписки, инструкции),
+Telegram-уведомления, Access Control (address-lists), шифрование ключей в БД.
+
+> Контейнер FreeRADIUS удалён из стека (2026-10): для OVPN-аутентификации
+> поднимите внешний RADIUS-сервер — Ligament 2FA (LDAP + Telegram Push) —
+> и укажите его адрес в Settings → RADIUS Host.
 
 ## Требования
 
@@ -40,13 +43,10 @@ FreeRADIUS**.
 - **MikroTik**: URL REST API роутера и креды (user с правами на
   wireguard/address-list/radius);
 - **Active Directory**: LDAP-URL, bind-аккаунт, Base DN, маппинг групп;
-- **RADIUS**: secret для клиента-роутера (должен совпадать с тем, что
-  попадёт в `/radius` на MikroTik);
+- **RADIUS (внешний)**: хост и secret сервера Ligament 2FA (должен совпадать
+  с тем, что попадёт в `/radius` на MikroTik; приложение пропишет его само
+  при следующей синхронизации);
 - **Telegram / SMTP** (опц.): уведомления о CRUD-событиях.
-
-После настройки AD/RADIUS приложение само генерирует конфиги FreeRADIUS в
-общий том. Чтобы radius-контейнер их подхватил — перезапустите приложение
-(App → restart): freeradius копирует конфиги при своём старте.
 
 ## Состав и тома
 
@@ -54,11 +54,10 @@ FreeRADIUS**.
 |---|---|---|
 | `app` | `ghcr.io/aligorov/routeros-aligorov/vpn-app` | админка + портал, порт 3000 |
 | `db` | `postgres:15-alpine` | данные, наружу не публикуется |
-| `freeradius` | `ghcr.io/aligorov/routeros-aligorov/vpn-freeradius` | auth/acct 1812/1813 UDP |
 
 Тома (`<диск>/app/vpn-manager/…`): `pgdata` — база; `app-data` — ключи
-шифрования; `radius-cfg` — общий том app↔freeradius; `downloads` — файлы
-для портала (класть инсталляторы WireGuard и т.п. без пересборки).
+шифрования; `downloads` — файлы для портала (класть инсталляторы WireGuard
+и т.п. без пересборки).
 
 ## Бэкап и перенос
 
@@ -78,6 +77,7 @@ FreeRADIUS**.
 
 - Логи контейнеров: App → приложение → логи сервисов (или `/container print`).
 - «жду базу перед migrate (N/12)» в логах app — норма первые десятки секунд.
-- RADIUS не отвечает конфигами → настройте AD/RADIUS в Settings и
-  перезапустите приложение (см. выше).
+- OVPN-аутентификация не проходит → проверьте доступность внешнего
+  RADIUS-сервера (Ligament 2FA) с роутера и совпадение shared secret
+  (Settings → RADIUS).
 - Образы не тянутся → проверьте DNS и доступ роутера до `ghcr.io`.
