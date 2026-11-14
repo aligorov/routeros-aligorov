@@ -105,3 +105,32 @@ func TestROSSyncMock(t *testing.T) {
 	}
 	_ = os.RemoveAll(tmp)
 }
+
+func TestSelectStartConfigs(t *testing.T) {
+	cfgs := []ConfigMeta{{Name: "a.conf"}, {Name: "b.conf"}, {Name: "c.conf"}}
+	if got := selectStartConfigs(cfgs, "b.conf", false); len(got) != 1 || got[0].Name != "b.conf" {
+		t.Fatalf("expected only b.conf, got %+v", got)
+	}
+	if got := selectStartConfigs(cfgs, "", false); len(got) != 1 || got[0].Name != "a.conf" {
+		t.Fatalf("expected fallback a.conf, got %+v", got)
+	}
+	if got := selectStartConfigs(cfgs, "b.conf", true); len(got) != 3 {
+		t.Fatalf("multi mode must start all, got %+v", got)
+	}
+}
+
+func TestActiveConfigPersist(t *testing.T) {
+	tmp := t.TempDir()
+	mgr := NewTunnelManager(tmp, filepath.Join(tmp, "run"), "", false, false, NewRingLogger(10))
+	_ = mgr.SaveConfig("nl.conf", "[Interface]\nPrivateKey = x\n")
+	_ = mgr.SaveConfig("de.conf", "[Interface]\nPrivateKey = y\n")
+	if err := mgr.SetActiveConfig("nl.conf"); err != nil {
+		t.Fatal(err)
+	}
+	if mgr.GetActiveConfig() != "nl.conf" {
+		t.Fatalf("active not persisted")
+	}
+	if err := mgr.SetActiveConfig("missing.conf"); err == nil {
+		t.Fatalf("expected error for missing profile")
+	}
+}

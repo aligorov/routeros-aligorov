@@ -51,6 +51,7 @@ type ConfigMeta struct {
 	Name       string   `json:"name"`
 	Interface  string   `json:"interface"`
 	Active     bool     `json:"active"`
+	Selected   bool     `json:"selected"`
 	ListenPort string   `json:"listen_port,omitempty"`
 	Address    string   `json:"address,omitempty"`
 	DNS        []string `json:"dns,omitempty"`
@@ -60,15 +61,15 @@ type ConfigMeta struct {
 }
 
 type TunnelManager struct {
-	mu          sync.Mutex
-	srcDir      string
-	runDir      string
-	lanIface    string
-	autoRoute   bool
-	killSwitch  bool
-	started     []string
-	logger      *RingLogger
-	onChange    func()
+	mu         sync.Mutex
+	srcDir     string
+	runDir     string
+	lanIface   string
+	autoRoute  bool
+	killSwitch bool
+	started    []string
+	logger     *RingLogger
+	onChange   func()
 }
 
 func NewTunnelManager(srcDir, runDir, lanIface string, autoRoute, killSwitch bool, logger *RingLogger) *TunnelManager {
@@ -145,6 +146,7 @@ func (m *TunnelManager) ListConfigs() ([]ConfigMeta, error) {
 		}
 	}
 
+	activeName := m.GetActiveConfig()
 	var out []ConfigMeta
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".conf") {
@@ -160,10 +162,65 @@ func (m *TunnelManager) ListConfigs() ([]ConfigMeta, error) {
 		}
 		meta := parseConfigMeta(e.Name(), text)
 		meta.Active = activeSet[meta.Interface]
+		meta.Selected = (e.Name() == activeName)
 		out = append(out, meta)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	if activeName == "" && len(out) > 0 {
+		out[0].Selected = true
+	}
 	return out, nil
+}
+
+// selectStartConfigs: by default only ONE profile runs (the selected one).
+// AWG_MULTI_TUNNEL=on keeps legacy behaviour (all *.conf up, first is primary).
+func selectStartConfigs(cfgs []ConfigMeta, active string, multi bool) []ConfigMeta {
+	if multi || len(cfgs) == 0 {
+		return cfgs
+	}
+	for _, c := range cfgs {
+		if c.Name == active {
+			return []ConfigMeta{c}
+		}
+	}
+	return cfgs[:1]
+}
+
+func (m *TunnelManager) activeFilePath() string {
+	return filepath.Join(m.srcDir, ".active")
+}
+
+func (m *TunnelManager) GetActiveConfig() string {
+	b, err := os.ReadFile(m.activeFilePath())
+	if err != nil {
+		return ""
+	}
+	name := strings.TrimSpace(string(b))
+	if !validConfNameRe.MatchString(name) {
+		return ""
+	}
+	if _, err := os.Stat(filepath.Join(m.srcDir, name)); err != nil {
+		return ""
+	}
+	return name
+}
+
+func (m *TunnelManager) SetActiveConfig(name string) error {
+	if !validConfNameRe.MatchString(name) {
+		return fmt.Errorf("invalid config filename %q", name)
+	}
+	if _, err := os.Stat(filepath.Join(m.srcDir, name)); err != nil {
+		return fmt.Errorf("config %s not found", name)
+	}
+	return os.WriteFile(m.activeFilePath(), []byte(name+"\n"), 0o600)
+}
+
+func (m *TunnelManager) ActivateConfig(name string) error {
+	if err := m.SetActiveConfig(name); err != nil {
+		return err
+	}
+	m.logger.Logf("Switched active profile to %s", name)
+	return m.RestartAll()
 }
 
 func parseConfigMeta(name, text string) ConfigMeta {
@@ -325,8 +382,9 @@ func (m *TunnelManager) StartAll() error {
 		return nil
 	}
 
+	target := selectStartConfigs(configs, m.GetActiveConfig(), envOr("AWG_MULTI_TUNNEL", "off") == "on")
 	m.started = nil
-	for idx, cfg := range configs {
+	for idx, cfg := range target {
 		srcBytes, err := os.ReadFile(filepath.Join(m.srcDir, cfg.Name))
 		if err != nil {
 			return err

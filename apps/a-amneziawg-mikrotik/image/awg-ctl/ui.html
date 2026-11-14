@@ -61,16 +61,17 @@
 
   <div id="tab-configs" class="tab-pane hide">
     <div class="card">
-      <h2>Конфигурации (/etc/amnezia/amneziawg)</h2>
+      <h2>Профили (/etc/amnezia/amneziawg) — активен только один</h2>
+      <div id="profList" style="margin-bottom:12px"></div>
       <div class="row" style="margin-bottom:10px">
         <select id="cfgSelect" style="max-width:220px" onchange="loadSelectedConfig()"></select>
-        <input id="cfgName" placeholder="awg0.conf" style="max-width:180px">
-        <button onclick="newConfig()">Новый</button>
+        <input id="cfgName" placeholder="имя профиля, напр. nl.conf" style="max-width:200px">
+        <button onclick="newConfig()">+ Новый профиль</button>
         <button class="danger" onclick="deleteConfig()">Удалить</button>
       </div>
       <textarea id="cfgText" placeholder="[Interface]&#10;PrivateKey = ..."></textarea>
       <div class="row" style="margin-top:10px">
-        <button class="primary" onclick="saveConfig(true)">Сохранить и применить</button>
+        <button class="primary" onclick="saveConfig(true)">Сохранить и сделать активным</button>
         <button onclick="saveConfig(false)">Только сохранить</button>
         <button onclick="showQRForText(document.getElementById('cfgText').value)">QR-код</button>
         <span class="mut" id="cfgMsg"></span>
@@ -91,9 +92,9 @@
       <button class="primary" onclick="generatePair()">Сгенерировать пару ключей и AWG 3.1</button>
       <div class="grid" style="margin-top:12px">
         <div>
-          <div class="mut" style="margin-bottom:4px">Сервер (положить как awg0.conf)</div>
+          <div class="mut" style="margin-bottom:4px">Сервер (server.conf)</div>
           <textarea id="kgSrvOut"></textarea>
-          <button style="margin-top:6px" onclick="applyGeneratedServer()">Сохранить как awg0.conf и запустить</button>
+          <button style="margin-top:6px" onclick="applyGeneratedServer()">Сохранить как server.conf и сделать активным</button>
         </div>
         <div>
           <div class="mut" style="margin-bottom:4px">Клиент (для телефона / ПК)</div>
@@ -186,9 +187,18 @@ async function refresh() {
     const sel = document.getElementById('cfgSelect');
     const prev = sel.value;
     const cfgs = st.configs || [];
-    sel.innerHTML = cfgs.map(c => `<option value="${esc(c.name)}">${esc(c.name)}${c.active ? ' (UP)' : ''}</option>`).join('');
+    sel.innerHTML = cfgs.map(c => `<option value="${esc(c.name)}">${esc(c.name)}${c.selected ? ' ★' : ''}${c.active ? ' (UP)' : ''}</option>`).join('');
     if (prev && cfgs.some(c => c.name === prev)) sel.value = prev;
     if (sel.value && !document.getElementById('cfgText').value) loadSelectedConfig();
+    document.getElementById('profList').innerHTML = cfgs.length ? cfgs.map(c => `
+      <div class="row" style="padding:6px 0;border-bottom:1px solid var(--bd)">
+        <label style="display:flex;gap:8px;align-items:center;cursor:pointer;flex:1">
+          <input type="radio" name="prof" style="width:auto" ${c.selected ? 'checked' : ''} onchange="activateProfile('${esc(c.name)}')">
+          <strong>${esc(c.name)}</strong>
+          ${c.active ? '<span class="badge ok">UP</span>' : ''}
+          <span class="mut">${esc(c.address || '')}</span>
+        </label>
+      </div>`).join('') : '<span class="mut">Профилей нет — нажмите «+ Новый профиль».</span>';
 
     document.getElementById('logsBox').textContent = (st.logs || []).join('\n');
   } catch (e) {
@@ -203,12 +213,25 @@ async function loadSelectedConfig() {
   document.getElementById('cfgText').value = d.content;
 }
 function newConfig() {
-  document.getElementById('cfgName').value = 'awg0.conf';
+  let n = 1;
+  const names = [...document.getElementById('cfgSelect').options].map(o => o.value);
+  while (names.includes('awg' + n + '.conf')) n++;
+  document.getElementById('cfgName').value = (names.length ? 'awg' + n : 'awg0') + '.conf';
   document.getElementById('cfgText').value = '';
   document.getElementById('qrBox').innerHTML = '';
 }
+async function activateProfile(name) {
+  const msg = document.getElementById('cfgMsg');
+  msg.textContent = 'Переключение на ' + name + '...';
+  try {
+    await api('/api/configs/' + encodeURIComponent(name) + '/activate', {method:'POST'});
+    msg.textContent = 'Активен: ' + name;
+  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; }
+  await refresh();
+}
 async function saveConfig(apply) {
-  const name = document.getElementById('cfgName').value.trim() || 'awg0.conf';
+  const name = document.getElementById('cfgName').value.trim();
+  if (!name) { document.getElementById('cfgMsg').textContent = 'Укажите имя профиля (напр. nl.conf)'; return; }
   const content = document.getElementById('cfgText').value;
   const msg = document.getElementById('cfgMsg');
   msg.textContent = 'Сохранение...';
@@ -254,9 +277,9 @@ async function generatePair() {
 async function applyGeneratedServer() {
   const content = document.getElementById('kgSrvOut').value;
   if (!content.trim()) return;
-  await api('/api/configs/awg0.conf', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content, apply:true})});
+  await api('/api/configs/server.conf', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content, apply:true})});
   await refresh();
-  alert('awg0.conf сохранён и запущен');
+  alert('server.conf сохранён и сделан активным');
 }
 async function loadDomains() {
   const d = await api('/api/domains');

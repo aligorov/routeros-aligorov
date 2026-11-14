@@ -15,12 +15,12 @@ import (
 )
 
 type ROSSyncStatus struct {
-	Enabled    bool   `json:"enabled"`
-	URL        string `json:"url,omitempty"`
-	LastSync   string `json:"last_sync,omitempty"`
-	LastError  string `json:"last_error,omitempty"`
-	Routes     int    `json:"routes_synced"`
-	Domains    int    `json:"domains_synced"`
+	Enabled   bool   `json:"enabled"`
+	URL       string `json:"url,omitempty"`
+	LastSync  string `json:"last_sync,omitempty"`
+	LastError string `json:"last_error,omitempty"`
+	Routes    int    `json:"routes_synced"`
+	Domains   int    `json:"domains_synced"`
 }
 
 type ROSClient struct {

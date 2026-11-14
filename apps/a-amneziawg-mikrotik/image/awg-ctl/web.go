@@ -18,15 +18,15 @@ import (
 var uiHTML []byte
 
 type WebServer struct {
-	listenAddr   string
-	healthAddr   string
-	uiUser       string
-	uiPass       string
-	maxHSAge     int64
-	mgr          *TunnelManager
-	dns          *DNSForwarder
-	ros          *ROSClient
-	logger       *RingLogger
+	listenAddr string
+	healthAddr string
+	uiUser     string
+	uiPass     string
+	maxHSAge   int64
+	mgr        *TunnelManager
+	dns        *DNSForwarder
+	ros        *ROSClient
+	logger     *RingLogger
 }
 
 func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros *ROSClient, logger *RingLogger) *WebServer {
@@ -52,6 +52,7 @@ func (w *WebServer) Start() error {
 	mux.HandleFunc("GET /api/configs/{name}", w.withAuth(w.handleGetConfig))
 	mux.HandleFunc("POST /api/configs/{name}", w.withAuth(w.handleSaveConfig))
 	mux.HandleFunc("DELETE /api/configs/{name}", w.withAuth(w.handleDeleteConfig))
+	mux.HandleFunc("POST /api/configs/{name}/activate", w.withAuth(w.handleActivateConfig))
 	mux.HandleFunc("POST /api/tunnel/up", w.withAuth(w.handleTunnelUp))
 	mux.HandleFunc("POST /api/tunnel/down", w.withAuth(w.handleTunnelDown))
 	mux.HandleFunc("POST /api/tunnel/restart", w.withAuth(w.handleTunnelRestart))
@@ -191,10 +192,18 @@ func (w *WebServer) handleSaveConfig(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Apply {
-		if err := w.mgr.RestartAll(); err != nil {
+		if err := w.mgr.ActivateConfig(name); err != nil {
 			writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (w *WebServer) handleActivateConfig(rw http.ResponseWriter, r *http.Request) {
+	if err := w.mgr.ActivateConfig(r.PathValue("name")); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
 }
