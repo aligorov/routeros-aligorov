@@ -2,7 +2,7 @@
 
 Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go` `v3.1.20260828` + `awg-quick` `v3.1.20260812`) для RouterOS со встроенным **WebUI (`:8092`)**, **мульти-профилями (`.conf`)**, **GeoSite / GeoIP + правилами `PROXY / DIRECT / DROP`**, вкладкой **Настройки**, **QR-генератором**, **DNS-форвардером (`:53`)**, **health-зондом (`:8081`)** для `/tool/netwatch` и **REST-синхронизацией RouterOS**.
 
-- Образ: `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`1.3.0`, `arm64`, `amd64`, `arm/v7`).
+- Образ: `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`1.3.1`, `arm64`, `amd64`, `arm/v7`).
 - WebUI: `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox).
 - Сеть: RouterOS `/app` создаёт выделенный `veth` автоматически (без предварительного создания сети).
 - Том: `awg-config` → `/etc/amnezia/amneziawg` (`*.conf`, `.active`, `settings.json`, `rules.conf`, `geo/`, `domains.txt`).
@@ -11,7 +11,7 @@
 
 **Шаг 1 — приложение из App Store:**
 1. В **Winbox → App → App** нажмите **Update** (обновить каталог).
-2. Выберите **`A-amneziawg-mikrotik`** (в описании должно быть `AmneziaWG 3.1 (v1.3.0)...`) и нажмите **Enable**.
+2. Выберите **`A-amneziawg-mikrotik`** (в описании должно быть `AmneziaWG 3.1 (v1.3.1)...`) и нажмите **Enable**.
    > Если ранее стояла старая версия под тем же тегом `:1`, выполните в терминале RouterOS `/app/disable A-amneziawg-mikrotik; /app/remove A-amneziawg-mikrotik; /app/cleanup; /app/enable A-amneziawg-mikrotik`, чтобы RouterOS скачал свежий образ.
 3. Откройте **Open WebUI** (`http://<ip-роутера>:8092`):
    - **Конфиги (.conf)** — управление профилями (радио-переключатель активного конфига + `+ Новый профиль` + **QR-код**).
@@ -87,7 +87,7 @@
 ```bash
 docker buildx build --builder multiarch \
   --platform linux/arm64,linux/amd64,linux/arm/v7 \
-  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.3.0 \
+  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.3.1 \
   -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1 \
   -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:latest \
   --push apps/a-amneziawg-mikrotik/image

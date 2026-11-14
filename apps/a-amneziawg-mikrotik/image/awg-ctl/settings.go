@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-const AppVersion = "1.3.0"
+const AppVersion = "1.3.1"
 
 const (
 	DefaultGeoSiteURL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
@@ -95,7 +95,7 @@ func NewSettingsStore(cfgDir string) (*SettingsStore, error) {
 			st.val = normalizeSettings(loaded, st.val)
 		}
 	} else if !os.IsNotExist(err) {
-		return nil, err
+		return st, err
 	}
 	return st, nil
 }

@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/binary"
+	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -270,5 +272,26 @@ func TestDNSWireHelpers(t *testing.T) {
 	ips := extractDNSAnswerIPv4s(resp)
 	if len(ips) != 1 || ips[0] != netip.MustParseAddr("93.184.216.34") {
 		t.Fatalf("extractDNSAnswerIPv4s failed: %+v", ips)
+	}
+}
+
+func TestWebHealthReadyVsTunnelHealth(t *testing.T) {
+	dir := t.TempDir()
+	logger := NewRingLogger(20)
+	mgr := NewTunnelManager(dir, filepath.Join(dir, "run"), "eth0", true, true, logger)
+	ws := NewWebServer(":8080", mgr, nil, nil, nil, nil, nil, logger)
+
+	reqReady := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rwReady := httptest.NewRecorder()
+	ws.handleReady(rwReady, reqReady)
+	if rwReady.Code != http.StatusOK {
+		t.Fatalf("expected /health 200 OK even without tunnels so RouterOS healthcheck passes, got %d: %s", rwReady.Code, rwReady.Body.String())
+	}
+
+	reqTun := httptest.NewRequest(http.MethodGet, "/health?tunnel=1", nil)
+	rwTun := httptest.NewRecorder()
+	ws.handleReady(rwTun, reqTun)
+	if rwTun.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected /health?tunnel=1 503 when no awg interfaces are active, got %d", rwTun.Code)
 	}
 }

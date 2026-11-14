@@ -52,7 +52,7 @@ func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros 
 
 func (w *WebServer) Start() error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", w.handleHealth)
+	mux.HandleFunc("GET /health", w.handleReady)
 	mux.HandleFunc("GET /", w.withAuth(w.handleIndex))
 	mux.HandleFunc("GET /api/status", w.withAuth(w.handleStatus))
 	mux.HandleFunc("GET /api/configs/{name}", w.withAuth(w.handleGetConfig))
@@ -122,6 +122,27 @@ func writeJSON(rw http.ResponseWriter, code int, v any) {
 func (w *WebServer) handleIndex(rw http.ResponseWriter, _ *http.Request) {
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = rw.Write(uiHTML)
+}
+
+// handleReady is used by Docker/RouterOS /app HEALTHCHECK on :8080/health:
+// returns 200 OK whenever WebUI is up (even before a .conf is added),
+// unless ?tunnel=1 is passed. RouterOS Netwatch continues to use :8081 (handleHealth).
+func (w *WebServer) handleReady(rw http.ResponseWriter, r *http.Request) {
+	if r.URL != nil && r.URL.Query().Get("tunnel") == "1" {
+		w.handleHealth(rw, r)
+		return
+	}
+	ifaces, _ := w.mgr.ShowInterfaces()
+	names := make([]string, 0, len(ifaces))
+	for _, i := range ifaces {
+		names = append(names, i.Name)
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":         true,
+		"version":    AppVersion,
+		"tunnel_up":  len(ifaces) > 0,
+		"interfaces": names,
+	})
 }
 
 func (w *WebServer) handleHealth(rw http.ResponseWriter, _ *http.Request) {
