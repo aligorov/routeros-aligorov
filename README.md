@@ -109,7 +109,7 @@ scripts/ghcr-push.sh       # сборка arm64-образа и пуш в GHCR
 |---|---|---|
 | `A-vpn-manager` | VPN-менеджер: админка (Next.js) + PostgreSQL, синк с AD, провижининг WG/OpenVPN/VLESS на MikroTik, внешний RADIUS (Ligament 2FA), портал пользователей | после установки открыть `http://<ip-роутера>:3000`, вход `admin`/`change-me` (сменить!) |
 | `A-awg-proxy` | AmneziaWG 1.0–3.1 UDP-прокси (C11, ~0.1 МБ) для штатного WireGuard RouterOS (клиент/сервер/WARP) | порт `51820/udp`, см. `apps/a-awg-proxy/README.md` |
-| `A-amneziawg-mikrotik` | AmneziaWG (`amneziawg-go` + `awg-quick`) клиент и сервер в контейнере, конфиги в томе `awg-config` | порт `51821:51820/udp`, проверка в shell: `awg` |
+| `A-amneziawg-mikrotik` | AmneziaWG 3.1 (`amneziawg-go` + `awg-quick`) клиент и сервер без OpenRC, авто-маршрутизация + `router-setup.rsc` | `AWG_CONF_B64` или том `awg-config`, порт `51821:51820/udp` |
 | `A-mihomo-mikrotik` | mihomo (Clash) tunnel-gateway + mixed-прокси 1080 и панель zashboard | `http://<ip-роутера>:9091/ui/` |
 | `A-mihomo-proxy` | Mihomo (Clash.Meta) TPROXY-прокси с WebUI и скриптом маршрутизации `router-setup.rsc` | `http://<ip-роутера>:8090` |
 | `A-mihomo-ros` | Ядро mihomo (Clash.Meta) + веб-панель ручной настройки `config.yaml` | `http://<ip-роутера>:8091` |

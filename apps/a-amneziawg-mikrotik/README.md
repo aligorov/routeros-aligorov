@@ -1,101 +1,71 @@
 # A-amneziawg-mikrotik
 
-[wiktorbgu/amneziawg-mikrotik](https://hub.docker.com/r/wiktorbgu/amneziawg-mikrotik) — полноценный клиент и сервер **AmneziaWG (включая AWG 3.1)** на базе Alpine + OpenRC + `amneziawg-go` + `awg-quick` внутри контейнера RouterOS.
+Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go` `v3.1.20260828` + `awg-quick` `v3.1.20260812`) для RouterOS `arm64`, собранный на базе Alpine 3.21 без OpenRC (вместо форка `wiktorbgu/amneziawg-mikrotik`).
 
-- Образ: `docker.io/wiktorbgu/amneziawg-mikrotik:latest` (`arm64`, `arm/v7`, `arm/v5`, `amd64`; ~10.1 МБ сжато).
-- Порт: `51821:51820/udp` (используется в серверном режиме или для входящего проброса).
-- Healthcheck: `/bin/bash /data/healthcheck.sh` (проверяет вывод `/usr/bin/awg`).
+- Образ: `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.0.0` (`arm64`, ~8.1 МБ несжато).
+- Выделенный `veth`: `AmneziaWGRoS` (`192.168.253.2/30`, шлюз роутера `192.168.253.1`).
+- Том: `awg-config` → `/etc/amnezia/amneziawg`.
 
-> В отличие от `A-awg-proxy` (который лишь обфусцирует трафик штатного WireGuard роутера), этот контейнер поднимает сам интерфейс `amneziawg-go` и маршрутизацию/NAT через `awg-quick` внутри контейнера — подходит для двусторонних туннелей, client- и server-режима.
+> **Что улучшено по сравнению с оригинальным образом:**
+> - **Без OpenRC и `/sbin/init`** — логи `awg-quick` и `amneziawg-go` идут напрямую в `RouterOS → Container → Logs`, при остановке интерфейсы корректно гасятся по `SIGTERM`.
+> - **Работает обычный `.conf` из AmneziaVPN** — не нужно вручную вписывать `PostUp`/`PostDown`, `Table = awg`, угадывать имя veth (`eth0` vs `AmneziaWGRoS`) или переводить CRLF в LF.
+> - **Авто-маршрутизация и kill-switch** — контейнер сам определяет свой `veth`, поднимает `MASQUERADE`, `TCPMSS`, `ip rule priority 300 ... lookup awg` и `blackhole default metric 254` (управляются через `AWG_AUTO_ROUTE` / `AWG_KILLSWITCH`).
+> - **Запуск без загрузки файлов** — конфиг можно передать прямо в `Environment` через `AWG_CONF_B64` (base64).
 
-## Том и конфигурационные файлы
+> Для роутеров на `arm/v5` или если нужен только прокси для штатного WireGuard RouterOS — используйте `A-awg-proxy` (~0.1 МБ).
 
-- Том `awg-config` → `/etc/amnezia/amneziawg`.
-- При старте OpenRC-сервис `/etc/init.d/wg-quick` автоматически запускает `awg-quick up` для каждого `*.conf` с секцией `[Interface]` в `/etc/amnezia/amneziawg/`.
-- При запуске `/data/pre_up.sh` автоматически создаёт `/dev/net/tun` и исправляет заголовок `/etc/resolv.conf` для `resolvconf`, а `/entrypoint.sh` очищает конфликтующие `ip rule` для RouterOS 7.22+.
+## Установка (2 шага)
 
-> **ВАЖНО:** файлы `*.conf` **обязательно должны иметь Unix-концы строк (LF)**! Файлы с CRLF (Windows) не запустятся.
+**Шаг 1 — подготовка роутера** (Winbox → New Terminal, по одной строке):
+
+```routeros
+/tool fetch url="https://aligorov.github.io/routeros-aligorov/apps/a-amneziawg-mikrotik/router-setup.rsc" dst-path=awg-setup.rsc
+/import awg-setup.rsc
+```
+
+Скрипт идемпотентный (повторный запуск безопасен). Он создаёт:
+- `veth` `AmneziaWGRoS` (`192.168.253.2/30`, gw `192.168.253.1`) и список `InAccept` (чтобы ответный трафик контейнера не уходил в петлю mangle);
+- таблицу маршрутизации `AmneziaWGRoS` (`0.0.0.0/0 -> 192.168.253.2` + `blackhole` fallback);
+- `mangle`-правила для выборочной маршрутизации по `/ip/firewall/address-list` (`list=AmneziaWGRoS`) и правку `fasttrack` (`connection-mark=no-mark`);
+- заготовку `dst-nat` для Server Mode (`AWG_Server_DSTNAT`, по умолчанию выключена).
+
+Если списки `LAN`/`WAN` только что создались — добавьте в них ваши интерфейсы (**Interfaces → Interface List**).
+
+**Шаг 2 — приложение и конфиг:**
+1. **Winbox → App → `A-amneziawg-mikrotik` → Install**. Контейнер автоматически подключится к `veth` `AmneziaWGRoS`.
+2. Передайте ваш стандартный `.conf` (из AmneziaVPN / генератора) любым из двух способов:
+   - **Без файлов (быстрее всего):** закодируйте `.conf` в base64 (`base64 -w0 awg.conf` на Linux или `base64 -i awg.conf | tr -d '\n'` на macOS) и вставьте строку в `Environment → AWG_CONF_B64`, затем перезапустите контейнер.
+   - **Через том:** положите `*.conf` (LF или CRLF — не важно) в смонтированный том `awg-config` (`/etc/amnezia/amneziawg/awg0.conf`) и перезапустите контейнер.
+
+## Куда направлять трафик (на RouterOS)
+
+- **Выборочно по доменам/IP** (уже готово после `router-setup.rsc`):
+  ```routeros
+  /ip/firewall/address-list/add list=AmneziaWGRoS address=ifconfig.me
+  ```
+- **Вся подсеть / конкретный клиент через VPN** (в обход `address-list`):
+  ```routeros
+  /routing/rule/add src-address=192.168.88.50/32 action=lookup table=AmneziaWGRoS
+  ```
+- **Server Mode** (входящие подключения к серверу AmneziaWG снаружи на порт `51821/udp`):
+  ```routeros
+  /ip/firewall/nat/enable [find comment="AWG_Server_DSTNAT"]
+  ```
 
 ## Переменные окружения
 
 | Переменная | Назначение | По умолчанию |
 |---|---|---|
-| `LOG_LEVEL` | Уровень логирования | `error` |
+| `AWG_AUTO_ROUTE` | Автоматически добавлять `MASQUERADE`, `TCPMSS`, `Table = awg`, `ip rule` (`on`/`off`) | `"on"` |
+| `AWG_KILLSWITCH` | Добавлять `blackhole` и запрет утечек мимо туннеля (`on`/`off`) | `"on"` |
+| `AWG_CONF_B64` | Base64-содержимое `.conf` (если не монтируете файл в `awg-config`) | `""` |
+| `AWG_IFACE` | Имя интерфейса при запуске из `AWG_CONF_B64` / `AWG_CONF` | `awg0` |
+| `AWG_LAN_IFACE` | Явное имя veth-интерфейса (по умолчанию определяется автоматически) | авто |
+| `LOG_LEVEL` | Уровень логирования `amneziawg-go` (`verbose`, `error`, `silent`) | `error` |
 | `WG_QUICK_USERSPACE_IMPLEMENTATION` | Userspace-реализация AmneziaWG | `amneziawg-go` |
-| `TZ` | Часовой пояс внутри контейнера | `UTC` |
+| `TZ` | Часовой пояс (без `tzdata` работают POSIX-строки, например `UTC`, `MSK-3`) | `UTC` |
 
-## Пример конфига: клиент (Client Mode)
-
-Положите файл `awg.conf` (в формате LF) в смонтированный том `awg-config` (`/etc/amnezia/amneziawg/awg.conf`). Имя интерфейса в `PostUp`/`PostDown` (например, `eth0` или имя veth контейнера — проверьте внутри через `ip a`) должно соответствовать veth-интерфейсу контейнера:
-
-```ini
-[Interface]
-PrivateKey = ВАШ_PRIVATE_KEY
-Address = 10.10.10.2/24
-MTU = 1420
-Jc = 6
-Jmin = 50
-Jmax = 1000
-S1 = 0
-S2 = 0
-H1 = 1
-H2 = 2
-H3 = 3
-H4 = 4
-
-PostUp = iptables -t nat -A POSTROUTING -o %i -j MASQUERADE
-PostDown = iptables -t nat -D POSTROUTING -o %i -j MASQUERADE
-PostUp = iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-PostDown = iptables -D FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-
-Table = awg
-PostUp = ip rule add priority 300 from all iif eth0 lookup awg || true
-PostDown = ip rule del from all iif eth0 lookup awg || true
-
-[Peer]
-PublicKey = SERVER_PUBLIC_KEY
-PresharedKey = PRESHARED_KEY
-AllowedIPs = 0.0.0.0/0
-PersistentKeepalive = 25
-Endpoint = SERVER_IP_OR_DNS:PORT
-```
-
-*(Если используете оригинальный AWG-сервер, значения `S1`, `S2`, `H1`–`H4` должны в точности совпадать с серверными. Для RouterOS 7.20+ имя интерфейса внутри контейнера может совпадать с именем veth вместо `eth0` — уточните командой `ip link` в shell контейнера.)*
-
-## Пример конфига: сервер (Server Mode)
-
-Положите `awg0.conf` в `/etc/amnezia/amneziawg/awg0.conf`:
-
-```ini
-[Interface]
-Address = 10.0.0.1/24
-ListenPort = 51820
-PrivateKey = SERVER_PRIVATE_KEY
-Jc = 4
-Jmin = 50
-Jmax = 1000
-S1 = 146
-S2 = 42
-H1 = 532916466
-H2 = 2096090865
-H3 = 406337014
-H4 = 57583056
-
-PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
-PostUp = iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-PostDown = iptables -D FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-
-Table = awg
-PostUp = ip rule add priority 300 from all iif eth0 lookup awg || true
-PostDown = ip rule del from all iif eth0 lookup awg || true
-
-[Peer]
-PublicKey = CLIENT_PUBLIC_KEY
-AllowedIPs = 10.0.0.2/32
-```
-
-Входящий порт пробрасывается стором (`51821:51820/udp`) или правилом dst-nat на роутере.
+*(Если в вашем `.conf` уже прописаны собственные `PostUp` или `Table`, авто-инъекция не вмешивается и использует ваши правила как есть.)*
 
 ## Проверка состояния
 
@@ -103,4 +73,14 @@ AllowedIPs = 10.0.0.2/32
 /container print where running
 /container shell 0
 ```
-Внутри контейнера выполните `awg` — отобразятся активный интерфейс, параметры обфускации и `latest handshake`.
+
+Внутри контейнера:
+- `awg` — активный интерфейс, параметры обфускации и `latest handshake`;
+- `/usr/local/bin/healthcheck.sh` — проверка поднятых интерфейсов (код возврата `0` при успехе).
+
+## Пересборка образа
+
+Исходники образа лежат в [`image/`](image/):
+```bash
+./scripts/ghcr-push.sh apps/a-amneziawg-mikrotik/image amneziawg-mikrotik 1.0.0
+```

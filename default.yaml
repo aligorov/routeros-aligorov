@@ -3,21 +3,28 @@
 #  Источники приложений: apps/*/app.yaml
 # =============================================================
 - name: A-amneziawg-mikrotik
-  descr: AmneziaWG (amneziawg-go + awg-quick) клиент и сервер в контейнере для RouterOS
-    — конфиги в /etc/amnezia/amneziawg
-  page: https://hub.docker.com/r/wiktorbgu/amneziawg-mikrotik
+  descr: AmneziaWG 3.1 (amneziawg-go + awg-quick) клиент и сервер для RouterOS — без
+    OpenRC, авто-маршрутизация и конфиг через AWG_CONF_B64 или том
+  page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/a-amneziawg-mikrotik
   category: networking
   icon: https://aligorov.github.io/routeros-aligorov/apps/a-amneziawg-mikrotik/icon.png
   auto-update: false
+  networks:
+    amneziawg:
+      name: AmneziaWGRoS
+      external: true
   services:
     a-amneziawg-mikrotik:
-      image: docker.io/wiktorbgu/amneziawg-mikrotik:latest
+      image: ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.0.0
       hostname: amneziawg
       ports:
       - 51821:51820/udp
       environment:
         LOG_LEVEL: error
         WG_QUICK_USERSPACE_IMPLEMENTATION: amneziawg-go
+        AWG_AUTO_ROUTE: 'on'
+        AWG_KILLSWITCH: 'on'
+        AWG_CONF_B64: ''
         TZ: UTC
       volumes:
       - awg-config:/etc/amnezia/amneziawg
