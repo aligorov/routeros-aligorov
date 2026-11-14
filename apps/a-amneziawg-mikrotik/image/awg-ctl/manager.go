@@ -279,7 +279,7 @@ func (m *TunnelManager) injectAutoRoute(text string, table string, primary bool)
 		)
 		if m.killSwitch {
 			lines = append(lines,
-				fmt.Sprintf("PostUp = ip route replace blackhole default table %s metric 254 || true", table),
+				fmt.Sprintf("PostUp = ip route show table %s | grep -q \"blackhole\" || ip route add blackhole default table %s metric 254 || true", table, table),
 				fmt.Sprintf("PostUp = iptables -C FORWARD -i %s ! -o %%i -j DROP 2>/dev/null || iptables -A FORWARD -i %s ! -o %%i -j DROP", m.lanIface, m.lanIface),
 				fmt.Sprintf("PostDown = iptables -D FORWARD -i %s ! -o %%i -j DROP || true", m.lanIface),
 			)

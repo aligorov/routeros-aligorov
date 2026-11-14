@@ -2,7 +2,7 @@
 
 Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go` `v3.1.20260828` + `awg-quick` `v3.1.20260812`) для RouterOS со встроенным **WebUI (`:8092`)**, **QR-генератором**, **DNS-форвардером (`192.168.253.2:53`)**, **health-зондом (`:8081`)** для `/tool/netwatch` и **авто-синхронизацией маршрутов/доменов через REST API RouterOS**.
 
-- Образ: `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.1.0` (`arm64`, `amd64`, `arm/v7`).
+- Образ: `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.1.1` (`arm64`, `amd64`, `arm/v7`).
 - WebUI: `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox).
 - Сеть: RouterOS `/app` создаёт выделенный `veth` автоматически (без предварительного создания сети).
 - Том: `awg-config` → `/etc/amnezia/amneziawg` (`*.conf` и `domains.txt`).
@@ -11,7 +11,7 @@
 
 **Шаг 1 — приложение из App Store:**
 1. В **Winbox → App → App** нажмите **Update** (обновить каталог).
-2. Выберите **`A-amneziawg-mikrotik`** (в описании должно быть `AmneziaWG 3.1 (v1.1.0) — WebUI 8092...`) и нажмите **Enable**.
+2. Выберите **`A-amneziawg-mikrotik`** (в описании должно быть `AmneziaWG 3.1 (v1.1.1) — WebUI 8092...`) и нажмите **Enable**.
 3. Откройте **Open WebUI** (`http://<ip-роутера>:8092`) → вкладка **Конфиги (.conf)** или **Генератор / QR** → вставьте стандартный `.conf` из AmneziaVPN (CRLF исправится автоматически) и нажмите **Сохранить и применить**.
    - Альтернатива без UI: добавьте переменную `AWG_CONF_B64` (base64-конфиг) в **Environment** или положите `*.conf` в том `awg-config`.
 
@@ -83,6 +83,6 @@
 ```bash
 docker buildx build --builder multiarch \
   --platform linux/arm64,linux/amd64,linux/arm/v7 \
-  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.1.0 \
+  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.1.1 \
   --push apps/a-amneziawg-mikrotik/image
 ```

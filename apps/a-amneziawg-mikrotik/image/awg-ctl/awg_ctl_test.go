@@ -44,8 +44,8 @@ func TestInjectAutoRouteAndSeed(t *testing.T) {
 		t.Fatalf("expected LF-normalized config, got err=%v", err)
 	}
 	injected := mgr.injectAutoRoute(loaded, "awg", true)
-	if !strings.Contains(injected, "Table = awg") || !strings.Contains(injected, "iif AmneziaWGRoS lookup awg") || !strings.Contains(injected, "blackhole default table awg") {
-		t.Fatalf("missing injected auto-route rules:\n%s", injected)
+	if !strings.Contains(injected, "Table = awg") || !strings.Contains(injected, "iif AmneziaWGRoS lookup awg") || !strings.Contains(injected, "ip route add blackhole default table awg metric 254") || strings.Contains(injected, "ip route replace blackhole") {
+		t.Fatalf("missing or broken injected auto-route rules:\n%s", injected)
 	}
 }
 
