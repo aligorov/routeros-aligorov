@@ -1,0 +1,29 @@
+name: A-amneziawg-mikrotik
+descr: "AmneziaWG (amneziawg-go + awg-quick) клиент и сервер в контейнере для RouterOS — конфиги в /etc/amnezia/amneziawg"
+page: https://hub.docker.com/r/wiktorbgu/amneziawg-mikrotik
+category: networking
+icon: icon.png
+auto-update: false
+
+services:
+  a-amneziawg-mikrotik:
+    image: docker.io/wiktorbgu/amneziawg-mikrotik:latest
+    hostname: amneziawg
+    ports:
+      - 51821:51820/udp
+    environment:
+      LOG_LEVEL: error
+      WG_QUICK_USERSPACE_IMPLEMENTATION: amneziawg-go
+      TZ: UTC
+    volumes:
+      - awg-config:/etc/amnezia/amneziawg
+    healthcheck:
+      test: ["CMD", "/bin/bash", "/data/healthcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  awg-config: {}

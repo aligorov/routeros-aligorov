@@ -13,6 +13,8 @@ const SECRET_KEY_RE = /(PASS|SECRET|TOKEN|KEY|CERT|CRED)/i;
 export interface ComposeImportOptions {
   name?: string;
   checkArm64?: boolean; // default: true
+  baseDir?: string;
+  allowEnvFile?: boolean;
   /** Читатель env_file (путь относительно compose-файла). По умолчанию fs. */
   readEnvFile?: (p: string) => string;
 }
@@ -52,7 +54,18 @@ export async function importCompose(
     throw new Error("В compose нет ключа services");
   }
   const readEnvFile =
-    opts.readEnvFile ?? ((p: string) => readFileSync(p, "utf8"));
+    opts.readEnvFile ??
+    ((p: string) => {
+      if (opts.allowEnvFile === false) {
+        throw new Error("env_file отключён для удалённого compose");
+      }
+      const root = path.resolve(opts.baseDir ?? ".");
+      const resolved = path.resolve(root, p);
+      if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+        throw new Error(`path traversal: ${p}`);
+      }
+      return readFileSync(resolved, "utf8");
+    });
 
   const config = (await import("../config.js")).config;
   let name = opts.name ?? doc.name ?? "compose-app";

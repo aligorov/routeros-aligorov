@@ -7,8 +7,8 @@ import { registerTools } from "./tools.js";
 import { config } from "./config.js";
 import { publisherMode, listApps } from "./core/publisher.js";
 
-if (!config.mcpToken) {
-  console.warn("⚠️  MCP_TOKEN не задан — эндпоинт /mcp открыт БЕЗ авторизации!");
+if (!config.mcpToken && process.env.ALLOW_UNAUTH_MCP !== "1") {
+  console.warn("⚠️  MCP_TOKEN не задан — запросы к /mcp будут отклоняться с 401 (задайте MCP_TOKEN или ALLOW_UNAUTH_MCP=1)");
 }
 
 const esc = (s: any) =>
@@ -55,9 +55,20 @@ function makeServer(): McpServer {
   return server;
 }
 
+const MAX_BODY_BYTES = 1024 * 1024;
+
 async function readBody(req: http.IncomingMessage): Promise<any> {
   const chunks: Buffer[] = [];
-  for await (const c of req) chunks.push(c as Buffer);
+  let total = 0;
+  for await (const c of req) {
+    const buf = c as Buffer;
+    total += buf.length;
+    if (total > MAX_BODY_BYTES) {
+      req.destroy();
+      throw new Error("Payload too large");
+    }
+    chunks.push(buf);
+  }
   const raw = Buffer.concat(chunks).toString("utf8");
   return raw ? JSON.parse(raw) : {};
 }
@@ -75,6 +86,13 @@ const srv = http.createServer(async (req, res) => {
   }
 
   if (url === "/mcp" || url === "/mcp/") {
+    if (!config.mcpToken && process.env.ALLOW_UNAUTH_MCP !== "1") {
+      res.writeHead(401, {
+        "Content-Type": "application/json",
+        "WWW-Authenticate": 'Bearer realm="mcp"',
+      });
+      return res.end(JSON.stringify({ error: "MCP_TOKEN is required" }));
+    }
     if (config.mcpToken && req.headers.authorization !== `Bearer ${config.mcpToken}`) {
       res.writeHead(401, { "WWW-Authenticate": 'Bearer realm="mcp"' });
       return res.end();
@@ -96,7 +114,8 @@ const srv = http.createServer(async (req, res) => {
         await transport.handleRequest(req, res, body);
       } catch (e: any) {
         if (!res.headersSent) {
-          res.writeHead(400, { "Content-Type": "application/json" });
+          const status = e?.message === "Payload too large" ? 413 : 400;
+          res.writeHead(status, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32700, message: e.message } }));
         }
       }

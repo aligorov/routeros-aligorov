@@ -1,5 +1,6 @@
 // Порт scripts/build.sh: пересборка store.yaml / default.yaml / index.html из apps/*/app.yaml
-import { readdirSync, readFileSync, writeFileSync, copyFileSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { config } from "../config.js";
@@ -53,7 +54,7 @@ export function buildStoreFiles(
 
   const header =
     "# =============================================================\n" +
-    "#  СГЕНЕРИРОВАН (scripts/build.sh | service) — НЕ РЕДАКТИРОВАТЬ\n" +
+    "#  СГЕНЕРИРОВАН scripts/build.sh — НЕ РЕДАКТИРОВАТЬ ВРУЧНУЮ\n" +
     "#  Источники приложений: apps/*/app.yaml\n" +
     "# =============================================================\n";
   const storeYaml = header + YAML.stringify(items, { lineWidth: 0 });
@@ -73,7 +74,7 @@ export function buildStoreFiles(
         `<p>${esc(manifest.descr ?? "")}</p></div></div>`
       );
     })
-    .join("\n");
+    .join("");
   const indexHtml = `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <title>routeros-aligorov app-store</title>
@@ -96,6 +97,15 @@ ${cards}
 }
 
 export function rebuildStore(repoDir = config.repoDir, baseUrl = config.storeBaseUrl): number {
+  const buildScript = path.join(repoDir, "scripts", "build.sh");
+  if (existsSync(buildScript)) {
+    execFileSync(buildScript, {
+      cwd: repoDir,
+      env: { ...process.env, BASE_URL: baseUrl },
+      stdio: "pipe",
+    });
+    return readApps(repoDir).length;
+  }
   const exists = (dir: string, icon: string) =>
     existsSync(path.join(repoDir, "apps", dir, icon));
   const generated = buildStoreFiles(readApps(repoDir), baseUrl, exists);

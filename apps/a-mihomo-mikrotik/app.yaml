@@ -1,5 +1,6 @@
 name: A-mihomo-mikrotik
 descr: mihomo (Clash) tunnel-gateway + mixed-прокси 1080 и панель — адаптация для RouterOS
+page: https://github.com/wiktorbgu/mihomo-mikrotik
 category: networking
 icon: icon.png
 auto-update: false
@@ -48,7 +49,7 @@ services:
       TCP_CONCURRENT: "true"
       KEEP_ALIVE_IDLE: "60"
       KEEP_ALIVE_INTERVAL: "30"
-      FIND_PROCESS_MODE: off
+      FIND_PROCESS_MODE: "off"
       STORE_SELECTED: "true"
       UNIFIED_DELAY: "true"
       LOADBALANCE_STRATEGY: consistent-hashing
@@ -56,6 +57,6 @@ services:
       - mihomo-config:/etc/mihomo
     restart: unless-stopped
 volumes:
-  mihomo-config: null
+  mihomo-config: {}
 secrets:
   ui-secret: null

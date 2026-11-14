@@ -64,7 +64,7 @@ function validateAll(): void {
 }
 
 async function commitAndPush(message: string): Promise<{ commit: string; pushed: boolean }> {
-  await git("add", "-A");
+  await git("add", "-A", "--", "apps", "store.yaml", "default.yaml", "index.html");
   const { stdout } = await git("status", "--porcelain");
   if (!stdout.trim()) return { commit: "", pushed: false };
   await git("commit", "-m", message);

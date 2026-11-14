@@ -30,6 +30,8 @@ services:
 
   app:
     image: ghcr.io/aligorov/routeros-aligorov/vpn-app:1.0.4
+    depends_on:
+      - db
     ports:
       # UI админки и портала; метка web => кнопка открытия в Winbox
       - 3000:3000/tcp:web

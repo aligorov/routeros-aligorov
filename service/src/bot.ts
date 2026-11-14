@@ -100,7 +100,7 @@ async function doImport(ctx: Context, source: string, label?: string) {
   await ctx.replyWithChatAction("typing");
   try {
     const { importCompose, loadCompose } = await import("./core/compose.js");
-    const r = await importCompose(await loadCompose(source));
+    const r = await importCompose(await loadCompose(source), { allowEnvFile: false });
     pending.set(ctx.from!.id, { kind: "add", name: r.name, files: r.files });
     const yaml = String(r.files["app.yaml"]);
     const body = yaml.length > 2600 ? yaml.slice(0, 2600) + "\n…" : yaml;

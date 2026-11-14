@@ -104,7 +104,8 @@ export class GitHub {
 
     const treeItems: TreeItem[] = [];
     for (const [p, content] of Object.entries(adds)) {
-      const sha = await this.createBlob(content, "utf-8").then((b) => b.sha);
+      const encoding = Buffer.isBuffer(content) ? "base64" : "utf-8";
+      const sha = await this.createBlob(content, encoding).then((b) => b.sha);
       treeItems.push({ path: p, mode: "100644", type: "blob", sha });
     }
     for (const p of removes) {

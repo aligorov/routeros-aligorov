@@ -34,6 +34,6 @@ services:
       - mihomo-config:/root/.config/mihomo
     restart: unless-stopped
 volumes:
-  mihomo-config: null
+  mihomo-config: {}
 secrets:
   ui-secret: null

@@ -1,5 +1,6 @@
 name: A-mihomo-ros
 descr: Ядро mihomo (Clash.Meta) + веб-панель ручной настройки config.yaml — для RouterOS 7.21+
+page: https://github.com/Medium1992/mihomo-ros
 category: networking
 icon: icon.png
 auto-update: false
@@ -14,4 +15,4 @@ services:
       - mihomo-config:/etc/mihomo
     restart: unless-stopped
 volumes:
-  mihomo-config: null
+  mihomo-config: {}

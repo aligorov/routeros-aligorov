@@ -1,4 +1,5 @@
 // Общий набор MCP-инструментов store-combine (используется stdio и http входами).
+import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { checkImage, formatInfo } from "./core/registry.js";
@@ -72,7 +73,13 @@ export function registerTools(server: McpServer): void {
     },
     async (p) => {
       const { importCompose, loadCompose } = await import("./core/compose.js");
-      const r = await importCompose(await loadCompose(p.source), { name: p.name });
+      const isRemote = /^https?:\/\//.test(p.source);
+      const r = await importCompose(await loadCompose(p.source), {
+        name: p.name,
+        ...(isRemote
+          ? { allowEnvFile: false }
+          : { baseDir: path.dirname(path.resolve(p.source)) }),
+      });
       let out = `apps/${r.name}/app.yaml:\n${r.files["app.yaml"]}`;
       if (r.warnings.length) out += `\n\n⚠️ Предупреждения:\n${r.warnings.map((w) => `- ${w}`).join("\n")}`;
       if (r.secretLocalEnv.length) {

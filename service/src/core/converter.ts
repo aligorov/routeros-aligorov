@@ -117,11 +117,11 @@ export async function buildAppFiles(
   // env: пользовательские + полезные из образа; секретоподобные -> secrets
   const env: Record<string, string> = {};
   const secrets: Record<string, null> = {};
-  const maskSecret = (key: string, value: string) => {
+  const maskSecret = (key: string, _value: string) => {
     const slug = key.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     secrets[slug] = null;
     env[key] = `[secret:${slug}]`;
-    return value; // оригинал вызывающий должен сохранить ЛОКАЛЬНО, не в репо
+    return slug;
   };
 
   const secretOriginals: Record<string, string> = {};
@@ -146,14 +146,14 @@ export async function buildAppFiles(
   }
 
   const svcName = name.toLowerCase().slice(0, 30);
-  const rootVolumes: Record<string, null> = {};
+  const rootVolumes: Record<string, Record<string, never>> = {};
   const svcVolumes: string[] = [];
   for (const v of opts.volumes ?? []) {
     const parts = String(v).split(":");
     if (parts.length < 2 || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(parts[0])) {
       throw new Error(`Том '${v}' — ожидается имя:/путь/в/контейнере`);
     }
-    rootVolumes[parts[0]] = null;
+    rootVolumes[parts[0]] = {};
     svcVolumes.push(v);
   }
   const manifest: any = {
@@ -212,7 +212,7 @@ export async function buildAppFiles(
 export function guessCategory(info: { name: string; labels?: Record<string, string> }): string {
   const s = `${info.name} ${Object.keys(info.labels ?? {}).join(" ")}`.toLowerCase();
   if (/(postgres|mysql|mariadb|redis|mongo|database|influxdb)/.test(s)) return "database";
-  if (/(wireguard|vpn|nginx|dns|proxy|network|tailscale|netbird)/.test(s)) return "networking";
+  if (/(wireguard|amnezia|awg|vpn|nginx|dns|proxy|mihomo|clash|xray|v2ray|sing-box|network|tailscale|netbird)/.test(s)) return "networking";
   if (/(prometheus|grafana|zabbix|uptime|monitor)/.test(s)) return "monitoring";
   if (/(chat|matrix|telegram|messenger)/.test(s)) return "messaging";
   if (/(torrent|download|sonarr|file|samba|nextcloud)/.test(s)) return "file-management";
