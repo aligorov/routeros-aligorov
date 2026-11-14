@@ -3,32 +3,36 @@
 Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go` `v3.1.20260828` + `awg-quick` `v3.1.20260812`) для RouterOS со встроенным **WebUI (`:8092`)**, **QR-генератором**, **DNS-форвардером (`192.168.253.2:53`)**, **health-зондом (`:8081`)** для `/tool/netwatch` и **авто-синхронизацией маршрутов/доменов через REST API RouterOS**.
 
 - Образ: `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.1.0` (`arm64`, `amd64`, `arm/v7`).
-- WebUI: `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox) или `http://192.168.253.2:8080`.
-- Выделенный `veth`: `AmneziaWGRoS` (`192.168.253.2/30`, шлюз роутера `192.168.253.1`).
+- WebUI: `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox).
+- Сеть: RouterOS `/app` создаёт выделенный `veth` автоматически (без предварительного создания сети).
 - Том: `awg-config` → `/etc/amnezia/amneziawg` (`*.conf` и `domains.txt`).
 
-## Установка (2 шага)
+## Установка
 
-**Шаг 1 — подготовка роутера** (Winbox → New Terminal, по одной строке):
+**Шаг 1 — приложение из App Store:**
+1. В **Winbox → App → App** нажмите **Update** (обновить каталог).
+2. Выберите **`A-amneziawg-mikrotik`** (в описании должно быть `AmneziaWG 3.1 (v1.1.0) — WebUI 8092...`) и нажмите **Enable**.
+3. Откройте **Open WebUI** (`http://<ip-роутера>:8092`) → вкладка **Конфиги (.conf)** или **Генератор / QR** → вставьте стандартный `.conf` из AmneziaVPN (CRLF исправится автоматически) и нажмите **Сохранить и применить**.
+   - Альтернатива без UI: добавьте переменную `AWG_CONF_B64` (base64-конфиг) в **Environment** или положите `*.conf` в том `awg-config`.
+
+**Шаг 2 (опционально) — policy routing, Netwatch и DNS-форвардинг:**
+В комплекте есть опциональный скрипт [`router-setup.rsc`](router-setup.rsc) для выборочной маршрутизации по `address-list=AmneziaWGRoS`, Netwatch-пробы и DNS-заглушек Apple Private Relay:
 
 ```routeros
 /tool fetch url="https://aligorov.github.io/routeros-aligorov/apps/a-amneziawg-mikrotik/router-setup.rsc" dst-path=awg-setup.rsc
 /import awg-setup.rsc
 ```
 
+> Так как `app.yaml` не привязан к внешнему `veth AmneziaWGRoS` (чтобы приложение ставилось в один клик без подготовки), `/app` выделит контейнеру свой IP (посмотрите в `/container/print` или **Winbox → Interfaces → VETH**). После установки подставьте этот IP в `gateway=` маршрута `AmneziaWGRoS_default`, `host=` Netwatch `AWG_Health` и `forward-to=` DNS-записей (вместо заготовки `192.168.253.2`), либо используйте собственный gateway из `/app`.
+
 Скрипт идемпотентный. Он создаёт:
-- `veth` `AmneziaWGRoS` (`192.168.253.2/30`, gw `192.168.253.1`) и список `InAccept`;
+- заготовку `veth` `AmneziaWGRoS` (`192.168.253.2/30`, gw `192.168.253.1`) и список `InAccept`;
 - таблицу маршрутизации `AmneziaWGRoS` (`0.0.0.0/0 -> 192.168.253.2` + `blackhole` fallback);
 - `mangle` для выборочной маршрутизации по `/ip/firewall/address-list` (`list=AmneziaWGRoS`) и правку `fasttrack`;
 - `NXDOMAIN` для Apple Private Relay (`mask.icloud.com`, `doh.dns.apple.com`);
-- заготовки `AWG_Server_DSTNAT` и Netwatch-пробы `AWG_Health` (`192.168.253.2:8081`, обе отключены по умолчанию).
+- заготовки `AWG_Server_DSTNAT` и Netwatch-пробы `AWG_Health` (`:8081`, обе отключены по умолчанию).
 
 Если списки `LAN`/`WAN` только что создались — добавьте в них интерфейсы (**Interfaces → Interface List**).
-
-**Шаг 2 — приложение и конфиг:**
-1. **Winbox → App → `A-amneziawg-mikrotik` → Install**.
-2. Откройте **Open WebUI** (`http://<ip-роутера>:8092`) → вкладка **Конфиги (.conf)** или **Генератор / QR** → вставьте стандартный `.conf` из AmneziaVPN (ничего дописывать не нужно, CRLF исправится автоматически) и нажмите **Сохранить и применить**.
-   - Альтернатива без UI: передайте base64-конфиг в `AWG_CONF_B64` или положите `*.conf` в том `awg-config`.
 
 ## Максимальная интеграция с RouterOS
 
