@@ -17,12 +17,6 @@ services:
       TZ: UTC
     volumes:
       - awg-config:/etc/amnezia/amneziawg
-    healthcheck:
-      test: ["CMD", "/bin/bash", "/data/healthcheck.sh"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
     restart: unless-stopped
 
 volumes:
