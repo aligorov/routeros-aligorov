@@ -26,10 +26,13 @@ type WebServer struct {
 	mgr        *TunnelManager
 	dns        *DNSForwarder
 	ros        *ROSClient
+	settings   *SettingsStore
+	geo        *GeoStore
+	policy     *PolicyEngine
 	logger     *RingLogger
 }
 
-func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros *ROSClient, logger *RingLogger) *WebServer {
+func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros *ROSClient, settings *SettingsStore, geo *GeoStore, policy *PolicyEngine, logger *RingLogger) *WebServer {
 	maxHS, _ := strconv.ParseInt(envOr("AWG_HEALTH_MAX_HANDSHAKE_SEC", "0"), 10, 64)
 	return &WebServer{
 		listenAddr: listenAddr,
@@ -40,6 +43,9 @@ func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros 
 		mgr:        mgr,
 		dns:        dns,
 		ros:        ros,
+		settings:   settings,
+		geo:        geo,
+		policy:     policy,
 		logger:     logger,
 	}
 }
@@ -58,6 +64,13 @@ func (w *WebServer) Start() error {
 	mux.HandleFunc("POST /api/tunnel/restart", w.withAuth(w.handleTunnelRestart))
 	mux.HandleFunc("POST /api/keygen", w.withAuth(w.handleKeygen))
 	mux.HandleFunc("POST /api/qr", w.withAuth(w.handleQR))
+	mux.HandleFunc("GET /api/settings", w.withAuth(w.handleGetSettings))
+	mux.HandleFunc("POST /api/settings", w.withAuth(w.handleSaveSettings))
+	mux.HandleFunc("GET /api/rules", w.withAuth(w.handleGetRules))
+	mux.HandleFunc("POST /api/rules", w.withAuth(w.handleSaveRules))
+	mux.HandleFunc("GET /api/rules/test", w.withAuth(w.handleTestRule))
+	mux.HandleFunc("GET /api/geo/status", w.withAuth(w.handleGeoStatus))
+	mux.HandleFunc("POST /api/geo/update", w.withAuth(w.handleGeoUpdate))
 	mux.HandleFunc("GET /api/domains", w.withAuth(w.handleGetDomains))
 	mux.HandleFunc("POST /api/domains", w.withAuth(w.handleSaveDomains))
 	mux.HandleFunc("POST /api/ros/sync", w.withAuth(w.handleROSSync))
@@ -144,6 +157,7 @@ func (w *WebServer) handleHealth(rw http.ResponseWriter, _ *http.Request) {
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"ok":         true,
+		"version":    AppVersion,
 		"interfaces": names,
 	})
 }
@@ -152,18 +166,36 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 	ifaces, _ := w.mgr.ShowInterfaces()
 	cfgs, _ := w.mgr.ListConfigs()
 	var upstreams []string
+	var directUpstreams []string
 	if w.dns != nil {
 		upstreams = w.dns.Upstreams()
+		directUpstreams = w.dns.getDirectUpstreams()
+	}
+	var policyStats PolicyStats
+	if w.policy != nil {
+		policyStats = w.policy.Stats()
+	}
+	var defPol string
+	var multiTun bool
+	if w.settings != nil {
+		st := w.settings.Get()
+		defPol = st.DefaultPolicy
+		multiTun = st.MultiTunnel
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"interfaces":    ifaces,
-		"configs":       cfgs,
-		"lan_iface":     w.mgr.lanIface,
-		"auto_route":    w.mgr.autoRoute,
-		"kill_switch":   w.mgr.killSwitch,
-		"dns_upstreams": upstreams,
-		"ros":           w.ros.Status(),
-		"logs":          w.logger.Lines(),
+		"version":          AppVersion,
+		"interfaces":       ifaces,
+		"configs":          cfgs,
+		"lan_iface":        w.mgr.lanIface,
+		"auto_route":       w.mgr.autoRoute,
+		"kill_switch":      w.mgr.killSwitch,
+		"multi_tunnel":     multiTun,
+		"default_policy":   defPol,
+		"dns_upstreams":    upstreams,
+		"direct_dns":       directUpstreams,
+		"policy":           policyStats,
+		"ros":              w.ros.Status(),
+		"logs":             w.logger.Lines(),
 	})
 }
 
@@ -316,4 +348,163 @@ func (w *WebServer) handleROSSync(rw http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "ros": w.ros.Status()})
+}
+
+func (w *WebServer) handleGetSettings(rw http.ResponseWriter, _ *http.Request) {
+	if w.settings == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "settings store unavailable"})
+		return
+	}
+	writeJSON(rw, http.StatusOK, w.settings.View())
+}
+
+func (w *WebServer) handleSaveSettings(rw http.ResponseWriter, r *http.Request) {
+	if w.settings == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "settings store unavailable"})
+		return
+	}
+	var upd SettingsUpdate
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&upd); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	prev := w.settings.Get()
+	next, err := w.settings.Update(upd)
+	if err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.mgr.SetRuntimeOptions(next.AutoRoute, next.KillSwitch, next.MultiTunnel)
+	if w.dns != nil {
+		w.dns.ConfigureFromSettings(next)
+	}
+	if w.ros != nil {
+		w.ros.Configure(next)
+	}
+	var applyErr string
+	if prev.AutoRoute != next.AutoRoute || prev.MultiTunnel != next.MultiTunnel {
+		if err := w.mgr.RestartAll(); err != nil {
+			applyErr = err.Error()
+		}
+	} else if w.policy != nil {
+		if err := w.policy.ApplyRouting(); err != nil {
+			applyErr = err.Error()
+		}
+	}
+	w.logger.Logf("Settings updated (default_policy=%s, auto_route=%v, kill_switch=%v, multi=%v)", next.DefaultPolicy, next.AutoRoute, next.KillSwitch, next.MultiTunnel)
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":          applyErr == "",
+		"apply_error": applyErr,
+		"settings":    w.settings.View(),
+	})
+}
+
+func (w *WebServer) handleGetRules(rw http.ResponseWriter, _ *http.Request) {
+	if w.policy == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "policy engine unavailable"})
+		return
+	}
+	raw, rules := w.policy.RawAndRules()
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"raw":    raw,
+		"rules":  rules,
+		"stats":  w.policy.Stats(),
+		"geo":    w.geo.Status(),
+	})
+}
+
+func (w *WebServer) handleSaveRules(rw http.ResponseWriter, r *http.Request) {
+	if w.policy == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "policy engine unavailable"})
+		return
+	}
+	var body struct {
+		Raw           string `json:"raw"`
+		DefaultPolicy string `json:"default_policy,omitempty"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&body); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if body.DefaultPolicy != "" && w.settings != nil {
+		cur := w.settings.Get()
+		cur.DefaultPolicy = body.DefaultPolicy
+		_, _ = w.settings.Update(SettingsUpdate{AppSettings: cur})
+	}
+	rules, err := w.policy.SaveRules(body.Raw)
+	if err != nil {
+		writeJSON(rw, http.StatusOK, map[string]any{
+			"ok":          false,
+			"apply_error": err.Error(),
+			"rules":       rules,
+			"stats":       w.policy.Stats(),
+		})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":    true,
+		"rules": rules,
+		"stats": w.policy.Stats(),
+		"geo":   w.geo.Status(),
+	})
+}
+
+func (w *WebServer) handleTestRule(rw http.ResponseWriter, r *http.Request) {
+	if w.policy == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "policy engine unavailable"})
+		return
+	}
+	q := r.URL.Query().Get("q")
+	writeJSON(rw, http.StatusOK, w.policy.TestQuery(q))
+}
+
+func (w *WebServer) handleGeoStatus(rw http.ResponseWriter, _ *http.Request) {
+	if w.geo == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "geo store unavailable"})
+		return
+	}
+	writeJSON(rw, http.StatusOK, w.geo.Status())
+}
+
+func (w *WebServer) handleGeoUpdate(rw http.ResponseWriter, r *http.Request) {
+	if w.geo == nil || w.settings == nil || w.policy == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "geo subsystem unavailable"})
+		return
+	}
+	var body struct {
+		GeoSiteURL string `json:"geosite_url,omitempty"`
+		GeoIPURL   string `json:"geoip_url,omitempty"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body)
+	}
+	cur := w.settings.Get()
+	changed := false
+	if strings.TrimSpace(body.GeoSiteURL) != "" && body.GeoSiteURL != cur.GeoSiteURL {
+		cur.GeoSiteURL = strings.TrimSpace(body.GeoSiteURL)
+		changed = true
+	}
+	if strings.TrimSpace(body.GeoIPURL) != "" && body.GeoIPURL != cur.GeoIPURL {
+		cur.GeoIPURL = strings.TrimSpace(body.GeoIPURL)
+		changed = true
+	}
+	if changed {
+		cur, _ = w.settings.Update(SettingsUpdate{AppSettings: cur})
+	}
+	sites, ips := w.policy.NeededGeoCategories()
+	dlErr := w.geo.DownloadAndReload(cur.GeoSiteURL, cur.GeoIPURL, sites, ips)
+	applyErr := w.policy.ApplyRouting()
+	var errMsg string
+	if dlErr != nil {
+		errMsg = dlErr.Error()
+	} else if applyErr != nil {
+		errMsg = applyErr.Error()
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":    errMsg == "",
+		"error": errMsg,
+		"geo":   w.geo.Status(),
+		"stats": w.policy.Stats(),
+	})
 }

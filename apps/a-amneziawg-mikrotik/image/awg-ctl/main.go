@@ -20,18 +20,31 @@ func main() {
 	srcDir := envOr("AWG_CONF_DIR", "/etc/amnezia/amneziawg")
 	runDir := envOr("AWG_RUN_DIR", "/run/awg")
 	lanIface := strings.TrimSpace(os.Getenv("AWG_LAN_IFACE"))
-	autoRoute := envOr("AWG_AUTO_ROUTE", "on") == "on"
-	killSwitch := envOr("AWG_KILLSWITCH", "on") == "on"
 
-	mgr := NewTunnelManager(srcDir, runDir, lanIface, autoRoute, killSwitch, logger)
+	settingsStore, err := NewSettingsStore(srcDir)
+	if err != nil {
+		logger.Logf("WARN loading settings.json: %v", err)
+	}
+	st := settingsStore.Get()
+
+	mgr := NewTunnelManager(srcDir, runDir, lanIface, st.AutoRoute, st.KillSwitch, logger)
+	mgr.SetRuntimeOptions(st.AutoRoute, st.KillSwitch, st.MultiTunnel)
 	if err := mgr.SeedFromEnv(); err != nil {
 		logger.Logf("ERROR seeding env config: %v", err)
 		os.Exit(1)
 	}
 
+	geoStore := NewGeoStore(srcDir, logger)
+	policy := NewPolicyEngine(srcDir, settingsStore, geoStore, mgr, logger)
+	if err := policy.LoadAndInit(); err != nil {
+		logger.Logf("WARN loading rules: %v", err)
+	}
+
 	var dnsFwd *DNSForwarder
 	if envOr("DNS_ENABLE", "on") == "on" {
-		dnsFwd = NewDNSForwarder(envOr("DNS_LISTEN", ":53"), envOr("DNS_UPSTREAM", "1.1.1.1:53,8.8.8.8:53"), logger)
+		dnsFwd = NewDNSForwarder(envOr("DNS_LISTEN", ":53"), st.ProxyDNS, logger)
+		dnsFwd.SetPolicy(policy, settingsStore)
+		dnsFwd.ConfigureFromSettings(st)
 		if err := dnsFwd.Start(); err != nil {
 			logger.Logf("WARN: DNS forwarder failed to start: %v", err)
 			dnsFwd = nil
@@ -39,17 +52,19 @@ func main() {
 	}
 
 	rosClient := NewROSClient(srcDir, logger)
+	rosClient.Configure(st)
 
 	mgr.onChange = func() {
 		if dnsFwd != nil {
 			dnsFwd.SetUpstreams(mgr.ActiveDNSServers())
 		}
+		_ = policy.ApplyRouting()
 		if rosClient.Status().Enabled {
 			_ = rosClient.SyncAll(mgr)
 		}
 	}
 
-	web := NewWebServer(envOr("UI_LISTEN", ":8080"), mgr, dnsFwd, rosClient, logger)
+	web := NewWebServer(envOr("UI_LISTEN", ":8080"), mgr, dnsFwd, rosClient, settingsStore, geoStore, policy, logger)
 	go func() {
 		if err := web.Start(); err != nil {
 			logger.Logf("ERROR WebUI server: %v", err)
@@ -59,23 +74,39 @@ func main() {
 
 	if err := mgr.StartAll(); err != nil {
 		logger.Logf("ERROR starting tunnels: %v", err)
+		_ = policy.ApplyRouting()
 		if envOr("AWG_EXIT_ON_ERROR", "off") == "on" {
 			os.Exit(1)
 		}
-	} else if dnsFwd != nil {
-		dnsFwd.SetUpstreams(mgr.ActiveDNSServers())
+	} else {
+		if dnsFwd != nil {
+			dnsFwd.SetUpstreams(mgr.ActiveDNSServers())
+		}
+		_ = policy.ApplyRouting()
 	}
 
-	if rosClient.Status().Enabled {
-		go func() {
+	// Periodic RouterOS sync & optional Geo auto-update
+	go func() {
+		if rosClient.Status().Enabled {
 			_ = rosClient.SyncAll(mgr)
-			ticker := time.NewTicker(60 * time.Second)
-			defer ticker.Stop()
-			for range ticker.C {
+		}
+		lastGeoCheck := time.Now()
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for now := range ticker.C {
+			if rosClient.Status().Enabled {
 				_ = rosClient.SyncAll(mgr)
 			}
-		}()
-	}
+			cur := settingsStore.Get()
+			if cur.GeoAutoUpdateHours > 0 && now.Sub(lastGeoCheck) >= time.Duration(cur.GeoAutoUpdateHours)*time.Hour {
+				lastGeoCheck = now
+				sites, ips := policy.NeededGeoCategories()
+				if err := geoStore.DownloadAndReload(cur.GeoSiteURL, cur.GeoIPURL, sites, ips); err == nil {
+					_ = policy.ApplyRouting()
+				}
+			}
+		}
+	}()
 
 	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)

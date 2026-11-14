@@ -1,19 +1,23 @@
 # A-amneziawg-mikrotik
 
-Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go` `v3.1.20260828` + `awg-quick` `v3.1.20260812`) для RouterOS со встроенным **WebUI (`:8092`)**, **QR-генератором**, **DNS-форвардером (`192.168.253.2:53`)**, **health-зондом (`:8081`)** для `/tool/netwatch` и **авто-синхронизацией маршрутов/доменов через REST API RouterOS**.
+Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go` `v3.1.20260828` + `awg-quick` `v3.1.20260812`) для RouterOS со встроенным **WebUI (`:8092`)**, **мульти-профилями (`.conf`)**, **GeoSite / GeoIP + правилами `PROXY / DIRECT / DROP`**, вкладкой **Настройки**, **QR-генератором**, **DNS-форвардером (`:53`)**, **health-зондом (`:8081`)** для `/tool/netwatch` и **REST-синхронизацией RouterOS**.
 
-- Образ: `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.2.0` (`arm64`, `amd64`, `arm/v7`).
+- Образ: `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`1.3.0`, `arm64`, `amd64`, `arm/v7`).
 - WebUI: `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox).
 - Сеть: RouterOS `/app` создаёт выделенный `veth` автоматически (без предварительного создания сети).
-- Том: `awg-config` → `/etc/amnezia/amneziawg` (`*.conf` и `domains.txt`).
+- Том: `awg-config` → `/etc/amnezia/amneziawg` (`*.conf`, `.active`, `settings.json`, `rules.conf`, `geo/`, `domains.txt`).
 
-## Установка
+## Установка и обновление
 
 **Шаг 1 — приложение из App Store:**
 1. В **Winbox → App → App** нажмите **Update** (обновить каталог).
-2. Выберите **`A-amneziawg-mikrotik`** (в описании должно быть `AmneziaWG 3.1 (v1.2.0) — WebUI 8092...`) и нажмите **Enable**.
-3. Откройте **Open WebUI** (`http://<ip-роутера>:8092`) → вкладка **Конфиги (.conf)** или **Генератор / QR** → вставьте стандартный `.conf` из AmneziaVPN (CRLF исправится автоматически) и нажмите **Сохранить и применить**.
-   - Альтернатива без UI: добавьте переменную `AWG_CONF_B64` (base64-конфиг) в **Environment** или положите `*.conf` в том `awg-config`.
+2. Выберите **`A-amneziawg-mikrotik`** (в описании должно быть `AmneziaWG 3.1 (v1.3.0)...`) и нажмите **Enable**.
+   > Если ранее стояла старая версия под тем же тегом `:1`, выполните в терминале RouterOS `/app/disable A-amneziawg-mikrotik; /app/remove A-amneziawg-mikrotik; /app/cleanup; /app/enable A-amneziawg-mikrotik`, чтобы RouterOS скачал свежий образ.
+3. Откройте **Open WebUI** (`http://<ip-роутера>:8092`):
+   - **Конфиги (.conf)** — управление профилями (радио-переключатель активного конфига + `+ Новый профиль` + **QR-код**).
+   - **Правила / Geo** — подгрузка баз `geosite.dat` / `geoip.dat` (по умолчанию из `Loyalsoldier/v2ray-rules-dat`), выбор режима по умолчанию (**PROXY** / **DIRECT**), быстрые пресеты (`Реклама → DROP`, `РФ → DIRECT`, `YouTube/Telegram → PROXY`) и тест правил.
+   - **Настройки** — DNS (Proxy/Direct), `Auto-Route`, `Kill-Switch`, `Multi-Tunnel`, URL баз Geo и параметры RouterOS REST API.
+   - Альтернатива без UI: переменная `AWG_CONF_B64` (base64-конфиг) в **Environment** или файлы `*.conf` в томе `awg-config`.
 
 **Шаг 2 (опционально) — policy routing, Netwatch и DNS-форвардинг:**
 В комплекте есть опциональный скрипт [`router-setup.rsc`](router-setup.rsc) для выборочной маршрутизации по `address-list=AmneziaWGRoS`, Netwatch-пробы и DNS-заглушек Apple Private Relay:
@@ -83,6 +87,8 @@
 ```bash
 docker buildx build --builder multiarch \
   --platform linux/arm64,linux/amd64,linux/arm/v7 \
-  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.2.0 \
+  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.3.0 \
+  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1 \
+  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:latest \
   --push apps/a-amneziawg-mikrotik/image
 ```

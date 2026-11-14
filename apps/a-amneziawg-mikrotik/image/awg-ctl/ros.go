@@ -71,6 +71,33 @@ func NewROSClient(cfgDir string, logger *RingLogger) *ROSClient {
 	return c
 }
 
+func (c *ROSClient) Configure(s AppSettings) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.baseURL = strings.TrimRight(strings.TrimSpace(s.ROSURL), "/")
+	c.user = strings.TrimSpace(s.ROSUser)
+	c.pass = s.ROSPass
+	if strings.TrimSpace(s.ROSContainerIP) != "" {
+		c.gatewayIP = strings.TrimSpace(s.ROSContainerIP)
+	}
+	if strings.TrimSpace(s.ROSForwardDNS) != "" {
+		c.forwardDNS = strings.TrimSpace(s.ROSForwardDNS)
+	}
+	if strings.TrimSpace(s.ROSAddressList) != "" {
+		c.addrList = strings.TrimSpace(s.ROSAddressList)
+	}
+	c.syncRoutes = s.ROSSyncRoutes
+	c.syncDomains = s.ROSSyncDomains
+	c.httpClient = &http.Client{
+		Timeout: 8 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: s.ROSTLSSkipVerify}, //nolint:gosec
+		},
+	}
+	c.status.Enabled = c.baseURL != "" && c.user != ""
+	c.status.URL = c.baseURL
+}
+
 func (c *ROSClient) Status() ROSSyncStatus {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -126,6 +153,13 @@ func (c *ROSClient) SaveDomains(raw string) error {
 }
 
 func (c *ROSClient) do(method, path string, body any) ([]byte, int, error) {
+	c.mu.Lock()
+	baseURL := c.baseURL
+	user := c.user
+	pass := c.pass
+	client := c.httpClient
+	c.mu.Unlock()
+
 	var r io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -134,16 +168,16 @@ func (c *ROSClient) do(method, path string, body any) ([]byte, int, error) {
 		}
 		r = bytes.NewReader(b)
 	}
-	url := c.baseURL + "/rest" + path
+	url := baseURL + "/rest" + path
 	req, err := http.NewRequest(method, url, r)
 	if err != nil {
 		return nil, 0, err
 	}
-	req.SetBasicAuth(c.user, c.pass)
+	req.SetBasicAuth(user, pass)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}

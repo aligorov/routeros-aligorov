@@ -61,26 +61,36 @@ type ConfigMeta struct {
 }
 
 type TunnelManager struct {
-	mu         sync.Mutex
-	srcDir     string
-	runDir     string
-	lanIface   string
-	autoRoute  bool
-	killSwitch bool
-	started    []string
-	logger     *RingLogger
-	onChange   func()
+	mu          sync.Mutex
+	srcDir      string
+	runDir      string
+	lanIface    string
+	autoRoute   bool
+	killSwitch  bool
+	multiTunnel bool
+	started     []string
+	logger      *RingLogger
+	onChange    func()
 }
 
 func NewTunnelManager(srcDir, runDir, lanIface string, autoRoute, killSwitch bool, logger *RingLogger) *TunnelManager {
 	return &TunnelManager{
-		srcDir:     srcDir,
-		runDir:     runDir,
-		lanIface:   lanIface,
-		autoRoute:  autoRoute,
-		killSwitch: killSwitch,
-		logger:     logger,
+		srcDir:      srcDir,
+		runDir:      runDir,
+		lanIface:    lanIface,
+		autoRoute:   autoRoute,
+		killSwitch:  killSwitch,
+		multiTunnel: envOr("AWG_MULTI_TUNNEL", "off") == "on",
+		logger:      logger,
 	}
+}
+
+func (m *TunnelManager) SetRuntimeOptions(autoRoute, killSwitch, multiTunnel bool) {
+	m.mu.Lock()
+	m.autoRoute = autoRoute
+	m.killSwitch = killSwitch
+	m.multiTunnel = multiTunnel
+	m.mu.Unlock()
 }
 
 // SeedFromEnv writes AWG_CONF_B64 or AWG_CONF if no *.conf exists in srcDir yet.
@@ -337,8 +347,6 @@ func (m *TunnelManager) injectAutoRoute(text string, table string, primary bool)
 		if m.killSwitch {
 			lines = append(lines,
 				fmt.Sprintf("PostUp = ip route show table %s | grep -q \"blackhole\" || ip route add blackhole default table %s metric 254 || true", table, table),
-				fmt.Sprintf("PostUp = iptables -C FORWARD -i %s ! -o %%i -j DROP 2>/dev/null || iptables -A FORWARD -i %s ! -o %%i -j DROP", m.lanIface, m.lanIface),
-				fmt.Sprintf("PostDown = iptables -D FORWARD -i %s ! -o %%i -j DROP || true", m.lanIface),
 			)
 		}
 	}
@@ -382,7 +390,7 @@ func (m *TunnelManager) StartAll() error {
 		return nil
 	}
 
-	target := selectStartConfigs(configs, m.GetActiveConfig(), envOr("AWG_MULTI_TUNNEL", "off") == "on")
+	target := selectStartConfigs(configs, m.GetActiveConfig(), m.multiTunnel)
 	m.started = nil
 	for idx, cfg := range target {
 		srcBytes, err := os.ReadFile(filepath.Join(m.srcDir, cfg.Name))

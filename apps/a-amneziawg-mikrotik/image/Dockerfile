@@ -49,7 +49,7 @@ RUN cd /src/amneziawg-tools/src && make && strip wg
 
 FROM alpine:${ALPINE_VERSION}
 
-RUN apk add --no-cache bash iptables iptables-legacy openresolv iproute2 && \
+RUN apk add --no-cache bash ca-certificates iptables iptables-legacy openresolv iproute2 && \
     rm -f /usr/sbin/iptables /usr/sbin/iptables-save /usr/sbin/iptables-restore && \
     ln -s /usr/sbin/iptables-legacy /usr/sbin/iptables && \
     ln -s /usr/sbin/iptables-legacy-save /usr/sbin/iptables-save && \
