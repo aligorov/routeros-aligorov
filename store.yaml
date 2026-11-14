@@ -10,7 +10,7 @@
   auto-update: false
   services:
     a-amneziawg-mikrotik:
-      image: ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.2.0
+      image: ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1
       hostname: amneziawg
       ports:
       - 8092:8080/tcp:web
