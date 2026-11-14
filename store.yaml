@@ -3,8 +3,8 @@
 #  Источники приложений: apps/*/app.yaml
 # =============================================================
 - name: A-amneziawg-mikrotik
-  descr: AmneziaWG 3.1 для RouterOS с WebUI, QR-генератором, DNS-форвардером, Netwatch
-    и REST-синком маршрутов
+  descr: '[v1.1.0] AmneziaWG 3.1 для RouterOS с WebUI, QR-генератором, DNS-форвардером,
+    Netwatch и REST-синком маршрутов'
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/a-amneziawg-mikrotik
   category: networking
   icon: https://aligorov.github.io/routeros-aligorov/apps/a-amneziawg-mikrotik/icon.png
