@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AmneziaWG MikroTik</title>
+<style>
+  :root { --bg:#0f141a; --card:#171d26; --bd:#273140; --tx:#e6edf3; --mut:#8b98a8; --acc:#3b82f6; --ok:#22c55e; --bad:#ef4444; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--tx); }
+  .wrap { max-width:980px; margin:24px auto; padding:0 16px; }
+  header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px; }
+  h1 { margin:0; font-size:1.3rem; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .card h2 { margin:0 0 12px; font-size:1rem; color:#cbd5e1; }
+  button { background:#232c3a; color:var(--tx); border:1px solid var(--bd); border-radius:7px; padding:7px 12px; cursor:pointer; font-size:.88rem; }
+  button.primary { background:var(--acc); border-color:var(--acc); color:#fff; font-weight:600; }
+  button.danger { background:#7f1d1d; border-color:#991b1b; }
+  button:hover { filter:brightness(1.1); }
+  input, select, textarea { width:100%; background:#0b1016; color:var(--tx); border:1px solid var(--bd); border-radius:7px; padding:9px 10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.85rem; }
+  textarea { min-height:220px; resize:vertical; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.75rem; font-weight:600; }
+  .badge.ok { background:rgba(34,197,94,.16); color:var(--ok); }
+  .badge.bad { background:rgba(239,68,68,.16); color:var(--bad); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+  .peer { background:#0b1016; border:1px solid var(--bd); border-radius:8px; padding:10px; margin-top:8px; font-size:.82rem; }
+  .mut { color:var(--mut); font-size:.82rem; }
+  pre { background:#0b1016; border:1px solid var(--bd); border-radius:8px; padding:10px; max-height:220px; overflow:auto; font-size:.78rem; margin:0; }
+  .tabs { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .tab.active { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>AmneziaWG 3.1 — MikroTik</h1>
+      <div class="mut" id="meta">Загрузка...</div>
+    </div>
+    <div class="row">
+      <button class="primary" onclick="tunnelAction('restart')">Перезапустить</button>
+      <button onclick="tunnelAction('up')">Поднять</button>
+      <button class="danger" onclick="tunnelAction('down')">Остановить</button>
+      <button onclick="refresh()">Обновить</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('status', this)">Статус</button>
+    <button class="tab" onclick="showTab('configs', this)">Конфиги (.conf)</button>
+    <button class="tab" onclick="showTab('keygen', this)">Генератор / QR</button>
+    <button class="tab" onclick="showTab('domains', this)">Домены / RouterOS</button>
+    <button class="tab" onclick="showTab('logs', this)">Логи</button>
+  </div>
+
+  <div id="tab-status" class="tab-pane">
+    <div id="ifaces"></div>
+  </div>
+
+  <div id="tab-configs" class="tab-pane hide">
+    <div class="card">
+      <h2>Конфигурации (/etc/amnezia/amneziawg)</h2>
+      <div class="row" style="margin-bottom:10px">
+        <select id="cfgSelect" style="max-width:220px" onchange="loadSelectedConfig()"></select>
+        <input id="cfgName" placeholder="awg0.conf" style="max-width:180px">
+        <button onclick="newConfig()">Новый</button>
+        <button class="danger" onclick="deleteConfig()">Удалить</button>
+      </div>
+      <textarea id="cfgText" placeholder="[Interface]&#10;PrivateKey = ..."></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="primary" onclick="saveConfig(true)">Сохранить и применить</button>
+        <button onclick="saveConfig(false)">Только сохранить</button>
+        <button onclick="showQRForText(document.getElementById('cfgText').value)">QR-код</button>
+        <span class="mut" id="cfgMsg"></span>
+      </div>
+      <div id="qrBox" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <div id="tab-keygen" class="tab-pane hide">
+    <div class="card">
+      <h2>Быстрая генерация Server + Client (AWG 3.1)</h2>
+      <div class="grid" style="margin-bottom:10px">
+        <div><label class="mut">Внешний Endpoint (IP/домен:порт)</label><input id="kgEndpoint" value="my-router.example.com:51821"></div>
+        <div><label class="mut">Tunnel IP сервера</label><input id="kgSrvIP" value="10.8.0.1/24"></div>
+        <div><label class="mut">Tunnel IP клиента</label><input id="kgCliIP" value="10.8.0.2/24"></div>
+        <div><label class="mut">ListenPort сервера</label><input id="kgPort" value="51820"></div>
+      </div>
+      <button class="primary" onclick="generatePair()">Сгенерировать пару ключей и AWG 3.1</button>
+      <div class="grid" style="margin-top:12px">
+        <div>
+          <div class="mut" style="margin-bottom:4px">Сервер (положить как awg0.conf)</div>
+          <textarea id="kgSrvOut"></textarea>
+          <button style="margin-top:6px" onclick="applyGeneratedServer()">Сохранить как awg0.conf и запустить</button>
+        </div>
+        <div>
+          <div class="mut" style="margin-bottom:4px">Клиент (для телефона / ПК)</div>
+          <textarea id="kgCliOut"></textarea>
+          <button style="margin-top:6px" onclick="showQRForText(document.getElementById('kgCliOut').value, 'kgQR')">Показать QR для телефона</button>
+          <div id="kgQR" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-domains" class="tab-pane hide">
+    <div class="card">
+      <h2>Домены для маршрутизации (RouterOS DNS FWD → AmneziaWGRoS)</h2>
+      <div class="mut" id="rosInfo" style="margin-bottom:10px"></div>
+      <textarea id="domText" placeholder="ifconfig.me&#10;youtube.com&#10;ntc.party"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="primary" onclick="saveDomains()">Сохранить и синхронизировать</button>
+        <button onclick="syncROS()">Синхронизировать сейчас</button>
+        <span class="mut" id="domMsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-logs" class="tab-pane hide">
+    <div class="card">
+      <h2>Логи контроллера и awg-quick</h2>
+      <pre id="logsBox"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KiB';
+  if (b < 1073741824) return (b/1048576).toFixed(2) + ' MiB';
+  return (b/1073741824).toFixed(2) + ' GiB';
+}
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hide'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.remove('hide');
+  btn.classList.add('active');
+  if (id === 'domains') loadDomains();
+}
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  const ct = r.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    return data;
+  }
+  if (!r.ok) throw new Error(await r.text());
+  return r;
+}
+async function refresh() {
+  try {
+    const st = await api('/api/status');
+    document.getElementById('meta').textContent =
+      `veth: ${st.lan_iface || '—'} · auto-route: ${st.auto_route ? 'on' : 'off'} · killswitch: ${st.kill_switch ? 'on' : 'off'} · DNS: ${(st.dns_upstreams||[]).join(', ') || 'off'}`;
+    const ros = st.ros || {};
+    document.getElementById('rosInfo').textContent = ros.enabled
+      ? `RouterOS REST API подключён (${ros.url}) · маршрутов: ${ros.routes_synced} · доменов: ${ros.domains_synced} · посл. синк: ${ros.last_sync || '—'} ${ros.last_error ? '· ОШИБКА: ' + ros.last_error : ''}`
+      : 'RouterOS REST API не настроен (задайте ROS_URL, ROS_USER, ROS_PASS в Environment, если нужна авто-синхронизация маршрутов и доменов).';
+
+    const ifDiv = document.getElementById('ifaces');
+    const ifaces = st.interfaces || [];
+    if (!ifaces.length) {
+      ifDiv.innerHTML = '<div class="card"><span class="badge bad">Туннели не активны</span><p class="mut">Перейдите во вкладку «Конфиги (.conf)» и сохраните ваш awg0.conf.</p></div>';
+    } else {
+      ifDiv.innerHTML = ifaces.map(i => `
+        <div class="card">
+          <div class="row" style="justify-content:space-between">
+            <div><strong>${esc(i.name)}</strong> <span class="badge ok">UP</span> <span class="mut">port ${i.listen_port}</span></div>
+            <div class="mut">Jc=${esc(i.jc)} Jmin=${esc(i.jmin)} Jmax=${esc(i.jmax)} S1=${esc(i.s1)} S2=${esc(i.s2)}</div>
+          </div>
+          <div class="mut" style="margin-top:6px">PublicKey: <code>${esc(i.public_key)}</code></div>
+          ${(i.peers||[]).map(p => `
+            <div class="peer">
+              <div><strong>Peer:</strong> <code>${esc(p.public_key)}</code></div>
+              <div class="mut">Endpoint: ${esc(p.endpoint)} · AllowedIPs: ${esc(p.allowed_ips)}</div>
+              <div>Handshake: ${p.handshake_age_sec >= 0 ? p.handshake_age_sec + 's назад' : 'нет'} · RX ${fmtBytes(p.rx_bytes)} / TX ${fmtBytes(p.tx_bytes)}</div>
+            </div>`).join('')}
+        </div>`).join('');
+    }
+
+    const sel = document.getElementById('cfgSelect');
+    const prev = sel.value;
+    const cfgs = st.configs || [];
+    sel.innerHTML = cfgs.map(c => `<option value="${esc(c.name)}">${esc(c.name)}${c.active ? ' (UP)' : ''}</option>`).join('');
+    if (prev && cfgs.some(c => c.name === prev)) sel.value = prev;
+    if (sel.value && !document.getElementById('cfgText').value) loadSelectedConfig();
+
+    document.getElementById('logsBox').textContent = (st.logs || []).join('\n');
+  } catch (e) {
+    document.getElementById('meta').textContent = 'Ошибка: ' + e.message;
+  }
+}
+async function loadSelectedConfig() {
+  const name = document.getElementById('cfgSelect').value;
+  if (!name) return;
+  const d = await api('/api/configs/' + encodeURIComponent(name));
+  document.getElementById('cfgName').value = d.name;
+  document.getElementById('cfgText').value = d.content;
+}
+function newConfig() {
+  document.getElementById('cfgName').value = 'awg0.conf';
+  document.getElementById('cfgText').value = '';
+  document.getElementById('qrBox').innerHTML = '';
+}
+async function saveConfig(apply) {
+  const name = document.getElementById('cfgName').value.trim() || 'awg0.conf';
+  const content = document.getElementById('cfgText').value;
+  const msg = document.getElementById('cfgMsg');
+  msg.textContent = 'Сохранение...';
+  try {
+    await api('/api/configs/' + encodeURIComponent(name), {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({content, apply})
+    });
+    msg.textContent = apply ? 'Сохранено и применено' : 'Сохранено';
+    await refresh();
+  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; }
+}
+async function deleteConfig() {
+  const name = document.getElementById('cfgName').value.trim();
+  if (!name || !confirm('Удалить ' + name + '?')) return;
+  await api('/api/configs/' + encodeURIComponent(name), {method:'DELETE'});
+  newConfig();
+  await refresh();
+}
+async function tunnelAction(act) {
+  await api('/api/tunnel/' + act, {method:'POST'});
+  await refresh();
+}
+async function showQRForText(text, target='qrBox') {
+  if (!text.trim()) return;
+  const r = await api('/api/qr', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text})});
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  document.getElementById(target).innerHTML = `<img src="${url}" width="220" height="220" style="background:#fff;padding:8px;border-radius:8px">`;
+}
+async function generatePair() {
+  const k = await api('/api/keygen', {method:'POST'});
+  const a = k.awg;
+  const port = document.getElementById('kgPort').value.trim() || '51820';
+  const ep = document.getElementById('kgEndpoint').value.trim();
+  const srvIP = document.getElementById('kgSrvIP').value.trim();
+  const cliIP = document.getElementById('kgCliIP').value.trim();
+  const cliHost = cliIP.split('/')[0] + '/32';
+  const awgBlock = `Jc = ${a.jc}\nJmin = ${a.jmin}\nJmax = ${a.jmax}\nS1 = ${a.s1}\nS2 = ${a.s2}\nH1 = ${a.h1}\nH2 = ${a.h2}\nH3 = ${a.h3}\nH4 = ${a.h4}`;
+  document.getElementById('kgSrvOut').value = `[Interface]\nAddress = ${srvIP}\nListenPort = ${port}\nPrivateKey = ${k.server_private}\n${awgBlock}\n\n[Peer]\nPublicKey = ${k.client_public}\nPresharedKey = ${k.preshared_key}\nAllowedIPs = ${cliHost}\n`;
+  document.getElementById('kgCliOut').value = `[Interface]\nPrivateKey = ${k.client_private}\nAddress = ${cliIP}\nDNS = 1.1.1.1\nMTU = 1420\n${awgBlock}\n\n[Peer]\nPublicKey = ${k.server_public}\nPresharedKey = ${k.preshared_key}\nAllowedIPs = 0.0.0.0/0\nEndpoint = ${ep}\nPersistentKeepalive = 25\n`;
+}
+async function applyGeneratedServer() {
+  const content = document.getElementById('kgSrvOut').value;
+  if (!content.trim()) return;
+  await api('/api/configs/awg0.conf', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content, apply:true})});
+  await refresh();
+  alert('awg0.conf сохранён и запущен');
+}
+async function loadDomains() {
+  const d = await api('/api/domains');
+  document.getElementById('domText').value = (d.domains || []).join('\n');
+}
+async function saveDomains() {
+  const msg = document.getElementById('domMsg');
+  msg.textContent = 'Сохранение...';
+  try {
+    const r = await api('/api/domains', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({domains:document.getElementById('domText').value})});
+    msg.textContent = r.sync_error ? ('Сохранено, но sync ошибка: ' + r.sync_error) : 'Сохранено';
+    await refresh();
+  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; }
+}
+async function syncROS() {
+  const msg = document.getElementById('domMsg');
+  try {
+    await api('/api/ros/sync', {method:'POST'});
+    msg.textContent = 'Синхронизировано';
+    await refresh();
+  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; }
+}
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>

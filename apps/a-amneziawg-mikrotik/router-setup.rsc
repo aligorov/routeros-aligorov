@@ -60,14 +60,30 @@
 :if ([:len [find comment="AWG_Mark_AddressList"]] = 0) do={ add action=mark-connection chain=prerouting in-interface-list=LAN connection-mark=no-mark connection-state=new dst-address-type=!local dst-address-list=AmneziaWGRoS new-connection-mark=AmneziaWGRoS comment="AWG_Mark_AddressList"; :put "+ mangle AWG_Mark_AddressList" }
 :if ([:len [find comment="AWG_Route_New"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark=AmneziaWGRoS new-routing-mark=AmneziaWGRoS passthrough=no comment="AWG_Route_New"; :put "+ mangle AWG_Route_New" }
 
-# --- 6. Заготовка dst-nat для Server Mode (отключена по умолчанию) ---
+# --- 6. DNS: защита от обхода через Apple Private Relay + разрешение remote-requests ---
+/ip dns static
+:if ([:len [find name="mask.icloud.com"]] = 0) do={ add name="mask.icloud.com" type=NXDOMAIN }
+:if ([:len [find name="mask-h2.icloud.com"]] = 0) do={ add name="mask-h2.icloud.com" type=NXDOMAIN }
+:if ([:len [find name="doh.dns.apple.com"]] = 0) do={ add name="doh.dns.apple.com" type=NXDOMAIN }
+:if ([/ip/dns/get allow-remote-requests] = false) do={ /ip/dns/set allow-remote-requests=yes; :put "+ dns allow-remote-requests=yes" }
+
+# --- 7. Заготовка dst-nat для Server Mode (отключена по умолчанию) ---
 /ip firewall nat
 :if ([:len [find comment="AWG_Server_DSTNAT"]] = 0) do={
   add action=dst-nat chain=dstnat in-interface-list=WAN protocol=udp dst-port=51821 to-addresses=192.168.253.2 to-ports=51820 disabled=yes comment="AWG_Server_DSTNAT"
   :put "+ dst-nat AWG_Server_DSTNAT (disabled=yes, включите только для Server Mode)"
 }
 
+# --- 8. Заготовка Netwatch failover на health-зонд :8081 (отключена по умолчанию) ---
+/tool netwatch
+:if ([:len [find comment="AWG_Health"]] = 0) do={
+  add type=http-get host=192.168.253.2 port=8081 interval=15s disabled=yes comment="AWG_Health" \
+    down-script="/ip route disable [find comment=\"AmneziaWGRoS_default\"]" \
+    up-script="/ip route enable [find comment=\"AmneziaWGRoS_default\"]"
+  :put "+ netwatch AWG_Health (disabled=yes, включите после запуска туннеля)"
+}
+
 :put "==="
 :put "ГОТОВО. Теперь установите A-amneziawg-mikrotik из App Store (Winbox -> App)."
-:put "Куда слать трафик: добавьте домены/IP в /ip/firewall/address-list list=AmneziaWGRoS"
-:put "Или целиком подсеть: /routing/rule/add src-address=192.168.88.0/24 action=lookup table=AmneziaWGRoS"
+:put "WebUI после старта: http://<ip-роутера>:8092 или http://192.168.253.2:8080"
+:put "DNS внутри туннеля: 192.168.253.2:53 (для /ip/dns/static type=FWD)"

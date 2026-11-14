@@ -22,6 +22,23 @@ RUN set -eux; \
     GOFLAGS="-trimpath" \
     sh -c 'go build -ldflags="-s -w" -o amneziawg-go'
 
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS build-ctl
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+
+WORKDIR /src/awg-ctl
+COPY awg-ctl/go.mod awg-ctl/go.sum ./
+RUN go mod download
+COPY awg-ctl/ ./
+RUN set -eux; \
+    GOARM=""; \
+    if [ "$TARGETARCH" = "arm" ]; then \
+        GOARM="${TARGETVARIANT#v}"; \
+    fi; \
+    CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" GOARM="$GOARM" \
+    go build -trimpath -ldflags="-s -w" -o /tmp/awg-ctl .
+
 FROM golang:${GO_VERSION} AS build-tools
 ARG AWG_TOOLS_REF
 
@@ -44,19 +61,28 @@ RUN apk add --no-cache bash iptables iptables-legacy openresolv iproute2 && \
     mkdir -p /etc/amnezia/amneziawg /run/awg
 
 COPY --from=build-go /src/amneziawg-go/amneziawg-go /usr/bin/amneziawg-go
+COPY --from=build-ctl /tmp/awg-ctl /usr/bin/awg-ctl
 COPY --from=build-tools /src/amneziawg-tools/src/wg /usr/bin/awg
 COPY --from=build-tools /src/amneziawg-tools/src/wg-quick/linux.bash /usr/bin/awg-quick
 COPY rt_tables /etc/iproute2/rt_tables
 COPY entrypoint.sh /entrypoint.sh
 COPY healthcheck.sh /usr/local/bin/healthcheck.sh
 
-RUN chmod +x /usr/bin/amneziawg-go /usr/bin/awg /usr/bin/awg-quick /entrypoint.sh /usr/local/bin/healthcheck.sh
+RUN chmod +x /usr/bin/amneziawg-go /usr/bin/awg-ctl /usr/bin/awg /usr/bin/awg-quick /entrypoint.sh /usr/local/bin/healthcheck.sh
 
 ENV WG_QUICK_USERSPACE_IMPLEMENTATION=amneziawg-go \
     LOG_LEVEL=error \
     AWG_AUTO_ROUTE=on \
     AWG_KILLSWITCH=on \
+    DNS_ENABLE=on \
+    DNS_LISTEN=:53 \
+    DNS_UPSTREAM=1.1.1.1:53,8.8.8.8:53 \
+    UI_LISTEN=:8080 \
+    HEALTH_LISTEN=:8081 \
+    AWG_HEALTH_MAX_HANDSHAKE_SEC=0 \
     TZ=UTC
+
+EXPOSE 53/udp 53/tcp 8080/tcp 8081/tcp 51820/udp
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=15s --retries=3 \
     CMD ["/usr/local/bin/healthcheck.sh"]

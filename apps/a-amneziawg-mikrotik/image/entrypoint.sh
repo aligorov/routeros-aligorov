@@ -1,48 +1,18 @@
 #!/bin/sh
 set -eu
 
-CONF_SRC_DIR="/etc/amnezia/amneziawg"
-CONF_RUN_DIR="/run/awg"
-STARTED_CONFS=""
-SLEEP_PID=""
-
-log() {
-    printf '[%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"
-}
-
-die() {
-    log "ERROR: $*" >&2
-    exit 1
-}
-
-teardown() {
-    log "Stopping AmneziaWG interfaces..."
-    for conf in $STARTED_CONFS; do
-        log "Down: $conf"
-        /usr/bin/awg-quick down "$conf" || true
-    done
-    if [ -n "$SLEEP_PID" ]; then
-        kill "$SLEEP_PID" 2>/dev/null || true
-    fi
-}
-
-cleanup() {
-    teardown
-    exit 0
-}
-
-trap cleanup TERM INT HUP
-
 ensure_tun() {
     if [ ! -c /dev/net/tun ]; then
-        log "Creating /dev/net/tun..."
+        printf '[entrypoint] Creating /dev/net/tun...\n'
         mkdir -p /dev/net
         if ! mknod /dev/net/tun c 10 200; then
-            die "Failed to create /dev/net/tun (check RouterOS container permissions)"
+            printf '[entrypoint] ERROR: Failed to create /dev/net/tun\n' >&2
+            exit 1
         fi
     fi
     if ! exec 3<>/dev/net/tun 2>/dev/null; then
-        die "Cannot open /dev/net/tun"
+        printf '[entrypoint] ERROR: Cannot open /dev/net/tun\n' >&2
+        exit 1
     fi
     exec 3>&-
 }
@@ -61,7 +31,6 @@ fix_resolvconf() {
 }
 
 fix_ip_rules() {
-    # Remove duplicate main/default rules inserted by RouterOS 7.22+ without deleting user custom rules
     ip -4 rule show | awk '
         /from all lookup main$/ && $1+0 < 32766 {gsub(":", "", $1); print $1}
         /from all lookup default$/ && $1+0 < 32767 {gsub(":", "", $1); print $1}
@@ -84,120 +53,16 @@ detect_lan_iface() {
     printf '%s\n' "$iface"
 }
 
-prepare_configs() {
-    mkdir -p "$CONF_RUN_DIR"
-    chmod 700 "$CONF_RUN_DIR"
-    rm -f "$CONF_RUN_DIR"/*.conf
-
-    raw_files=""
-    for f in "$CONF_SRC_DIR"/*.conf; do
-        [ -f "$f" ] || continue
-        if grep -q '\[Interface\]' "$f" 2>/dev/null; then
-            raw_files="$raw_files $f"
-        fi
-    done
-
-    if [ -z "$raw_files" ]; then
-        if [ -n "${AWG_CONF_B64:-}" ]; then
-            name="${AWG_IFACE:-awg0}"
-            log "Writing config from AWG_CONF_B64 -> $CONF_RUN_DIR/$name.conf"
-            printf '%s' "$AWG_CONF_B64" | base64 -d | tr -d '\r' > "$CONF_RUN_DIR/$name.conf"
-            chmod 600 "$CONF_RUN_DIR/$name.conf"
-            return 0
-        elif [ -n "${AWG_CONF:-}" ]; then
-            name="${AWG_IFACE:-awg0}"
-            log "Writing config from AWG_CONF -> $CONF_RUN_DIR/$name.conf"
-            printf '%b\n' "$AWG_CONF" | tr -d '\r' > "$CONF_RUN_DIR/$name.conf"
-            chmod 600 "$CONF_RUN_DIR/$name.conf"
-            return 0
-        fi
-        die "No *.conf with [Interface] found in $CONF_SRC_DIR (and AWG_CONF / AWG_CONF_B64 are empty)"
-    fi
-
-    for f in $raw_files; do
-        base=$(basename "$f")
-        tr -d '\r' < "$f" > "$CONF_RUN_DIR/$base"
-        chmod 600 "$CONF_RUN_DIR/$base"
-    done
-}
-
-inject_auto_route() {
-    conf="$1"
-    lan_if="$2"
-    single_conf="$3"
-
-    [ "${AWG_AUTO_ROUTE:-on}" = "on" ] || return 0
-    [ -n "$lan_if" ] || return 0
-    if grep -qiE '^[[:space:]]*(PostUp|Table)[[:space:]]*=' "$conf"; then
-        return 0
-    fi
-
-    extra="
-PostUp = iptables -t nat -C POSTROUTING -o %i -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -o %i -j MASQUERADE
-PostDown = iptables -t nat -D POSTROUTING -o %i -j MASQUERADE || true
-PostUp = iptables -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-PostDown = iptables -D FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu || true"
-
-    if [ "$single_conf" = "1" ]; then
-        extra="$extra
-Table = awg
-PostUp = ip rule add priority 300 from all iif $lan_if lookup awg || true
-PostDown = ip rule del priority 300 from all iif $lan_if lookup awg || true"
-
-        if [ "${AWG_KILLSWITCH:-on}" = "on" ]; then
-            extra="$extra
-PostUp = ip route replace blackhole default table awg metric 254 || true
-PostUp = iptables -C FORWARD -i $lan_if ! -o %i -j DROP 2>/dev/null || iptables -A FORWARD -i $lan_if ! -o %i -j DROP
-PostDown = iptables -D FORWARD -i $lan_if ! -o %i -j DROP || true"
-        fi
-    fi
-
-    tmp="${conf}.tmp"
-    awk -v ins="$extra" '
-        BEGIN { done=0 }
-        {
-            print
-            if (!done && $0 ~ /^\[Interface\][[:space:]]*$/) {
-                print ins
-                done=1
-            }
-        }
-    ' "$conf" > "$tmp"
-    mv "$tmp" "$conf"
-    chmod 600 "$conf"
-}
-
 ensure_tun
 fix_resolvconf
-sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || log "WARN: could not set net.ipv4.ip_forward=1"
+sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || printf '[entrypoint] WARN: could not set net.ipv4.ip_forward=1\n'
 sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1 || true
 fix_ip_rules
 
-LAN_IFACE=$(detect_lan_iface)
-log "Detected veth interface: ${LAN_IFACE:-none}"
+if [ -z "${AWG_LAN_IFACE:-}" ]; then
+    AWG_LAN_IFACE=$(detect_lan_iface)
+    export AWG_LAN_IFACE
+fi
+printf '[entrypoint] Detected veth interface: %s\n' "${AWG_LAN_IFACE:-none}"
 
-prepare_configs
-
-conf_count=$(set -- "$CONF_RUN_DIR"/*.conf; echo $#)
-single_flag=0
-[ "$conf_count" -eq 1 ] && single_flag=1
-
-for conf in "$CONF_RUN_DIR"/*.conf; do
-    [ -f "$conf" ] || continue
-    inject_auto_route "$conf" "$LAN_IFACE" "$single_flag"
-    log "Starting AmneziaWG: $conf"
-    if ! /usr/bin/awg-quick up "$conf"; then
-        log "ERROR: awg-quick up failed for $conf"
-        teardown
-        exit 1
-    fi
-    STARTED_CONFS="$conf $STARTED_CONFS"
-done
-
-log "AmneziaWG is up. Active interfaces: $(/usr/bin/awg show interfaces | tr '\n' ' ')"
-
-while :; do
-    sleep 3600 &
-    SLEEP_PID=$!
-    wait "$SLEEP_PID" || true
-done
+exec /usr/bin/awg-ctl
