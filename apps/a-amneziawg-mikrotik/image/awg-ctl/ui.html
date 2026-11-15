@@ -268,15 +268,36 @@
     </div>
 
     <div class="card">
-      <h2>RouterOS REST — выборочный DNS FWD / address-list (опционально)</h2>
-      <div class="mut" style="margin-bottom:6px">Нужно только если трафик на MikroTik идёт мимо контейнера (через mangle/address-list). Если трафик уже идёт через шлюз контейнера (default=PROXY), достаточно блока «Правила маршрутизации» выше.</div>
-      <div class="mut" id="rosInfo" style="margin-bottom:10px"></div>
-      <textarea id="domText" style="min-height:95px" placeholder="ifconfig.me&#10;youtube.com"></textarea>
-      <div class="row" style="margin-top:10px">
-        <button class="primary" onclick="saveDomains(this)">Сохранить и синхронизировать</button>
-        <button onclick="syncROS(this, 'domMsg')">Синхронизировать</button>
-        <span class="mut" id="domMsg"></span>
+      <div class="row" style="justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">Интеграция с RouterOS</h2>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <label class="mut" for="rosModeRules">Режим:</label>
+          <select id="rosModeRules" onchange="switchROSModeQuick(this.value)" style="min-width:260px">
+            <option value="gateway">Весь трафик через контейнер (шлюз)</option>
+            <option value="address_list">Address-List + Mangle + Route → в контейнер</option>
+            <option value="bgp">BGP (без mangle, FastTrack работает)</option>
+            <option value="manual">Ручной (domains.txt + AllowedIPs)</option>
+          </select>
+        </div>
       </div>
+      <div class="mut" id="rosModeHint" style="margin-bottom:6px"></div>
+      <div class="mut" id="rosInfo" style="margin-bottom:10px"></div>
+
+      <div id="rosRulesManualBox" class="hide">
+        <textarea id="domText" style="min-height:95px" placeholder="ifconfig.me&#10;youtube.com"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="primary" onclick="saveDomains(this)">Сохранить и синхронизировать</button>
+          <button onclick="syncROS(this, 'domMsg')">Синхронизировать</button>
+        </div>
+      </div>
+
+      <div id="rosRulesActions" class="row" style="gap:8px;flex-wrap:wrap">
+        <button id="btnRosRulesSync" onclick="syncROS(this, 'domMsg')">Синхронизировать</button>
+        <button onclick="checkROSSchema('rosSchemaRulesOut')">Проверить схему ROS</button>
+        <button class="primary" onclick="provisionROSSchema(this, 'rosSchemaRulesOut', false)">Применить схему на ROS</button>
+      </div>
+      <div class="mut" id="domMsg" style="margin-top:8px"></div>
+      <div id="rosSchemaRulesOut" class="hide" style="margin-top:10px"></div>
     </div>
   </div>
 
@@ -402,30 +423,65 @@
     </div>
 
     <div class="card">
-      <h2>MikroTik RouterOS REST API</h2>
+      <h2>MikroTik RouterOS API и режим работы</h2>
       <div class="grid" style="margin-bottom:12px">
-        <div><label class="mut" id="setRosURLLbl">ROS_URL (HTTPS REST)</label><input id="setRosURL" placeholder="https://172.18.0.1"></div>
-        <div><label class="mut">ROS_USER (группа с policy=read,write,api,rest-api)</label><input id="setRosUser" placeholder="awg-api"></div>
+        <div>
+          <label class="mut">Режим интеграции (ROS_MODE)</label>
+          <select id="setRosMode" onchange="onSettingsROSModeChange()">
+            <option value="gateway">Весь трафик через контейнер (шлюз)</option>
+            <option value="address_list">Address-List + Mangle + Route → в контейнер</option>
+            <option value="bgp">BGP (без mangle, FastTrack работает)</option>
+            <option value="manual">Ручной (domains.txt + AllowedIPs)</option>
+          </select>
+        </div>
+        <div><label class="mut" id="setRosURLLbl">ROS_URL (REST API)</label><input id="setRosURL" placeholder="http://172.18.0.1"></div>
+        <div><label class="mut">ROS_USER (policy=read,write,api,rest-api)</label><input id="setRosUser" placeholder="awg-api"></div>
         <div><label class="mut" id="setRosPassLbl">ROS_PASS</label><input id="setRosPass" type="password" placeholder="оставьте пустым, чтобы не менять"></div>
         <div><label class="mut" id="setRosGWLbl">ROS_CONTAINER_IP (пусто = авто)</label><input id="setRosGW" placeholder="auto" oninput="updateRosGWWarning()"></div>
-        <div><label class="mut">ROS_ROUTE_TABLE (для AllowedIPs, пусто = main)</label><input id="setRosTable" placeholder="main (по умолчанию)"></div>
+        <div><label class="mut">Binary API порт (:8728 / :8729 TLS)</label><input id="setRosAPIPort" type="number" min="1" max="65535" placeholder="8728"></div>
+      </div>
+
+      <div id="rosSetAddrListBox" class="grid" style="margin-bottom:12px">
         <div><label class="mut">ROS_ADDRESS_LIST</label><input id="setRosAL" placeholder="AmneziaWGRoS"></div>
+        <div><label class="mut">ROS_ROUTE_TABLE (mangle / route)</label><input id="setRosTable" placeholder="AmneziaWGRoS"></div>
+        <div><label class="mut">Таймаут DNS-IP в RAM ROS (без износа flash)</label><input id="setRosDynTimeout" placeholder="12:00:00"></div>
+        <div><label class="mut">Лимит статических PROXY CIDR</label><input id="setRosPrefixLimit" type="number" min="10" max="100000" placeholder="2500"></div>
+      </div>
+
+      <div id="rosSetBGPBox" class="grid hide" style="margin-bottom:12px">
+        <div><label class="mut">BGP Local ASN (контейнер)</label><input id="setRosBGPLocalAS" type="number" min="1" placeholder="65511"></div>
+        <div><label class="mut">BGP Remote ASN (RouterOS)</label><input id="setRosBGPRemoteAS" type="number" min="1" placeholder="65510"></div>
+        <div><label class="mut">BGP Peer IP RouterOS (пусто = из ROS_URL)</label><input id="setRosBGPPeerIP" placeholder="auto"></div>
+        <div><label class="mut">BGP Routing Table на ROS</label><input id="setRosBGPRouteTable" placeholder="main"></div>
+      </div>
+
+      <div id="rosSetManualBox" class="grid hide" style="margin-bottom:12px">
         <div><label class="mut">ROS_FORWARD_DNS</label><input id="setRosFwd" placeholder="AmneziaWGRoS"></div>
       </div>
+
       <div id="rosGWWarning" class="mut hide" style="margin-bottom:10px;color:var(--warn)"></div>
-      <div class="row" style="gap:16px;margin-bottom:14px">
+
+      <div class="row" style="gap:16px;margin-bottom:14px;flex-wrap:wrap">
+        <label class="chk"><input type="checkbox" id="setRosUseBinAPI"> Использовать Binary API (:8728)</label>
+        <label class="chk"><input type="checkbox" id="setRosAPITLS"> TLS для Binary API (:8729)</label>
         <label class="chk"><input type="checkbox" id="setRosTLS"> Пропускать проверку TLS</label>
-        <label class="chk"><input type="checkbox" id="setRosSyncRoutes"> Синхронизировать маршруты</label>
-        <label class="chk"><input type="checkbox" id="setRosSyncDomains"> Синхронизировать домены</label>
+        <label class="chk" id="lblRosSyncPolicyCIDRs"><input type="checkbox" id="setRosSyncPolicyCIDRs"> Синхронизировать статические CIDR/GeoIP из правил</label>
+        <label class="chk" id="lblRosSyncRoutes"><input type="checkbox" id="setRosSyncRoutes"> Синхронизировать маршруты AllowedIPs</label>
+        <label class="chk" id="lblRosSyncDomains"><input type="checkbox" id="setRosSyncDomains"> Синхронизировать домены domains.txt</label>
+        <label class="chk"><input type="checkbox" id="setRosProvisionDNS"> При «Применить схему» переключить DNS роутера на контейнер</label>
         <label class="chk"><input type="checkbox" id="setRosClearPass"> Очистить ROS_PASS</label>
       </div>
-      <div class="row" style="margin-bottom:10px;flex-wrap:wrap">
+
+      <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
         <button onclick="testROS(this)">Проверить подключение</button>
+        <button onclick="checkROSSchema('rosSchemaSetOut')">Проверить схему ROS</button>
+        <button class="primary" onclick="provisionROSSchema(this, 'rosSchemaSetOut', true)">Применить схему на ROS</button>
         <button onclick="syncROS(this, 'rosTestMsg')">Синхронизировать сейчас</button>
         <button class="bad" onclick="cleanupROS(this)">Удалить записи awg-ctl</button>
-        <span class="mut" id="rosTestMsg"></span>
       </div>
-      <div class="mut" id="rosSetInfo" style="margin-bottom:12px"></div>
+      <div class="mut" id="rosTestMsg" style="margin-bottom:6px"></div>
+      <div class="mut" id="rosSetInfo" style="margin-bottom:10px"></div>
+      <div id="rosSchemaSetOut" class="hide" style="margin-bottom:12px"></div>
       <div class="row">
         <button class="primary" onclick="saveSettings(this)">Сохранить и применить настройки</button>
         <span class="mut" id="setMsg"></span>
@@ -574,14 +630,44 @@ async function refresh(manual = false) {
     document.getElementById('meta').textContent =
       `${(st.default_policy||'proxy').toUpperCase()} · ${st.lan_iface||'—'} (${st.container_ip||'no IP'}, gw ${st.gateway||'—'}) · rules: ${pol.rules_count||0} · failover: ${fo.mode||'off'} · TG: ${tg.enabled ? 'on' : 'off'}`;
 
-    const rosText = ros.enabled
-      ? `${ros.router_name ? ros.router_name + (ros.routeros_version ? ' (ROS ' + ros.routeros_version + ')' : '') + ' · ' : ''}${ros.url} · шлюз контейнера: ${ros.gateway_ip || '—'} · маршрутов: ${ros.routes_synced} · доменов: ${ros.domains_synced}${ros.last_error ? ' · ОШИБКА: ' + ros.last_error : ''}`
-      : (ros.last_error ? 'RouterOS REST ошибка конфигурации: ' + ros.last_error : 'RouterOS REST не настроен (укажите параметры во вкладке «Настройки»).');
+    const rosMode = ros.mode || 'gateway';
+    const rosSelRules = document.getElementById('rosModeRules');
+    if (rosSelRules && document.activeElement !== rosSelRules) {
+      rosSelRules.value = rosMode;
+    }
+    updateRulesROSModeUI(rosMode);
+
+    let rosText = '';
+    const rHead = (ros.router_name ? ros.router_name + (ros.routeros_version ? ' (ROS ' + ros.routeros_version + ')' : '') + ' · ' : '') + (ros.url || '');
+    if (rosMode === 'gateway') {
+      rosText = `Режим Шлюза · контейнер ${ros.gateway_ip || '—'} обрабатывает правила внутри table 210 (синхронизация address-list на ROS не требуется)` + (rHead ? ' · ' + rHead : '');
+    } else if (rosMode === 'address_list') {
+      if (ros.enabled) {
+        rosText = `${rHead} · лист ${ros.address_list || 'AmneziaWGRoS'} · статика CIDR: ${ros.static_cidrs_synced || 0} · DNS /32: ${ros.dynamic_ips_synced || 0}` +
+          (ros.dropped_by_limit ? ` (лимит: -${ros.dropped_by_limit})` : '') +
+          (ros.transport ? ` · ${ros.transport}` : '') +
+          ` · шлюз: ${ros.gateway_ip || '—'}` +
+          (ros.last_error ? ` · ОШИБКА: ${ros.last_error}` : '');
+      } else {
+        rosText = ros.last_error ? 'RouterOS ошибка: ' + ros.last_error : 'Укажите ROS_URL и ROS_USER во вкладке «Настройки» для синхронизации address-list.';
+      }
+    } else if (rosMode === 'bgp') {
+      const bSt = ros.bgp_state || 'disabled';
+      rosText = `BGP [${bSt}]` +
+        (ros.bgp_peer ? ` · peer ${ros.bgp_peer}` : '') +
+        ` · анонсировано маршрутов: ${ros.bgp_routes || 0} (статика: ${ros.static_cidrs_synced || 0}, DNS: ${ros.dynamic_ips_synced || 0})` +
+        ` · next-hop: ${ros.bgp_next_hop || ros.gateway_ip || '—'}` +
+        (ros.bgp_last_error ? ` · ОШИБКА: ${ros.bgp_last_error}` : '');
+    } else {
+      rosText = ros.enabled
+        ? `${rHead} · шлюз контейнера: ${ros.gateway_ip || '—'} · маршрутов: ${ros.routes_synced} · доменов: ${ros.domains_synced}${ros.last_error ? ' · ОШИБКА: ' + ros.last_error : ''}`
+        : (ros.last_error ? 'RouterOS REST ошибка конфигурации: ' + ros.last_error : 'RouterOS REST не настроен (укажите параметры во вкладке «Настройки»).');
+    }
     document.getElementById('rosInfo').textContent = rosText;
     const rosSetInfo = document.getElementById('rosSetInfo');
     if (rosSetInfo) {
       rosSetInfo.textContent = rosText + (ros.next_retry_at ? ` · повтор: ${ros.next_retry_at}` : '');
-      rosSetInfo.style.color = ros.last_error ? 'var(--warn)' : '';
+      rosSetInfo.style.color = (ros.last_error || ros.bgp_last_error) ? 'var(--warn)' : '';
     }
 
     // 1. Interfaces cards
@@ -1241,10 +1327,11 @@ async function loadSettings() {
     document.getElementById('setTGConfig').checked = !!s.tg_on_config;
     document.getElementById('setTGSilent').checked = !!s.tg_silent;
 
+    document.getElementById('setRosMode').value = s.ros_mode || 'gateway';
     document.getElementById('setRosURL').value = s.ros_url || '';
-    const gwHint = (lastStatus && lastStatus.gateway) ? `ROS_URL (шлюз: https://${lastStatus.gateway})` : 'ROS_URL (HTTPS REST)';
+    const gwHint = (lastStatus && lastStatus.gateway) ? `ROS_URL (шлюз: http://${lastStatus.gateway})` : 'ROS_URL (REST API)';
     document.getElementById('setRosURLLbl').textContent = gwHint;
-    if (lastStatus && lastStatus.gateway) document.getElementById('setRosURL').placeholder = 'https://' + lastStatus.gateway;
+    if (lastStatus && lastStatus.gateway) document.getElementById('setRosURL').placeholder = 'http://' + lastStatus.gateway;
     document.getElementById('setRosUser').value = s.ros_user || '';
     document.getElementById('setRosPass').value = '';
     document.getElementById('setRosPassLbl').textContent = s.ros_pass_set ? 'ROS_PASS (задан)' : 'ROS_PASS (не задан)';
@@ -1252,6 +1339,16 @@ async function loadSettings() {
     document.getElementById('setRosGWLbl').textContent = autoRosIP ? `ROS_CONTAINER_IP (пусто = авто: ${autoRosIP})` : 'ROS_CONTAINER_IP (пусто = авто)';
     document.getElementById('setRosGW').placeholder = autoRosIP ? `auto (${autoRosIP})` : 'auto';
     document.getElementById('setRosGW').value = s.ros_container_ip || '';
+    document.getElementById('setRosAPIPort').value = s.ros_api_port || 8728;
+    document.getElementById('setRosUseBinAPI').checked = s.ros_use_binary_api !== false;
+    document.getElementById('setRosAPITLS').checked = !!s.ros_api_tls;
+    document.getElementById('setRosDynTimeout').value = s.ros_dynamic_timeout || '12:00:00';
+    document.getElementById('setRosPrefixLimit').value = s.ros_static_prefix_limit || 2500;
+    document.getElementById('setRosSyncPolicyCIDRs').checked = s.ros_sync_policy_cidrs !== false;
+    document.getElementById('setRosBGPLocalAS').value = s.ros_bgp_local_as || 65511;
+    document.getElementById('setRosBGPRemoteAS').value = s.ros_bgp_remote_as || 65510;
+    document.getElementById('setRosBGPPeerIP').value = s.ros_bgp_peer_ip || '';
+    document.getElementById('setRosBGPRouteTable').value = s.ros_bgp_route_table || 'main';
     document.getElementById('setRosTable').value = s.ros_route_table || '';
     document.getElementById('setRosFwd').value = s.ros_forward_dns || '';
     document.getElementById('setRosAL').value = s.ros_address_list || '';
@@ -1259,6 +1356,7 @@ async function loadSettings() {
     document.getElementById('setRosSyncRoutes').checked = !!s.ros_sync_routes;
     document.getElementById('setRosSyncDomains').checked = !!s.ros_sync_domains;
     document.getElementById('setRosClearPass').checked = false;
+    onSettingsROSModeChange();
     updateRosGWWarning(autoRosIP);
   } catch (e) { document.getElementById('setMsg').textContent = 'Ошибка: ' + e.message; }
 }
@@ -1306,11 +1404,22 @@ async function saveSettings(btn) {
         tg_on_config: document.getElementById('setTGConfig').checked,
         tg_silent: document.getElementById('setTGSilent').checked,
 
+        ros_mode: document.getElementById('setRosMode').value,
         ros_url: document.getElementById('setRosURL').value.trim(),
         ros_user: document.getElementById('setRosUser').value.trim(),
         ros_pass: document.getElementById('setRosPass').value,
         clear_ros_pass: document.getElementById('setRosClearPass').checked,
         ros_container_ip: document.getElementById('setRosGW').value.trim(),
+        ros_use_binary_api: document.getElementById('setRosUseBinAPI').checked,
+        ros_api_port: parseInt(document.getElementById('setRosAPIPort').value || '8728', 10) || 8728,
+        ros_api_tls: document.getElementById('setRosAPITLS').checked,
+        ros_dynamic_timeout: document.getElementById('setRosDynTimeout').value.trim() || '12:00:00',
+        ros_sync_policy_cidrs: document.getElementById('setRosSyncPolicyCIDRs').checked,
+        ros_static_prefix_limit: parseInt(document.getElementById('setRosPrefixLimit').value || '2500', 10) || 2500,
+        ros_bgp_local_as: parseInt(document.getElementById('setRosBGPLocalAS').value || '65511', 10) || 65511,
+        ros_bgp_remote_as: parseInt(document.getElementById('setRosBGPRemoteAS').value || '65510', 10) || 65510,
+        ros_bgp_peer_ip: document.getElementById('setRosBGPPeerIP').value.trim(),
+        ros_bgp_route_table: document.getElementById('setRosBGPRouteTable').value.trim() || 'main',
         ros_route_table: document.getElementById('setRosTable').value.trim(),
         ros_forward_dns: document.getElementById('setRosFwd').value.trim(),
         ros_address_list: document.getElementById('setRosAL').value.trim(),
@@ -1392,6 +1501,115 @@ function clearRosContainerIP() {
   const autoIP = (lastStatus && lastStatus.ros && lastStatus.ros.auto_gateway_ip) || '';
   updateRosGWWarning(autoIP);
 }
+const rosModeHints = {
+  gateway: 'Весь LAN-трафик поступает на шлюз контейнера; правила GeoSite/CIDR/GeoIP работают локально в контейнере (table 210) без синка списков на RouterOS.',
+  address_list: 'Статические CIDR/GeoIP и резолвленные DNS /32 (с RAM-таймаутом без износа flash) автоматически пушатся в address-list MikroTik для выборочного mangle.',
+  bgp: 'Чистый BGP-спикер в контейнере анонсирует статические CIDR и DNS /32 напрямую в маршруты RouterOS: mangle не нужен, FastTrack остаётся включённым.',
+  manual: 'Классический режим: синхронизация доменов из domains.txt (DNS type=FWD) и AllowedIPs подсетей туннелей в /ip/route.'
+};
+
+function updateRulesROSModeUI(mode) {
+  const hint = document.getElementById('rosModeHint');
+  if (hint) hint.textContent = rosModeHints[mode] || '';
+  const manBox = document.getElementById('rosRulesManualBox');
+  const actBox = document.getElementById('rosRulesActions');
+  const syncBtn = document.getElementById('btnRosRulesSync');
+  if (manBox) manBox.classList.toggle('hide', mode !== 'manual');
+  if (actBox) actBox.classList.toggle('hide', mode === 'manual');
+  if (syncBtn) syncBtn.classList.toggle('hide', mode === 'gateway');
+}
+
+function onSettingsROSModeChange() {
+  const mode = document.getElementById('setRosMode').value;
+  document.getElementById('rosSetAddrListBox').classList.toggle('hide', mode === 'bgp' || mode === 'gateway');
+  document.getElementById('rosSetBGPBox').classList.toggle('hide', mode !== 'bgp');
+  document.getElementById('rosSetManualBox').classList.toggle('hide', mode !== 'manual');
+  document.getElementById('lblRosSyncPolicyCIDRs').classList.toggle('hide', mode !== 'address_list' && mode !== 'bgp');
+  document.getElementById('lblRosSyncRoutes').classList.toggle('hide', mode !== 'manual');
+  document.getElementById('lblRosSyncDomains').classList.toggle('hide', mode !== 'manual');
+}
+
+async function switchROSModeQuick(mode) {
+  const msg = document.getElementById('domMsg');
+  if (msg) { msg.textContent = 'Переключение режима...'; msg.style.color = ''; }
+  updateRulesROSModeUI(mode);
+  try {
+    const r = await api('/api/ros/mode', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ ros_mode: mode })
+    });
+    const setSel = document.getElementById('setRosMode');
+    if (setSel) { setSel.value = mode; onSettingsROSModeChange(); }
+    if (msg) { msg.style.color = 'var(--ok)'; msg.textContent = 'Режим: ' + mode; }
+    toast('Режим RouterOS переключён: ' + mode);
+    await refresh(true);
+  } catch (e) {
+    if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = 'Ошибка: ' + e.message; }
+    toast(e.message, 'bad');
+  }
+}
+
+function renderROSSchemaBox(boxId, rep, applied) {
+  const box = document.getElementById(boxId);
+  if (!box || !rep) return;
+  box.classList.remove('hide');
+  const checksHTML = (rep.checks || []).map(ch => {
+    const cls = ch.ok ? 'ok' : (ch.warn ? 'warn' : 'bad');
+    const lbl = ch.ok ? 'OK' : (ch.warn ? 'WARN' : 'FAIL');
+    return `<div style="margin:4px 0"><span class="badge ${cls}">${lbl}</span> <strong>${esc(ch.title)}</strong> <span class="mut">${esc(ch.detail || '')}</span></div>`;
+  }).join('');
+  const warnsHTML = (rep.warnings || []).map(w => `<div style="color:var(--warn);margin:4px 0">! ${esc(w)}</div>`).join('');
+  const appHTML = (applied && applied.length) ? `<div style="color:var(--ok);margin:6px 0">Применено: ${esc(applied.join('; '))}</div>` : '';
+  const errHTML = rep.error ? `<div style="color:var(--bad);margin:4px 0">Ошибка: ${esc(rep.error)}</div>` : '';
+  const preId = boxId + '_cli';
+  box.innerHTML = `
+    <div style="border:1px solid var(--brd);border-radius:8px;padding:10px;background:rgba(0,0,0,.18)">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <strong>Схема RouterOS (${esc(rep.mode)} · шлюз ${esc(rep.container_ip || '—')})</strong>
+        <button type="button" class="sm" onclick="copyROSCLIScript('${preId}')">Копировать CLI</button>
+      </div>
+      ${errHTML}${appHTML}${warnsHTML}${checksHTML}
+      ${rep.cli_script ? `<pre id="${preId}" style="margin:8px 0 0;max-height:220px;overflow:auto;font-size:.74rem;padding:8px;background:rgba(0,0,0,.3);border-radius:6px">${esc(rep.cli_script)}</pre>` : ''}
+    </div>`;
+}
+
+function copyROSCLIScript(preId) {
+  const el = document.getElementById(preId);
+  if (!el) return;
+  navigator.clipboard?.writeText(el.textContent).then(() => toast('CLI-скрипт скопирован')).catch(() => toast('Не удалось скопировать', 'bad'));
+}
+
+async function checkROSSchema(boxId) {
+  const box = document.getElementById(boxId);
+  if (box) { box.classList.remove('hide'); box.innerHTML = '<span class="mut">Проверка конфигурации RouterOS...</span>'; }
+  try {
+    const mode = boxId === 'rosSchemaSetOut' ? document.getElementById('setRosMode').value : document.getElementById('rosModeRules').value;
+    const rep = await api('/api/ros/schema?mode=' + encodeURIComponent(mode));
+    renderROSSchemaBox(boxId, rep, null);
+  } catch (e) {
+    if (box) box.innerHTML = `<span style="color:var(--bad)">Ошибка проверки: ${esc(e.message)}</span>`;
+    toast(e.message, 'bad');
+  }
+}
+
+async function provisionROSSchema(btn, boxId, includeSetupDNS) {
+  if (!confirm('Создать/обновить таблицу маршрутизации, маршруты, mangle/BGP и FastTrack compat (connection-mark=no-mark) на RouterOS?')) return;
+  await withBusy(btn, async () => {
+    try {
+      const setupDNS = includeSetupDNS && document.getElementById('setRosProvisionDNS')?.checked;
+      const r = await api('/api/ros/provision', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ setup_dns: !!setupDNS })
+      });
+      renderROSSchemaBox(boxId, r.report, r.applied);
+      toast(r.ok ? 'Схема RouterOS применена' : (r.error || 'Ошибка настройки схемы'), r.ok ? 'ok' : 'bad');
+      await refresh(true);
+    } catch (e) {
+      toast(e.message, 'bad');
+    }
+  });
+}
+
 async function testROS(btn) {
   const msg = document.getElementById('rosTestMsg');
   msg.textContent = 'Проверка...';
@@ -1407,16 +1625,24 @@ async function testROS(btn) {
           clear_ros_pass: document.getElementById('setRosClearPass').checked,
           ros_tls_insecure: document.getElementById('setRosTLS').checked,
           ros_container_ip: document.getElementById('setRosGW').value.trim(),
-          ros_route_table: document.getElementById('setRosTable').value.trim()
+          ros_route_table: document.getElementById('setRosTable').value.trim(),
+          ros_use_binary_api: document.getElementById('setRosUseBinAPI').checked,
+          ros_api_port: parseInt(document.getElementById('setRosAPIPort').value || '8728', 10) || 8728,
+          ros_api_tls: document.getElementById('setRosAPITLS').checked
         })
       });
-      if (r.ok) {
-        msg.style.color = 'var(--ok)';
-        msg.textContent = `OK: ${r.identity || 'MikroTik'} ${r.board || ''} · RouterOS ${r.version || '?'} · шлюз контейнера: ${r.gateway_ip || '—'}`;
-        toast('RouterOS REST API доступен');
+      const binNote = r.bin_api_addr
+        ? (r.bin_api_ok ? ` · Binary API (${r.bin_api_addr}): OK` : ` · Binary API (${r.bin_api_addr}): ${r.bin_api_error || 'недоступен'}`)
+        : '';
+      if (r.ok || r.bin_api_ok) {
+        msg.style.color = r.ok ? 'var(--ok)' : 'var(--warn)';
+        msg.textContent = (r.ok
+          ? `REST OK: ${r.identity || 'MikroTik'} ${r.board || ''} · ROS ${r.version || '?'} · шлюз: ${r.gateway_ip || '—'}`
+          : `REST ошибка: ${r.error || '—'}`) + binNote;
+        toast(r.ok ? 'RouterOS доступен' : 'REST недоступен, но Binary API работает', r.ok ? 'ok' : 'warn');
       } else {
         msg.style.color = 'var(--bad)';
-        msg.textContent = `Ошибка: ${r.error || 'неизвестная'}${r.hint ? ' — ' + r.hint : ''}`;
+        msg.textContent = `Ошибка: ${r.error || 'неизвестная'}${r.hint ? ' — ' + r.hint : ''}${binNote}`;
         toast(r.error || 'Ошибка подключения к RouterOS', 'bad');
       }
       await refresh(true);
@@ -1429,7 +1655,15 @@ async function syncROS(btn, msgId = 'domMsg') {
   await withBusy(btn, async () => {
     try {
       const r = await api('/api/ros/sync', {method:'POST'});
-      const txt = r.ros ? `Синхронизировано (маршрутов: ${r.ros.routes_synced}, доменов: ${r.ros.domains_synced})` : 'Синхронизировано';
+      const ros = r.ros || {};
+      let txt = 'Синхронизировано';
+      if (ros.mode === 'address_list') {
+        txt = `Синхронизировано (лист ${ros.address_list || 'AmneziaWGRoS'}: статика=${ros.static_cidrs_synced || 0}, DNS=${ros.dynamic_ips_synced || 0}, ${ros.transport || 'api'})`;
+      } else if (ros.mode === 'bgp') {
+        txt = `BGP маршруты обновлены (state=${ros.bgp_state || '—'}, routes=${ros.bgp_routes || 0})`;
+      } else if (r.ros) {
+        txt = `Синхронизировано (маршрутов: ${ros.routes_synced}, доменов: ${ros.domains_synced})`;
+      }
       if (msg) { msg.style.color = 'var(--ok)'; msg.textContent = txt; }
       toast('RouterOS синхронизирован');
       await refresh(true);
@@ -1440,13 +1674,13 @@ async function syncROS(btn, msgId = 'domMsg') {
   });
 }
 async function cleanupROS(btn) {
-  if (!confirm('Удалить все маршруты (awg-ctl:*) и DNS-записи (comment=awg-ctl) на RouterOS?')) return;
+  if (!confirm('Удалить все маршруты (awg-ctl:*), DNS (comment=awg-ctl) и управляемые address-list записи (awg-ctl:*) на RouterOS?')) return;
   const msg = document.getElementById('rosTestMsg');
   await withBusy(btn, async () => {
     try {
       const r = await api('/api/ros/cleanup', {method:'POST'});
       msg.style.color = 'var(--ok)';
-      msg.textContent = `Удалено записей: маршрутов=${r.routes_deleted}, DNS=${r.dns_deleted}`;
+      msg.textContent = `Удалено записей: маршрутов=${r.routes_deleted}, DNS=${r.dns_deleted} (+ кэш динамических IPs очищен)`;
       toast(msg.textContent);
       await refresh(true);
     } catch (e) { msg.style.color = 'var(--bad)'; msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }

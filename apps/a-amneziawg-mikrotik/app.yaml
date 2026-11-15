@@ -1,5 +1,5 @@
 name: A-amneziawg-mikrotik
-descr: "AmneziaWG 3.1 (v1.4.1) — Multi-Tunnel, Failover, DoH, Telegram-уведомления, GeoSite/GeoIP, Терминал"
+descr: "AmneziaWG 3.1 (v1.5.0) — Multi-Tunnel, Failover, DoH, Telegram, GeoSite/GeoIP, RouterOS (Address-List/BGP/Binary API), Терминал"
 page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/a-amneziawg-mikrotik
 category: networking
 icon: icon.png

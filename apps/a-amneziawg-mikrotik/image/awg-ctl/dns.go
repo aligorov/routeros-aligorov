@@ -26,6 +26,7 @@ type DNSForwarder struct {
 	directUps  []string
 	policy     *PolicyEngine
 	settings   *SettingsStore
+	ros        *ROSClient
 	logger     *RingLogger
 }
 
@@ -82,6 +83,12 @@ func (d *DNSForwarder) SetPolicy(policy *PolicyEngine, settings *SettingsStore) 
 	d.mu.Lock()
 	d.policy = policy
 	d.settings = settings
+	d.mu.Unlock()
+}
+
+func (d *DNSForwarder) SetROS(ros *ROSClient) {
+	d.mu.Lock()
+	d.ros = ros
 	d.mu.Unlock()
 }
 
@@ -216,6 +223,7 @@ func (d *DNSForwarder) handleDNSQuery(query []byte, proto string) ([]byte, error
 	d.mu.RLock()
 	policy := d.policy
 	settings := d.settings
+	ros := d.ros
 	d.mu.RUnlock()
 
 	qname, _, qEnd, ok := parseDNSQuestion(query)
@@ -271,6 +279,9 @@ func (d *DNSForwarder) handleDNSQuery(query []byte, proto string) ([]byte, error
 	if policy != nil && qname != "" && (action == ActionDirect || action == ActionProxy) {
 		if ips := extractDNSAnswerIPv4s(resp); len(ips) > 0 {
 			policy.RecordResolvedIPsForTarget(qname, action, matchedBy, targetTun, ips)
+			if ros != nil && action == ActionProxy && matchedBy != "default" {
+				ros.PushDynamicFromDNS(qname, ips)
+			}
 		}
 	}
 	return resp, nil

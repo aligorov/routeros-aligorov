@@ -54,8 +54,13 @@ func main() {
 	}
 
 	rosClient := NewROSClient(srcDir, logger)
+	rosClient.SetManager(mgr)
+	rosClient.SetPolicy(policy)
 	rosClient.SetAutoGatewayFn(func() string { return detectInterfaceIPv4(mgr.LanIface()) })
 	rosClient.Configure(st)
+	if dnsFwd != nil {
+		dnsFwd.SetROS(rosClient)
+	}
 
 	tg := NewTGNotifier(settingsStore, mgr, logger)
 	failover := NewFailoverMonitor(mgr, settingsStore, tg, logger)
@@ -65,6 +70,7 @@ func main() {
 			dnsFwd.SetUpstreams(mgr.ActiveDNSServers())
 		}
 		_ = policy.ApplyRouting()
+		rosClient.configureBGPFromState()
 		if rosClient.Status().Enabled {
 			go func() {
 				_ = rosClient.SyncAll(mgr)
@@ -119,6 +125,7 @@ func main() {
 				sites, ips := policy.NeededGeoCategories()
 				if err := geoStore.DownloadAndReload(cur.GeoSiteURL, cur.GeoIPURL, sites, ips); err == nil {
 					_ = policy.ApplyRouting()
+					rosClient.OnPolicyChanged()
 				}
 			}
 		}
@@ -130,5 +137,6 @@ func main() {
 	logger.Logf("Received signal %s, shutting down...", sig)
 	failover.Stop()
 	tg.Stop()
+	rosClient.Close()
 	mgr.StopAll()
 }

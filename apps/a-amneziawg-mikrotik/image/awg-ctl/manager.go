@@ -86,6 +86,10 @@ type TunnelManager struct {
 	logger      *RingLogger
 	onChange    func()
 	ipCmdFn     func(args ...string) error
+
+	epMu            sync.Mutex
+	cachedEndpoints []string
+	endpointsAt     time.Time
 }
 
 func NewTunnelManager(srcDir, runDir, lanIface string, autoRoute, killSwitch bool, logger *RingLogger) *TunnelManager {
@@ -1007,6 +1011,42 @@ func (m *TunnelManager) AllNonDefaultAllowedIPs() map[string][]string {
 			out[c.Interface] = cidrs
 		}
 	}
+	return out
+}
+
+// AllEndpoints returns cached WireGuard peer Endpoint strings across all configured tunnels.
+func (m *TunnelManager) AllEndpoints() []string {
+	m.epMu.Lock()
+	if time.Since(m.endpointsAt) < 30*time.Second && m.endpointsAt != (time.Time{}) {
+		out := append([]string(nil), m.cachedEndpoints...)
+		m.epMu.Unlock()
+		return out
+	}
+	m.epMu.Unlock()
+
+	cfgs, err := m.ListConfigs()
+	if err != nil {
+		return nil
+	}
+	var eps []string
+	seen := make(map[string]struct{}, len(cfgs))
+	for _, c := range cfgs {
+		ep := strings.TrimSpace(c.Endpoint)
+		if ep == "" {
+			continue
+		}
+		if _, ok := seen[ep]; ok {
+			continue
+		}
+		seen[ep] = struct{}{}
+		eps = append(eps, ep)
+	}
+
+	m.epMu.Lock()
+	m.cachedEndpoints = eps
+	m.endpointsAt = time.Now()
+	out := append([]string(nil), eps...)
+	m.epMu.Unlock()
 	return out
 }
 

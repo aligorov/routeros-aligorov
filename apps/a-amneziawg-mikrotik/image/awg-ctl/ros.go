@@ -36,47 +36,71 @@ var (
 	htmlTagRe   = regexp.MustCompile(`(?s)<[^>]+>`)
 )
 
-// ROSSyncStatus describes the current state of RouterOS REST integration.
+// ROSSyncStatus describes the current state of RouterOS integration.
 type ROSSyncStatus struct {
 	Enabled        bool   `json:"enabled"`
+	Mode           string `json:"mode,omitempty"`
+	Transport      string `json:"transport,omitempty"`
 	URL            string `json:"url,omitempty"`
 	GatewayIP      string `json:"gateway_ip,omitempty"`
 	AutoGatewayIP  string `json:"auto_gateway_ip,omitempty"`
 	RouteTable     string `json:"route_table,omitempty"`
+	AddressList    string `json:"address_list,omitempty"`
 	RouterName     string `json:"router_name,omitempty"`
 	RouterOSVer    string `json:"routeros_version,omitempty"`
 	LastSync       string `json:"last_sync,omitempty"`
 	LastError      string `json:"last_error,omitempty"`
 	Routes         int    `json:"routes_synced"`
 	Domains        int    `json:"domains_synced"`
+	StaticSynced   int    `json:"static_cidrs_synced"`
+	DynSynced      int    `json:"dynamic_ips_synced"`
+	DroppedByLimit int    `json:"dropped_by_limit,omitempty"`
+	BGPState       string `json:"bgp_state,omitempty"`
+	BGPRoutes      int    `json:"bgp_routes"`
+	BGPPeer        string `json:"bgp_peer,omitempty"`
+	BGPLastError   string `json:"bgp_last_error,omitempty"`
+	BGPNextHop     string `json:"bgp_next_hop,omitempty"`
 	ConsecFailures int    `json:"consecutive_failures,omitempty"`
 	NextRetryAt    string `json:"next_retry_at,omitempty"`
 }
 
 // ROSTestResult is returned by POST /api/ros/test with RouterOS diagnostics.
 type ROSTestResult struct {
-	OK         bool   `json:"ok"`
-	URL        string `json:"url,omitempty"`
-	GatewayIP  string `json:"gateway_ip,omitempty"`
-	Identity   string `json:"identity,omitempty"`
-	Board      string `json:"board,omitempty"`
-	Version    string `json:"version,omitempty"`
-	Hint       string `json:"hint,omitempty"`
-	Error      string `json:"error,omitempty"`
-	HTTPStatus int    `json:"http_status,omitempty"`
+	OK          bool   `json:"ok"`
+	URL         string `json:"url,omitempty"`
+	GatewayIP   string `json:"gateway_ip,omitempty"`
+	Identity    string `json:"identity,omitempty"`
+	Board       string `json:"board,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Hint        string `json:"hint,omitempty"`
+	Error       string `json:"error,omitempty"`
+	HTTPStatus  int    `json:"http_status,omitempty"`
+	BinAPIAddr  string `json:"bin_api_addr,omitempty"`
+	BinAPIOK    bool   `json:"bin_api_ok,omitempty"`
+	BinAPIError string `json:"bin_api_error,omitempty"`
 }
 
 type rosConnConfig struct {
-	baseURL    string
-	urlErr     string
-	user       string
-	pass       string
-	insecure   bool
-	gatewayIP  string
-	routeTable string
-	forwardDNS string
-	addrList   string
-	client     *http.Client
+	baseURL           string
+	urlErr            string
+	user              string
+	pass              string
+	insecure          bool
+	gatewayIP         string
+	routeTable        string
+	forwardDNS        string
+	addrList          string
+	client            *http.Client
+	mode              string
+	useBinAPI         bool
+	binCfg            rosBinConfig
+	dynamicTimeout    string
+	syncPolicyCIDRs   bool
+	staticPrefixLimit int
+	bgpLocalAS        uint32
+	bgpRemoteAS       uint32
+	bgpPeerIP         string
+	bgpRouteTable     string
 }
 
 type rosHTTPError struct {
@@ -104,24 +128,45 @@ func newROSHTTPClient(insecure bool) *http.Client {
 	}
 }
 
-// ROSClient manages RouterOS REST API connectivity and idempotent route/DNS sync.
+// ROSClient manages RouterOS integration (Binary API, REST API, Address-List, BGP, routes/DNS).
 type ROSClient struct {
-	baseURL         string
-	urlErr          string
-	user            string
-	pass            string
-	insecure        bool
-	gatewayOverride string
-	routeTable      string
-	forwardDNS      string
-	addrList        string
-	syncRoutes      bool
-	syncDomains     bool
-	httpClient      *http.Client
-	domainsFile     string
-	logger          *RingLogger
-	autoGatewayFn   func() string
-	noAddrListURL   string
+	baseURL           string
+	urlErr            string
+	user              string
+	pass              string
+	insecure          bool
+	gatewayOverride   string
+	routeTable        string
+	forwardDNS        string
+	addrList          string
+	syncRoutes        bool
+	syncDomains       bool
+	rosMode           string
+	useBinAPI         bool
+	apiPort           int
+	apiTLS            bool
+	dynamicTimeout    string
+	syncPolicyCIDRs   bool
+	staticPrefixLimit int
+	bgpLocalAS        uint32
+	bgpRemoteAS       uint32
+	bgpPeerIP         string
+	bgpRouteTable     string
+	httpClient        *http.Client
+	domainsFile       string
+	logger            *RingLogger
+	autoGatewayFn     func() string
+	noAddrListURL     string
+
+	binSync    *ROSBinClient
+	binLive    *ROSBinClient
+	bgpSpeaker *ROSBGPSpeaker
+	dynStore   *DynIPStore
+	policy     *PolicyEngine
+	mgr        *TunnelManager
+
+	liveBreakerMu    sync.Mutex
+	liveBreakerUntil time.Time
 
 	syncMu              sync.Mutex
 	mu                  sync.Mutex
@@ -135,7 +180,7 @@ type ROSClient struct {
 	hadSuccess          bool
 }
 
-// NewROSClient builds a RouterOS REST client initialized from environment variables.
+// NewROSClient builds a RouterOS client initialized from environment variables.
 func NewROSClient(cfgDir string, logger *RingLogger) *ROSClient {
 	baseURL := normalizeROSBaseURL(os.Getenv("ROS_URL"))
 	user := strings.TrimSpace(os.Getenv("ROS_USER"))
@@ -143,21 +188,54 @@ func NewROSClient(cfgDir string, logger *RingLogger) *ROSClient {
 	insecure := envOr("ROS_TLS_INSECURE", "true") == "true"
 	urlErr := validateROSBaseURL(baseURL)
 
+	rawMode := strings.TrimSpace(os.Getenv("ROS_MODE"))
+	if rawMode == "" && baseURL != "" {
+		rawMode = ROSModeManual
+	}
+	mode := normalizeROSMode(rawMode)
+
+	useBinAPI := envOr("ROS_USE_BINARY_API", "true") == "true"
+	apiTLS := envOr("ROS_API_TLS", "false") == "true"
+	apiPort := 8728
+	if apiTLS {
+		apiPort = 8729
+	}
+
+	dynStorePath := ""
+	if strings.TrimSpace(cfgDir) != "" {
+		dynStorePath = filepath.Join(cfgDir, "ros-dynamic.json")
+	}
+
 	c := &ROSClient{
-		baseURL:         baseURL,
-		urlErr:          urlErr,
-		user:            user,
-		pass:            pass,
-		insecure:        insecure,
-		gatewayOverride: normalizeROSContainerIP(os.Getenv("ROS_CONTAINER_IP")),
-		routeTable:      strings.TrimSpace(os.Getenv("ROS_ROUTE_TABLE")),
-		forwardDNS:      envOr("ROS_FORWARD_DNS", "AmneziaWGRoS"),
-		addrList:        envOr("ROS_ADDRESS_LIST", "AmneziaWGRoS"),
-		syncRoutes:      envOr("ROS_SYNC_ROUTES", "on") == "on",
-		syncDomains:     envOr("ROS_SYNC_DOMAINS", "on") == "on",
-		domainsFile:     filepath.Join(cfgDir, "domains.txt"),
-		logger:          logger,
-		httpClient:      newROSHTTPClient(insecure),
+		baseURL:           baseURL,
+		urlErr:            urlErr,
+		user:              user,
+		pass:              pass,
+		insecure:          insecure,
+		gatewayOverride:   normalizeROSContainerIP(os.Getenv("ROS_CONTAINER_IP")),
+		routeTable:        strings.TrimSpace(os.Getenv("ROS_ROUTE_TABLE")),
+		forwardDNS:        envOr("ROS_FORWARD_DNS", "AmneziaWGRoS"),
+		addrList:          envOr("ROS_ADDRESS_LIST", "AmneziaWGRoS"),
+		syncRoutes:        envOr("ROS_SYNC_ROUTES", "on") == "on",
+		syncDomains:       envOr("ROS_SYNC_DOMAINS", "on") == "on",
+		rosMode:           mode,
+		useBinAPI:         useBinAPI,
+		apiPort:           apiPort,
+		apiTLS:            apiTLS,
+		dynamicTimeout:    normalizeROSDynamicTimeout(os.Getenv("ROS_DYNAMIC_TIMEOUT")),
+		syncPolicyCIDRs:   envOr("ROS_SYNC_POLICY_CIDRS", "true") == "true",
+		staticPrefixLimit: 2500,
+		bgpLocalAS:        65511,
+		bgpRemoteAS:       65510,
+		bgpPeerIP:         normalizeROSContainerIP(os.Getenv("ROS_BGP_PEER_IP")),
+		bgpRouteTable:     envOr("ROS_BGP_ROUTE_TABLE", "main"),
+		domainsFile:       filepath.Join(cfgDir, "domains.txt"),
+		logger:            logger,
+		httpClient:        newROSHTTPClient(insecure),
+		binSync:           NewROSBinClient(),
+		binLive:           NewROSBinClient(),
+		bgpSpeaker:        NewROSBGPSpeaker(logger),
+		dynStore:          NewDynIPStore(dynStorePath, logger),
 	}
 	c.refreshStatusLocked()
 	return c
@@ -168,6 +246,62 @@ func (c *ROSClient) SetAutoGatewayFn(fn func() string) {
 	c.mu.Lock()
 	c.autoGatewayFn = fn
 	c.mu.Unlock()
+	c.configureBGPFromState()
+}
+
+// SetPolicy attaches PolicyEngine for address_list and bgp rule synchronization.
+func (c *ROSClient) SetPolicy(p *PolicyEngine) {
+	c.mu.Lock()
+	c.policy = p
+	c.mu.Unlock()
+	c.refreshBGPDesiredPrefixes()
+}
+
+// SetManager attaches TunnelManager for WireGuard endpoint exclusion during ROS sync.
+func (c *ROSClient) SetManager(m *TunnelManager) {
+	c.mu.Lock()
+	c.mgr = m
+	c.mu.Unlock()
+}
+
+// Close shuts down persistent Binary API sockets, BGP speaker, and flushes dynamic IP store.
+func (c *ROSClient) Close() {
+	if c == nil {
+		return
+	}
+	if c.bgpSpeaker != nil {
+		c.bgpSpeaker.Close()
+	}
+	if c.binSync != nil {
+		c.binSync.Close()
+	}
+	if c.binLive != nil {
+		c.binLive.Close()
+	}
+	if c.dynStore != nil {
+		c.dynStore.Close()
+	}
+}
+
+// OnPolicyChanged should be invoked after policy rules or Geo databases update.
+func (c *ROSClient) OnPolicyChanged() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.lastFingerprint = ""
+	mode := c.rosMode
+	c.mu.Unlock()
+
+	if mode == ROSModeBGP {
+		c.refreshBGPDesiredPrefixes()
+		return
+	}
+	if mode == ROSModeAddressList {
+		go func() {
+			_ = c.SyncAll(nil)
+		}()
+	}
 }
 
 // Configure applies runtime AppSettings and resets backoff on credential/URL changes.
@@ -177,6 +311,39 @@ func (c *ROSClient) Configure(s AppSettings) {
 	urlErr := validateROSBaseURL(baseURL)
 	gwOverride := normalizeROSContainerIP(s.ROSContainerIP)
 	routeTable := strings.TrimSpace(s.ROSRouteTable)
+
+	rawMode := strings.TrimSpace(s.ROSMode)
+	if rawMode == "" && (s.ROSSyncRoutes || s.ROSSyncDomains || baseURL != "") {
+		rawMode = ROSModeManual
+	}
+	mode := normalizeROSMode(rawMode)
+
+	apiPort := s.ROSAPIPort
+	if apiPort <= 0 || apiPort > 65535 {
+		if s.ROSAPITLS {
+			apiPort = 8729
+		} else {
+			apiPort = 8728
+		}
+	}
+	dynTimeout := normalizeROSDynamicTimeout(s.ROSDynamicTimeout)
+	prefixLimit := s.ROSStaticPrefixLimit
+	if prefixLimit <= 0 {
+		prefixLimit = 2500
+	}
+	localAS := s.ROSBGPLocalAS
+	if localAS == 0 {
+		localAS = 65511
+	}
+	remoteAS := s.ROSBGPRemoteAS
+	if remoteAS == 0 {
+		remoteAS = 65510
+	}
+	bgpPeerIP := normalizeROSContainerIP(s.ROSBGPPeerIP)
+	bgpTable := strings.TrimSpace(s.ROSBGPRouteTable)
+	if bgpTable == "" {
+		bgpTable = "main"
+	}
 
 	var oldClient *http.Client
 
@@ -189,7 +356,14 @@ func (c *ROSClient) Configure(s AppSettings) {
 		c.routeTable != routeTable ||
 		c.addrList != strings.TrimSpace(s.ROSAddressList) ||
 		c.syncRoutes != s.ROSSyncRoutes ||
-		c.syncDomains != s.ROSSyncDomains
+		c.syncDomains != s.ROSSyncDomains ||
+		c.rosMode != mode ||
+		c.useBinAPI != s.ROSUseBinaryAPI ||
+		c.apiPort != apiPort ||
+		c.apiTLS != s.ROSAPITLS ||
+		c.dynamicTimeout != dynTimeout ||
+		c.syncPolicyCIDRs != s.ROSSyncPolicyCIDRs ||
+		c.staticPrefixLimit != prefixLimit
 
 	if c.baseURL != baseURL {
 		c.noAddrListURL = ""
@@ -210,6 +384,17 @@ func (c *ROSClient) Configure(s AppSettings) {
 	}
 	c.syncRoutes = s.ROSSyncRoutes
 	c.syncDomains = s.ROSSyncDomains
+	c.rosMode = mode
+	c.useBinAPI = s.ROSUseBinaryAPI
+	c.apiPort = apiPort
+	c.apiTLS = s.ROSAPITLS
+	c.dynamicTimeout = dynTimeout
+	c.syncPolicyCIDRs = s.ROSSyncPolicyCIDRs
+	c.staticPrefixLimit = prefixLimit
+	c.bgpLocalAS = localAS
+	c.bgpRemoteAS = remoteAS
+	c.bgpPeerIP = bgpPeerIP
+	c.bgpRouteTable = bgpTable
 
 	if c.httpClient == nil || c.insecure != s.ROSTLSSkipVerify {
 		oldClient = c.httpClient
@@ -222,19 +407,110 @@ func (c *ROSClient) Configure(s AppSettings) {
 		c.nextRetryAt = time.Time{}
 		c.lastLoggedErr = ""
 		c.lastFingerprint = ""
+		if c.binSync != nil {
+			c.binSync.Close()
+		}
+		if c.binLive != nil {
+			c.binLive.Close()
+		}
 	}
 	c.refreshStatusLocked()
 	c.mu.Unlock()
 
+	c.liveBreakerMu.Lock()
+	c.liveBreakerUntil = time.Time{}
+	c.liveBreakerMu.Unlock()
+
 	if oldClient != nil {
 		oldClient.CloseIdleConnections()
 	}
+
+	c.refreshBGPDesiredPrefixes()
+	c.configureBGPFromState()
+}
+
+func (c *ROSClient) configureBGPFromState() {
+	if c == nil || c.bgpSpeaker == nil {
+		return
+	}
+	conn := c.connSnapshot()
+	if conn.mode != ROSModeBGP {
+		c.bgpSpeaker.Configure(ROSBGPConfig{Enabled: false})
+		return
+	}
+	peerIP := firstNonEmpty(conn.bgpPeerIP, rosURLHost(conn.baseURL))
+	nh, _ := netip.ParseAddr(conn.gatewayIP)
+	c.bgpSpeaker.Configure(ROSBGPConfig{
+		Enabled:  peerIP != "" && nh.IsValid() && nh.Is4(),
+		PeerIP:   peerIP,
+		LocalAS:  conn.bgpLocalAS,
+		RemoteAS: conn.bgpRemoteAS,
+		NextHop:  nh,
+		RouterID: nh,
+	})
+}
+
+func (c *ROSClient) refreshBGPDesiredPrefixes() {
+	if c == nil || c.bgpSpeaker == nil {
+		return
+	}
+	conn := c.connSnapshot()
+	if conn.mode != ROSModeBGP {
+		return
+	}
+	c.mu.Lock()
+	pol := c.policy
+	dynStore := c.dynStore
+	mgr := c.mgr
+	c.mu.Unlock()
+
+	var exclude []netip.Addr
+	if pol != nil {
+		exclude = rosExcludedHostAddrs(conn, mgr)
+	}
+
+	seen := make(map[netip.Prefix]struct{})
+	var all []netip.Prefix
+
+	if pol != nil && conn.syncPolicyCIDRs {
+		plan := pol.ComputeRouterOSPrefixes(conn.staticPrefixLimit, exclude...)
+		for _, pfx := range plan.Prefixes {
+			m := pfx.Masked()
+			if _, ok := seen[m]; !ok {
+				seen[m] = struct{}{}
+				all = append(all, m)
+			}
+		}
+		c.mu.Lock()
+		c.status.StaticSynced = len(plan.Prefixes)
+		c.status.DroppedByLimit = plan.DroppedByLimit
+		c.mu.Unlock()
+	}
+	if dynStore != nil {
+		if pol != nil {
+			dynStore.Revalidate(func(domain string, ip netip.Addr) (bool, string) {
+				return pol.RevalidateDynamicHostIP(domain, ip, exclude...)
+			})
+		}
+		for _, pfx := range dynStore.Prefixes() {
+			if _, ok := seen[pfx]; !ok {
+				seen[pfx] = struct{}{}
+				all = append(all, pfx)
+			}
+		}
+		c.mu.Lock()
+		c.status.DynSynced = dynStore.Count()
+		c.mu.Unlock()
+	}
+	c.bgpSpeaker.SetDesiredPrefixes(all)
 }
 
 func (c *ROSClient) refreshStatusLocked() {
 	c.status.Enabled = c.baseURL != "" && c.user != "" && c.urlErr == ""
+	c.status.Mode = c.rosMode
 	c.status.URL = c.baseURL
 	c.status.RouteTable = c.routeTable
+	c.status.AddressList = c.addrList
 	c.status.ConsecFailures = c.consecutiveFailures
 	if c.nextRetryAt.IsZero() {
 		c.status.NextRetryAt = ""
@@ -252,6 +528,9 @@ func (c *ROSClient) Status() ROSSyncStatus {
 	fn := c.autoGatewayFn
 	override := c.gatewayOverride
 	st := c.status
+	bgp := c.bgpSpeaker
+	dyn := c.dynStore
+	mode := c.rosMode
 	c.mu.Unlock()
 
 	autoIP := ""
@@ -265,6 +544,20 @@ func (c *ROSClient) Status() ROSSyncStatus {
 		st.GatewayIP = autoIP
 	} else {
 		st.GatewayIP = defaultROSContainerIP
+	}
+	if dyn != nil && (mode == ROSModeAddressList || mode == ROSModeBGP) && st.DynSynced == 0 {
+		st.DynSynced = dyn.Count()
+	}
+	if bgp != nil {
+		bst := bgp.Status()
+		st.BGPState = bst.State
+		st.BGPRoutes = bst.AnnouncedRoutes
+		st.BGPPeer = bst.Peer
+		st.BGPLastError = bst.LastError
+		st.BGPNextHop = bst.NextHop
+		if mode == ROSModeBGP {
+			st.Enabled = bst.Enabled || (st.URL != "" && c.user != "")
+		}
 	}
 	return st
 }
@@ -283,17 +576,36 @@ func (c *ROSClient) autoOrDefaultGatewayIP() string {
 
 func (c *ROSClient) connSnapshot() rosConnConfig {
 	c.mu.Lock()
+	binCfg, _ := rosBinEndpointFromSettings(AppSettings{
+		ROSURL:           c.baseURL,
+		ROSUser:          c.user,
+		ROSPass:          c.pass,
+		ROSTLSSkipVerify: c.insecure,
+		ROSUseBinaryAPI:  c.useBinAPI,
+		ROSAPIPort:       c.apiPort,
+		ROSAPITLS:        c.apiTLS,
+	})
 	conn := rosConnConfig{
-		baseURL:    c.baseURL,
-		urlErr:     c.urlErr,
-		user:       c.user,
-		pass:       c.pass,
-		insecure:   c.insecure,
-		gatewayIP:  c.gatewayOverride,
-		routeTable: c.routeTable,
-		forwardDNS: c.forwardDNS,
-		addrList:   c.addrList,
-		client:     c.httpClient,
+		baseURL:           c.baseURL,
+		urlErr:            c.urlErr,
+		user:              c.user,
+		pass:              c.pass,
+		insecure:          c.insecure,
+		gatewayIP:         c.gatewayOverride,
+		routeTable:        c.routeTable,
+		forwardDNS:        c.forwardDNS,
+		addrList:          c.addrList,
+		client:            c.httpClient,
+		mode:              c.rosMode,
+		useBinAPI:         c.useBinAPI,
+		binCfg:            binCfg,
+		dynamicTimeout:    c.dynamicTimeout,
+		syncPolicyCIDRs:   c.syncPolicyCIDRs,
+		staticPrefixLimit: c.staticPrefixLimit,
+		bgpLocalAS:        c.bgpLocalAS,
+		bgpRemoteAS:       c.bgpRemoteAS,
+		bgpPeerIP:         c.bgpPeerIP,
+		bgpRouteTable:     c.bgpRouteTable,
 	}
 	c.mu.Unlock()
 
@@ -440,6 +752,10 @@ func (c *ROSClient) SyncPeriodic(mgr *TunnelManager) error {
 
 func (c *ROSClient) syncLocked(mgr *TunnelManager, isPeriodic bool) error {
 	c.mu.Lock()
+	if mgr == nil {
+		mgr = c.mgr
+	}
+	mode := c.rosMode
 	enabled := c.baseURL != "" && c.user != "" && c.urlErr == ""
 	urlErr := c.urlErr
 	syncRoutes := c.syncRoutes
@@ -449,6 +765,24 @@ func (c *ROSClient) syncLocked(mgr *TunnelManager, isPeriodic bool) error {
 	lastFP := c.lastFingerprint
 	lastFull := c.lastFullSyncAt
 	c.mu.Unlock()
+
+	conn := c.connSnapshot()
+
+	if mode == ROSModeGateway {
+		c.configureBGPFromState()
+		if !isPeriodic {
+			c.recordModeSuccess(conn, "", 0, 0, 0, 0, 0, "", isPeriodic)
+		}
+		return nil
+	}
+
+	if mode == ROSModeBGP {
+		c.configureBGPFromState()
+		c.refreshBGPDesiredPrefixes()
+		st := c.bgpSpeaker.Status()
+		c.recordModeSuccess(conn, "bgp", 0, 0, c.status.StaticSynced, st.DesiredRoutes-c.status.StaticSynced, c.status.DroppedByLimit, "bgp", isPeriodic)
+		return nil
+	}
 
 	if !enabled {
 		if urlErr != "" {
@@ -463,7 +797,25 @@ func (c *ROSClient) syncLocked(mgr *TunnelManager, isPeriodic bool) error {
 		return nil
 	}
 
-	conn := c.connSnapshot()
+	if mode == ROSModeAddressList {
+		// Reconcile at least every ~60s on periodic ticks to ensure reboot recovery and RAM timeouts.
+		if isPeriodic && lastErr == "" && lastFP == "address_list" && !lastFull.IsZero() && now.Sub(lastFull) < 55*time.Second {
+			return nil
+		}
+		staticSynced, dynSynced, dropped, transport, err := c.syncPolicyAddressListWithConn(conn, mgr)
+		if err != nil {
+			errText := err.Error()
+			if h := extractROSHint(err); h != "" && !strings.Contains(errText, h) {
+				errText += " — " + h
+			}
+			c.recordFailure(errText, true, isPeriodic)
+			return errors.New(errText)
+		}
+		c.recordModeSuccess(conn, "address_list", 0, 0, staticSynced, dynSynced, dropped, transport, isPeriodic)
+		return nil
+	}
+
+	// Legacy ROSModeManual (domains.txt + AllowedIPs)
 	var byIface map[string][]string
 	if syncRoutes && mgr != nil {
 		byIface = mgr.AllNonDefaultAllowedIPs()
@@ -522,7 +874,7 @@ func (c *ROSClient) syncLocked(mgr *TunnelManager, isPeriodic bool) error {
 		return errors.New(errText)
 	}
 
-	c.recordSuccess(conn, fp, routesCount, domainsCount, isPeriodic)
+	c.recordModeSuccess(conn, fp, routesCount, domainsCount, 0, 0, 0, "rest", isPeriodic)
 	return nil
 }
 
@@ -550,17 +902,27 @@ func (c *ROSClient) recordFailure(errText string, applyBackoff, isPeriodic bool)
 	}
 }
 
-func (c *ROSClient) recordSuccess(conn rosConnConfig, fp string, routesCount, domainsCount int, isPeriodic bool) {
+func (c *ROSClient) recordModeSuccess(conn rosConnConfig, fp string, routesCount, domainsCount, staticSynced, dynSynced, dropped int, transport string, isPeriodic bool) {
 	now := time.Now()
 	c.mu.Lock()
 	prevRoutes := c.status.Routes
 	prevDomains := c.status.Domains
+	prevStatic := c.status.StaticSynced
+	prevDyn := c.status.DynSynced
 	hadErr := c.status.LastError != "" || !c.hadSuccess
 
 	c.status.LastSync = now.UTC().Format(time.RFC3339)
 	c.status.LastError = ""
 	c.status.Routes = routesCount
 	c.status.Domains = domainsCount
+	if conn.mode != ROSModeBGP {
+		c.status.StaticSynced = staticSynced
+		c.status.DynSynced = dynSynced
+		c.status.DroppedByLimit = dropped
+	}
+	if transport != "" {
+		c.status.Transport = transport
+	}
 	c.status.GatewayIP = conn.gatewayIP
 	c.status.RouteTable = conn.routeTable
 	c.consecutiveFailures = 0
@@ -572,8 +934,28 @@ func (c *ROSClient) recordSuccess(conn rosConnConfig, fp string, routesCount, do
 	c.refreshStatusLocked()
 	c.mu.Unlock()
 
-	if c.logger != nil && (!isPeriodic || hadErr || routesCount != prevRoutes || domainsCount != prevDomains) {
-		c.logger.Logf("ROS sync OK (routes=%d, domains=%d, gw=%s)", routesCount, domainsCount, conn.gatewayIP)
+	if c.logger == nil {
+		return
+	}
+	switch conn.mode {
+	case ROSModeAddressList:
+		if !isPeriodic || hadErr || staticSynced != prevStatic || dynSynced != prevDyn {
+			c.logger.Logf("ROS address-list sync OK (list=%s, static=%d, dyn=%d, via=%s, gw=%s)",
+				conn.addrList, staticSynced, dynSynced, transport, conn.gatewayIP)
+		}
+	case ROSModeBGP:
+		if !isPeriodic || hadErr {
+			c.logger.Logf("ROS BGP routes updated (desired_static=%d, dyn=%d, next_hop=%s)",
+				c.status.StaticSynced, c.status.DynSynced, conn.gatewayIP)
+		}
+	case ROSModeGateway:
+		if !isPeriodic {
+			c.logger.Logf("ROS gateway mode active (gw=%s)", conn.gatewayIP)
+		}
+	default:
+		if !isPeriodic || hadErr || routesCount != prevRoutes || domainsCount != prevDomains {
+			c.logger.Logf("ROS sync OK (routes=%d, domains=%d, gw=%s)", routesCount, domainsCount, conn.gatewayIP)
+		}
 	}
 }
 
@@ -589,7 +971,7 @@ func rosBackoffDuration(failures int) time.Duration {
 	return d
 }
 
-// TestConnection probes /system/resource and /system/identity using saved settings or form override.
+// TestConnection probes /system/resource, /system/identity (REST) and optionally Binary API (:8728/:8729).
 func (c *ROSClient) TestConnection(override *AppSettings) ROSTestResult {
 	conn := c.connSnapshot()
 	if override != nil {
@@ -603,22 +985,46 @@ func (c *ROSClient) TestConnection(override *AppSettings) ROSTestResult {
 		if gw == "" {
 			gw = c.autoOrDefaultGatewayIP()
 		}
+		ovCopy := *override
+		ovCopy.ROSURL = baseURL
+		ovCopy.ROSUser = strings.TrimSpace(override.ROSUser)
+		ovCopy.ROSPass = pass
+		binCfg, _ := rosBinEndpointFromSettings(ovCopy)
 		conn = rosConnConfig{
 			baseURL:    baseURL,
 			urlErr:     urlErr,
-			user:       strings.TrimSpace(override.ROSUser),
+			user:       ovCopy.ROSUser,
 			pass:       pass,
 			insecure:   override.ROSTLSSkipVerify,
 			gatewayIP:  gw,
 			routeTable: strings.TrimSpace(override.ROSRouteTable),
 			client:     newROSHTTPClient(override.ROSTLSSkipVerify),
+			useBinAPI:  override.ROSUseBinaryAPI,
+			binCfg:     binCfg,
 		}
 		defer conn.client.CloseIdleConnections()
 	}
 
 	res := ROSTestResult{
-		URL:       conn.baseURL,
-		GatewayIP: conn.gatewayIP,
+		URL:        conn.baseURL,
+		GatewayIP:  conn.gatewayIP,
+		BinAPIAddr: conn.binCfg.Addr,
+	}
+
+	if conn.useBinAPI && conn.binCfg.Addr != "" && conn.urlErr == "" && conn.user != "" {
+		probe := NewROSBinClient()
+		ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+		rows, bErr := probe.Exec(ctx, conn.binCfg, "/system/identity/print")
+		cancel()
+		probe.Close()
+		if bErr == nil {
+			res.BinAPIOK = true
+			if len(rows) > 0 && res.Identity == "" {
+				res.Identity = rows[0]["name"]
+			}
+		} else {
+			res.BinAPIError = bErr.Error()
+		}
 	}
 
 	raw, status, err := c.doWithConn(conn, http.MethodGet, "/system/resource", nil)
@@ -658,7 +1064,7 @@ func (c *ROSClient) TestConnection(override *AppSettings) ROSTestResult {
 	return res
 }
 
-// CleanupManaged deletes all routes and DNS records created by awg-ctl on RouterOS.
+// CleanupManaged deletes all routes, DNS records, and managed address-list entries created by awg-ctl on RouterOS.
 func (c *ROSClient) CleanupManaged() (routesDeleted, dnsDeleted int, err error) {
 	c.syncMu.Lock()
 	defer c.syncMu.Unlock()
@@ -700,15 +1106,40 @@ func (c *ROSClient) CleanupManaged() (routesDeleted, dnsDeleted int, err error) 
 		}
 	}
 
+	addrDeleted := 0
+	if conn.mode == ROSModeAddressList && conn.addrList != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		rows, _, alErr := c.listAddressList(ctx, conn, c.binSync, conn.addrList)
+		if alErr == nil {
+			for _, row := range rows {
+				if isManagedROSComment(row.Comment) && row.ID != "" {
+					if dErr := c.removeAddressListEntry(ctx, conn, c.binSync, row.ID); dErr == nil {
+						addrDeleted++
+					}
+				}
+			}
+		}
+		cancel()
+	}
+
+	if c.dynStore != nil {
+		c.dynStore.Clear()
+	}
+	if conn.mode == ROSModeBGP {
+		c.refreshBGPDesiredPrefixes()
+	}
+
 	c.mu.Lock()
 	c.status.Routes = 0
 	c.status.Domains = 0
+	c.status.StaticSynced = 0
+	c.status.DynSynced = 0
 	c.status.LastError = ""
 	c.lastFingerprint = ""
 	c.mu.Unlock()
 
 	if c.logger != nil {
-		c.logger.Logf("ROS cleanup OK (routes_deleted=%d, dns_deleted=%d)", routesDeleted, dnsDeleted)
+		c.logger.Logf("ROS cleanup OK (routes_deleted=%d, dns_deleted=%d, addr_list_deleted=%d)", routesDeleted, dnsDeleted, addrDeleted)
 	}
 	return routesDeleted, dnsDeleted, nil
 }

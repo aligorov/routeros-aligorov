@@ -115,6 +115,9 @@ func (w *WebServer) Start() error {
 	mux.HandleFunc("POST /api/ros/sync", w.withAuth(w.handleROSSync))
 	mux.HandleFunc("POST /api/ros/test", w.withAuth(w.handleROSTest))
 	mux.HandleFunc("POST /api/ros/cleanup", w.withAuth(w.handleROSCleanup))
+	mux.HandleFunc("GET /api/ros/schema", w.withAuth(w.handleROSSchema))
+	mux.HandleFunc("POST /api/ros/provision", w.withAuth(w.handleROSProvision))
+	mux.HandleFunc("POST /api/ros/mode", w.withAuth(w.handleROSMode))
 	mux.HandleFunc("POST /api/term/exec", w.withAuth(w.handleTermExec))
 	mux.HandleFunc("POST /api/term/kill", w.withAuth(w.handleTermKill))
 
@@ -656,6 +659,9 @@ func (w *WebServer) handleROSTest(rw http.ResponseWriter, r *http.Request) {
 		ROSTLSSkipVerify *bool   `json:"ros_tls_insecure"`
 		ROSContainerIP   *string `json:"ros_container_ip"`
 		ROSRouteTable    *string `json:"ros_route_table"`
+		ROSUseBinaryAPI  *bool   `json:"ros_use_binary_api"`
+		ROSAPIPort       *int    `json:"ros_api_port"`
+		ROSAPITLS        *bool   `json:"ros_api_tls"`
 	}
 	var override *AppSettings
 	if r.Body != nil {
@@ -677,11 +683,118 @@ func (w *WebServer) handleROSTest(rw http.ResponseWriter, r *http.Request) {
 			if body.ROSRouteTable != nil {
 				cur.ROSRouteTable = *body.ROSRouteTable
 			}
+			if body.ROSUseBinaryAPI != nil {
+				cur.ROSUseBinaryAPI = *body.ROSUseBinaryAPI
+			}
+			if body.ROSAPIPort != nil {
+				cur.ROSAPIPort = *body.ROSAPIPort
+			}
+			if body.ROSAPITLS != nil {
+				cur.ROSAPITLS = *body.ROSAPITLS
+			}
 			override = &cur
 		}
 	}
 	res := w.ros.TestConnection(override)
 	writeJSON(rw, http.StatusOK, res)
+}
+
+func (w *WebServer) handleROSSchema(rw http.ResponseWriter, r *http.Request) {
+	if w.ros == nil || w.settings == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "ros client unavailable"})
+		return
+	}
+	s := w.settings.Get()
+	if qMode := strings.TrimSpace(r.URL.Query().Get("mode")); qMode != "" {
+		s.ROSMode = normalizeROSMode(qMode)
+	}
+	writeJSON(rw, http.StatusOK, w.ros.InspectSchema(s))
+}
+
+func (w *WebServer) handleROSProvision(rw http.ResponseWriter, r *http.Request) {
+	if w.ros == nil || w.settings == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "ros client unavailable"})
+		return
+	}
+	var opts ROSProvisionOptions
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&opts)
+	}
+	s := w.settings.Get()
+	res := w.ros.ProvisionSchema(s, opts)
+	if res.OK {
+		go func() {
+			_ = w.ros.SyncAll(w.mgr)
+		}()
+	}
+	writeJSON(rw, http.StatusOK, res)
+}
+
+func (w *WebServer) handleROSMode(rw http.ResponseWriter, r *http.Request) {
+	if w.ros == nil || w.settings == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "ros client unavailable"})
+		return
+	}
+	var body struct {
+		ROSMode              string  `json:"ros_mode"`
+		ROSUseBinaryAPI      *bool   `json:"ros_use_binary_api,omitempty"`
+		ROSDynamicTimeout    *string `json:"ros_dynamic_timeout,omitempty"`
+		ROSSyncPolicyCIDRs   *bool   `json:"ros_sync_policy_cidrs,omitempty"`
+		ROSStaticPrefixLimit *int    `json:"ros_static_prefix_limit,omitempty"`
+		ROSBGPLocalAS        *uint32 `json:"ros_bgp_local_as,omitempty"`
+		ROSBGPRemoteAS       *uint32 `json:"ros_bgp_remote_as,omitempty"`
+		ROSBGPPeerIP         *string `json:"ros_bgp_peer_ip,omitempty"`
+		ROSBGPRouteTable     *string `json:"ros_bgp_route_table,omitempty"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	cur := w.settings.Get()
+	cur.ROSMode = normalizeROSMode(body.ROSMode)
+	if body.ROSUseBinaryAPI != nil {
+		cur.ROSUseBinaryAPI = *body.ROSUseBinaryAPI
+	}
+	if body.ROSDynamicTimeout != nil {
+		cur.ROSDynamicTimeout = *body.ROSDynamicTimeout
+	}
+	if body.ROSSyncPolicyCIDRs != nil {
+		cur.ROSSyncPolicyCIDRs = *body.ROSSyncPolicyCIDRs
+	}
+	if body.ROSStaticPrefixLimit != nil {
+		cur.ROSStaticPrefixLimit = *body.ROSStaticPrefixLimit
+	}
+	if body.ROSBGPLocalAS != nil {
+		cur.ROSBGPLocalAS = *body.ROSBGPLocalAS
+	}
+	if body.ROSBGPRemoteAS != nil {
+		cur.ROSBGPRemoteAS = *body.ROSBGPRemoteAS
+	}
+	if body.ROSBGPPeerIP != nil {
+		cur.ROSBGPPeerIP = *body.ROSBGPPeerIP
+	}
+	if body.ROSBGPRouteTable != nil {
+		cur.ROSBGPRouteTable = *body.ROSBGPRouteTable
+	}
+	next, err := w.settings.Update(SettingsUpdate{AppSettings: cur})
+	if err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	w.ros.Configure(next)
+	if w.ros.Status().Enabled {
+		go func() {
+			_ = w.ros.SyncAll(w.mgr)
+		}()
+	}
+	st := w.ros.Status()
+	w.logger.Logf("ROS mode switched -> %s", next.ROSMode)
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":         true,
+		"settings":   w.settings.View(),
+		"ros":        st,
+		"cli_script": BuildROSSchemaCLIScript(next, st.GatewayIP, next.ROSBGPPeerIP),
+	})
 }
 
 func (w *WebServer) handleROSCleanup(rw http.ResponseWriter, _ *http.Request) {
@@ -756,8 +869,8 @@ func (w *WebServer) handleSaveSettings(rw http.ResponseWriter, r *http.Request) 
 	if w.tg != nil {
 		w.tg.Notify(TGKindConfig, "settings", "Настройки сохранены", "failover="+next.FailoverMode+", multi="+strconv.FormatBool(next.MultiTunnel))
 	}
-	w.logger.Logf("Settings updated (default_policy=%s, auto_route=%v, kill_switch=%v, multi=%v, failover=%s/%s)",
-		next.DefaultPolicy, next.AutoRoute, next.KillSwitch, next.MultiTunnel, next.FailoverMode, next.FailoverTrigger)
+	w.logger.Logf("Settings updated (default_policy=%s, ros_mode=%s, auto_route=%v, kill_switch=%v, multi=%v, failover=%s/%s)",
+		next.DefaultPolicy, next.ROSMode, next.AutoRoute, next.KillSwitch, next.MultiTunnel, next.FailoverMode, next.FailoverTrigger)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"ok":          applyErr == "",
 		"apply_error": applyErr,
@@ -806,6 +919,9 @@ func (w *WebServer) handleSaveRules(rw http.ResponseWriter, r *http.Request) {
 			"stats":       w.policy.Stats(),
 		})
 		return
+	}
+	if w.ros != nil {
+		w.ros.OnPolicyChanged()
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"ok":    true,
@@ -860,6 +976,9 @@ func (w *WebServer) handleGeoUpdate(rw http.ResponseWriter, r *http.Request) {
 	sites, ips := w.policy.NeededGeoCategories()
 	dlErr := w.geo.DownloadAndReload(cur.GeoSiteURL, cur.GeoIPURL, sites, ips)
 	applyErr := w.policy.ApplyRouting()
+	if w.ros != nil {
+		w.ros.OnPolicyChanged()
+	}
 	var errMsg string
 	if dlErr != nil {
 		errMsg = dlErr.Error()

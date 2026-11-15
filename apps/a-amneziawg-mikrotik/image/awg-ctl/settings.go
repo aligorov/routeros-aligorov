@@ -2,19 +2,28 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
-const AppVersion = "1.4.1"
+const AppVersion = "1.5.0"
 
 const (
-	DefaultGeoSiteURL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
-	DefaultGeoIPURL   = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+	ROSModeGateway     = "gateway"
+	ROSModeAddressList = "address_list"
+	ROSModeBGP         = "bgp"
+	ROSModeManual      = "manual"
+)
+
+const (
+	DefaultGeoSiteURL  = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+	DefaultGeoIPURL    = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
 	DefaultTelegramAPI = "https://api.telegram.org"
 )
 
@@ -57,16 +66,27 @@ type AppSettings struct {
 	TGSilent          bool   `json:"tg_silent"`            // disable_notification=true
 	TGDailyDigestHour int    `json:"tg_daily_digest_hour"` // -1 = off, 0..23 = UTC/local container hour
 
-	ROSURL           string `json:"ros_url"`
-	ROSUser          string `json:"ros_user"`
-	ROSPass          string `json:"ros_pass,omitempty"`
-	ROSTLSSkipVerify bool   `json:"ros_tls_insecure"`
-	ROSContainerIP   string `json:"ros_container_ip"`
-	ROSRouteTable    string `json:"ros_route_table"`
-	ROSForwardDNS    string `json:"ros_forward_dns"`
-	ROSAddressList   string `json:"ros_address_list"`
-	ROSSyncRoutes    bool   `json:"ros_sync_routes"`
-	ROSSyncDomains   bool   `json:"ros_sync_domains"`
+	ROSURL               string `json:"ros_url"`
+	ROSUser              string `json:"ros_user"`
+	ROSPass              string `json:"ros_pass,omitempty"`
+	ROSTLSSkipVerify     bool   `json:"ros_tls_insecure"`
+	ROSContainerIP       string `json:"ros_container_ip"`
+	ROSRouteTable        string `json:"ros_route_table"`
+	ROSForwardDNS        string `json:"ros_forward_dns"`
+	ROSAddressList       string `json:"ros_address_list"`
+	ROSSyncRoutes        bool   `json:"ros_sync_routes"`
+	ROSSyncDomains       bool   `json:"ros_sync_domains"`
+	ROSMode              string `json:"ros_mode"`                // "gateway" | "address_list" | "bgp" | "manual"
+	ROSUseBinaryAPI      bool   `json:"ros_use_binary_api"`      // prefer Binary API (:8728/:8729) with REST fallback
+	ROSAPIPort           int    `json:"ros_api_port"`            // default 8728 (or 8729 when ros_api_tls)
+	ROSAPITLS            bool   `json:"ros_api_tls"`             // enable TLS on Binary API
+	ROSDynamicTimeout    string `json:"ros_dynamic_timeout"`     // RAM-only timeout for DNS-learned IPs in address-list
+	ROSSyncPolicyCIDRs   bool   `json:"ros_sync_policy_cidrs"`   // sync static PROXY cidr:/geoip: into address-list
+	ROSStaticPrefixLimit int    `json:"ros_static_prefix_limit"` // cap on static address-list prefixes
+	ROSBGPLocalAS        uint32 `json:"ros_bgp_local_as"`        // container ASN for BGP mode
+	ROSBGPRemoteAS       uint32 `json:"ros_bgp_remote_as"`       // RouterOS ASN for BGP mode
+	ROSBGPPeerIP         string `json:"ros_bgp_peer_ip"`         // RouterOS BGP peer IP (empty = auto)
+	ROSBGPRouteTable     string `json:"ros_bgp_route_table"`     // target routing table on RouterOS (default "main")
 }
 
 type SettingsView struct {
@@ -148,17 +168,36 @@ func defaultSettingsFromEnv() AppSettings {
 		TGSilent:          false,
 		TGDailyDigestHour: -1,
 
-		ROSURL:           normalizeROSBaseURL(os.Getenv("ROS_URL")),
-		ROSUser:          strings.TrimSpace(os.Getenv("ROS_USER")),
-		ROSPass:          os.Getenv("ROS_PASS"),
-		ROSTLSSkipVerify: envOr("ROS_TLS_INSECURE", "true") == "true",
-		ROSContainerIP:   normalizeROSContainerIP(os.Getenv("ROS_CONTAINER_IP")),
-		ROSRouteTable:    strings.TrimSpace(os.Getenv("ROS_ROUTE_TABLE")),
-		ROSForwardDNS:    envOr("ROS_FORWARD_DNS", "AmneziaWGRoS"),
-		ROSAddressList:   envOr("ROS_ADDRESS_LIST", "AmneziaWGRoS"),
-		ROSSyncRoutes:    envOr("ROS_SYNC_ROUTES", "on") == "on",
-		ROSSyncDomains:   envOr("ROS_SYNC_DOMAINS", "on") == "on",
+		ROSURL:               normalizeROSBaseURL(os.Getenv("ROS_URL")),
+		ROSUser:              strings.TrimSpace(os.Getenv("ROS_USER")),
+		ROSPass:              os.Getenv("ROS_PASS"),
+		ROSTLSSkipVerify:     envOr("ROS_TLS_INSECURE", "true") == "true",
+		ROSContainerIP:       normalizeROSContainerIP(os.Getenv("ROS_CONTAINER_IP")),
+		ROSRouteTable:        strings.TrimSpace(os.Getenv("ROS_ROUTE_TABLE")),
+		ROSForwardDNS:        envOr("ROS_FORWARD_DNS", "AmneziaWGRoS"),
+		ROSAddressList:       envOr("ROS_ADDRESS_LIST", "AmneziaWGRoS"),
+		ROSSyncRoutes:        envOr("ROS_SYNC_ROUTES", "on") == "on",
+		ROSSyncDomains:       envOr("ROS_SYNC_DOMAINS", "on") == "on",
+		ROSMode:              normalizeROSMode(envOr("ROS_MODE", ROSModeGateway)),
+		ROSUseBinaryAPI:      envOr("ROS_BINARY_API", "on") != "off",
+		ROSAPIPort:           clampInt(atoiDef(os.Getenv("ROS_API_PORT"), 8728), 1, 65535, 8728),
+		ROSAPITLS:            envOr("ROS_API_TLS", "off") == "on",
+		ROSDynamicTimeout:    normalizeROSDynamicTimeout(envOr("ROS_DYNAMIC_TIMEOUT", "12:00:00")),
+		ROSSyncPolicyCIDRs:   envOr("ROS_SYNC_POLICY_CIDRS", "on") != "off",
+		ROSStaticPrefixLimit: clampInt(atoiDef(os.Getenv("ROS_STATIC_PREFIX_LIMIT"), 2500), 10, 100000, 2500),
+		ROSBGPLocalAS:        uint32(clampInt(atoiDef(os.Getenv("ROS_BGP_LOCAL_AS"), 65511), 1, 2147483647, 65511)),
+		ROSBGPRemoteAS:       uint32(clampInt(atoiDef(os.Getenv("ROS_BGP_REMOTE_AS"), 65510), 1, 2147483647, 65510)),
+		ROSBGPPeerIP:         normalizeROSContainerIP(os.Getenv("ROS_BGP_PEER_IP")),
+		ROSBGPRouteTable:     envOr("ROS_BGP_ROUTE_TABLE", "main"),
 	}
+}
+
+func atoiDef(raw string, def int) int {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n == 0 {
+		return def
+	}
+	return n
 }
 
 func NewSettingsStore(cfgDir string) (*SettingsStore, error) {
@@ -171,6 +210,19 @@ func NewSettingsStore(cfgDir string) (*SettingsStore, error) {
 	if err == nil {
 		loaded := st.val
 		if jerr := json.Unmarshal(b, &loaded); jerr == nil {
+			var rawKeys map[string]any
+			if json.Unmarshal(b, &rawKeys) == nil {
+				// Preserve legacy behavior when upgrading settings.json created before ros_mode existed.
+				if _, ok := rawKeys["ros_mode"]; !ok && strings.TrimSpace(loaded.ROSURL) != "" {
+					loaded.ROSMode = ROSModeManual
+				}
+				if _, ok := rawKeys["ros_use_binary_api"]; !ok {
+					loaded.ROSUseBinaryAPI = st.val.ROSUseBinaryAPI
+				}
+				if _, ok := rawKeys["ros_sync_policy_cidrs"]; !ok {
+					loaded.ROSSyncPolicyCIDRs = st.val.ROSSyncPolicyCIDRs
+				}
+			}
 			st.val = normalizeSettings(loaded, st.val)
 		}
 	} else if !os.IsNotExist(err) {
@@ -292,7 +344,149 @@ func normalizeSettings(s, fallback AppSettings) AppSettings {
 	if strings.TrimSpace(s.ROSAddressList) == "" {
 		s.ROSAddressList = fallback.ROSAddressList
 	}
+	s.ROSMode = normalizeROSMode(s.ROSMode)
+	defAPIPort := 8728
+	if s.ROSAPITLS {
+		defAPIPort = 8729
+	}
+	s.ROSAPIPort = clampInt(s.ROSAPIPort, 1, 65535, defAPIPort)
+	s.ROSDynamicTimeout = normalizeROSDynamicTimeout(s.ROSDynamicTimeout)
+	s.ROSStaticPrefixLimit = clampInt(s.ROSStaticPrefixLimit, 10, 100000, 2500)
+	if s.ROSBGPLocalAS == 0 {
+		s.ROSBGPLocalAS = fallback.ROSBGPLocalAS
+		if s.ROSBGPLocalAS == 0 {
+			s.ROSBGPLocalAS = 65511
+		}
+	}
+	if s.ROSBGPRemoteAS == 0 {
+		s.ROSBGPRemoteAS = fallback.ROSBGPRemoteAS
+		if s.ROSBGPRemoteAS == 0 {
+			s.ROSBGPRemoteAS = 65510
+		}
+	}
+	s.ROSBGPPeerIP = normalizeROSContainerIP(s.ROSBGPPeerIP)
+	s.ROSBGPRouteTable = strings.TrimSpace(s.ROSBGPRouteTable)
+	if s.ROSBGPRouteTable == "" {
+		s.ROSBGPRouteTable = "main"
+	}
 	return s
+}
+
+func normalizeROSMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case ROSModeAddressList, "address-list", "mangle":
+		return ROSModeAddressList
+	case ROSModeBGP:
+		return ROSModeBGP
+	case ROSModeManual, "custom":
+		return ROSModeManual
+	case ROSModeGateway, "full":
+		return ROSModeGateway
+	default:
+		return ROSModeGateway
+	}
+}
+
+func normalizeROSDynamicTimeout(raw string) string {
+	d, ok := parseROSDuration(raw)
+	if !ok || d < time.Minute {
+		return "12:00:00"
+	}
+	if d > 30*24*time.Hour {
+		d = 30 * 24 * time.Hour
+	}
+	return formatROSDuration(d)
+}
+
+// parseROSDuration parses RouterOS timeouts (12:00:00, 1d, 2w3d, 12h30m) and clamps within bounds.
+func parseROSDuration(raw string) (time.Duration, bool) {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	if s == "" {
+		return 0, false
+	}
+	if d, err := time.ParseDuration(s); err == nil && d > 0 {
+		return d, true
+	}
+	// Support RouterOS compact day+time strings like "1d12:00:00" or "1w2d03:04:05"
+	if colon := strings.IndexByte(s, ':'); colon > 0 {
+		for idx := colon - 1; idx >= 0; idx-- {
+			if s[idx] == 'd' || s[idx] == 'w' {
+				s = s[:idx+1] + " " + s[idx+1:]
+				break
+			}
+		}
+	}
+	var total time.Duration
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return 0, false
+	}
+	for _, part := range fields {
+		if strings.Contains(part, ":") {
+			hms := strings.Split(part, ":")
+			if len(hms) != 3 {
+				return 0, false
+			}
+			hh, err1 := strconv.Atoi(hms[0])
+			mm, err2 := strconv.Atoi(hms[1])
+			ss, err3 := strconv.Atoi(hms[2])
+			if err1 != nil || err2 != nil || err3 != nil || hh < 0 || mm < 0 || ss < 0 || mm >= 60 || ss >= 60 {
+				return 0, false
+			}
+			total += time.Duration(hh)*time.Hour + time.Duration(mm)*time.Minute + time.Duration(ss)*time.Second
+			continue
+		}
+		// RouterOS compact form like 1w2d3h4m5s
+		idx := 0
+		for idx < len(part) {
+			j := idx
+			for j < len(part) && part[j] >= '0' && part[j] <= '9' {
+				j++
+			}
+			if j == idx || j >= len(part) {
+				return 0, false
+			}
+			val, err := strconv.Atoi(part[idx:j])
+			if err != nil {
+				return 0, false
+			}
+			switch part[j] {
+			case 'w':
+				total += time.Duration(val) * 7 * 24 * time.Hour
+			case 'd':
+				total += time.Duration(val) * 24 * time.Hour
+			case 'h':
+				total += time.Duration(val) * time.Hour
+			case 'm':
+				total += time.Duration(val) * time.Minute
+			case 's':
+				total += time.Duration(val) * time.Second
+			default:
+				return 0, false
+			}
+			idx = j + 1
+		}
+	}
+	return total, total > 0
+}
+
+func formatROSDuration(d time.Duration) string {
+	sec := int64(d.Seconds())
+	if sec < 60 {
+		sec = 60
+	}
+	days := sec / 86400
+	rem := sec % 86400
+	hh := rem / 3600
+	mm := (rem % 3600) / 60
+	ss := rem % 60
+	if days > 0 {
+		if hh == 0 && mm == 0 && ss == 0 {
+			return fmt.Sprintf("%dd", days)
+		}
+		return fmt.Sprintf("%dd %02d:%02d:%02d", days, hh, mm, ss)
+	}
+	return fmt.Sprintf("%02d:%02d:%02d", hh, mm, ss)
 }
 
 func (s *SettingsStore) Get() AppSettings {
