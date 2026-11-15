@@ -293,20 +293,29 @@
         </div>
         <div>
           <label class="mut">Proxy DNS (IP:port или DoH https://...)</label>
-          <input id="setProxyDNS" placeholder="1.1.1.1:53 или https://dns.quic.best/dns-query">
+          <input id="setProxyDNS" placeholder="1.1.1.1:53 или https://w.quic.best/dns-query">
           <div class="row" style="margin-top:5px;gap:5px">
-            <button type="button" class="sm" onclick="document.getElementById('setProxyDNS').value='https://dns.quic.best/dns-query,1.1.1.1:53'">DoH quic.best</button>
+            <button type="button" class="sm" onclick="document.getElementById('setProxyDNS').value='https://w.quic.best/dns-query,1.1.1.1:53'">w.quic.best</button>
             <button type="button" class="sm" onclick="document.getElementById('setProxyDNS').value='https://1.1.1.1/dns-query'">DoH 1.1.1.1</button>
             <button type="button" class="sm" onclick="document.getElementById('setProxyDNS').value='https://dns.google/dns-query'">DoH Google</button>
             <button type="button" class="sm" onclick="document.getElementById('setProxyDNS').value='1.1.1.1:53,8.8.8.8:53'">UDP 1.1.1.1</button>
+          </div>
+          <div class="row" style="margin-top:5px;gap:6px;flex-wrap:nowrap">
+            <select id="selProxyDoH" style="flex:1;min-width:0" onchange="pickDoHFromCatalog('setProxyDNS',this,'chkProxyDoHAppend')"></select>
+            <label class="chk" style="white-space:nowrap;font-size:.76rem" title="Добавлять выбранный DoH через запятую к текущему значению"><input type="checkbox" id="chkProxyDoHAppend"> + к списку</label>
           </div>
         </div>
         <div>
           <label class="mut">Direct DNS (для DIRECT: IP:port или DoH)</label>
           <input id="setDirectDNS" placeholder="77.88.8.8:53,1.1.1.1:53">
           <div class="row" style="margin-top:5px;gap:5px">
-            <button type="button" class="sm" onclick="document.getElementById('setDirectDNS').value='https://dns.quic.best/dns-query,77.88.8.8:53'">DoH quic.best</button>
+            <button type="button" class="sm" onclick="document.getElementById('setDirectDNS').value='https://w.quic.best/dns-query,77.88.8.8:53'">w.quic.best</button>
+            <button type="button" class="sm" onclick="document.getElementById('setDirectDNS').value='https://common.dot.dns.yandex.net/dns-query,77.88.8.8:53'">Яндекс DoH</button>
             <button type="button" class="sm" onclick="document.getElementById('setDirectDNS').value='77.88.8.8:53,1.1.1.1:53'">UDP 77.88.8.8</button>
+          </div>
+          <div class="row" style="margin-top:5px;gap:6px;flex-wrap:nowrap">
+            <select id="selDirectDoH" style="flex:1;min-width:0" onchange="pickDoHFromCatalog('setDirectDNS',this,'chkDirectDoHAppend')"></select>
+            <label class="chk" style="white-space:nowrap;font-size:.76rem" title="Добавлять выбранный DoH через запятую к текущему значению"><input type="checkbox" id="chkDirectDoHAppend"> + к списку</label>
           </div>
         </div>
         <div><label class="mut">Автообновление Geo (ч, 0 = выкл)</label><input id="setGeoHours" type="number" min="0" value="0"></div>
@@ -1179,6 +1188,8 @@ async function loadSettings() {
     document.getElementById('setDefPol').value = s.default_policy || 'proxy';
     document.getElementById('setProxyDNS').value = s.proxy_dns || '';
     document.getElementById('setDirectDNS').value = s.direct_dns || '';
+    syncDoHSelect('setProxyDNS', 'selProxyDoH');
+    syncDoHSelect('setDirectDNS', 'selDirectDoH');
     document.getElementById('setGeoHours').value = s.geo_auto_update_hours || 0;
     document.getElementById('setAutoRoute').checked = !!s.auto_route;
     document.getElementById('setKillSwitch').checked = !!s.kill_switch;
@@ -1431,6 +1442,40 @@ function handleTermKey(e) {
   }
 }
 
+const DOH_CATALOG = [["Обход геоблока",[["w.quic.best","https://w.quic.best/dns-query"],["Geodema DNS","https://dns.geodema.love/dns-query"],["Semqka DNS","https://dns.semqka.xyz/dns-query"],["Wlrus DNS","https://dns.wlrus.cfd/dns-query"],["Geohide — RU","https://geohide.ru/dns-query"],["Geohide — EU","https://eu.geohide.ru/dns-query"],["Geohide — US","https://us.geohide.ru/dns-query"],["Comss.one DNS","https://dns.comss.one/dns-query"],["Comss.one DNS — router","https://router.comss.one/dns-query"],["Malw.link — Direct","https://dns.malw.link/dns-query"],["Malw.link — CF Gateway","https://5u35p8m9i7.cloudflare-gateway.com/dns-query"],["DNS AI","https://dns.dns-ai.ru/dns-query"],["Shecan","https://free.shecan.ir/dns-query"],["Zapret.moe DNS","https://dns.zapret.moe/dns-query"],["Dagami DNS","https://dns.dagami.ru/dns-query"],["Tamaev DNS","https://tamaev-gifts.xyz/dns-query"],["MagicDNS","https://api.magicdns.ru/sync"],["WebShift DNS","https://d.webshiftvpn.ru/dns-query"]]],["Глобальные",[["Cloudflare","https://cloudflare-dns.com/dns-query"],["Cloudflare — Malware","https://security.cloudflare-dns.com/dns-query"],["Cloudflare — Family (18+, malware)","https://family.cloudflare-dns.com/dns-query"],["Cloudflare","https://dns.cloudflare.com/dns-query"],["Google DNS","https://dns.google/dns-query"],["Quad9 — Secure","https://dns.quad9.net/dns-query"],["Quad9 — dns10","https://dns10.quad9.net/dns-query"],["Quad9 — dns11","https://dns11.quad9.net/dns-query"],["Control D — Free resolver","https://freedns.controld.com/p0"],["Control D — p1","https://freedns.controld.com/p1"],["Control D — p2","https://freedns.controld.com/p2"],["Control D — p3","https://freedns.controld.com/p3"],["Alibaba DNS","https://dns.alidns.com/dns-query"],["DNS.SB — Anycast","https://doh.dns.sb/dns-query"],["DNS.SB — Alt DoH","https://doh.sb/dns-query"],["V.recipes — Unfiltered","https://v.recipes/dns-query"],["V.recipes — Security","https://v.recipes/dns-security"],["V.recipes — Adblock","https://v.recipes/dns-adblock"],["V.recipes — ECS Optimized","https://v.recipes/dns-ecs"],["V.recipes — CN Optimized","https://v.recipes/dns-cn"],["V.recipes — DNS64","https://v.recipes/dns64"],["FoxyFy — Generic","https://dns.foxyfy.net/dns-query"],["FoxyFy — EU Center","https://de-du.foxyfy.net/dns-query"],["FoxyFy — EU South","https://de-f1.foxyfy.net/dns-query"],["FoxyFy — EU Romania","https://ro-bu.foxyfy.net/dns-query"],["FoxyFy — EU Spain","https://es-ma.foxyfy.net/dns-query"],["FoxyFy — US East","https://us-ny.foxyfy.net/dns-query"],["FoxyFy — US West","https://us-la.foxyfy.net/dns-query"],["FoxyFy — Asia Japan","https://jp-to.foxyfy.net/dns-query"],["JupitrDNS","https://dns.jupitrdns.com/dns-query"],["Surfshark DNS","https://dns.surfsharkdns.com/dns-query"],["UsablePrivacy — AdFree","https://adfree.usableprivacy.net/dns-query"],["OpenBLD — ada","https://ada.openbld.net/dns-query"],["OpenBLD — ric","https://ric.openbld.net/dns-query"],["DNSWarden — uncensored","https://dns.dnswarden.com/uncensored"],["MarbledFennec","https://dns.marbledfennec.net/dns-query"],["OSZX","https://dns.oszx.co/dns-query"],["DNSPub","https://dns.pub/dns-query"],["RabbitDNS","https://dns.rabbitdns.org/dns-query"],["RabbitDNS — family","https://family.rabbitdns.org/dns-query"],["RabbitDNS — security","https://security.rabbitdns.org/dns-query"],["Cloudflare Gateway — frd4wvnobp","https://frd4wvnobp.cloudflare-gateway.com/dns-query"],["Synology Me — ibksturm","https://ibksturm.synology.me/dns-query"],["Techomespace — rx","https://rx.techomespace.com/dns-query"]]],["Приватность",[["Mullvad DNS","https://dns.mullvad.net/dns-query"],["Mullvad DNS — Base (реклама+трекеры+малварь+18+)","https://base.dns.mullvad.net/dns-query"],["Mullvad DNS — adblock","https://adblock.dns.mullvad.net/dns-query"],["Mullvad DNS — all","https://all.dns.mullvad.net/dns-query"],["Mullvad DNS — extended","https://extended.dns.mullvad.net/dns-query"],["Mullvad DNS — family","https://family.dns.mullvad.net/dns-query"],["AhaDNS","https://doh.la.ahadns.net/dns-query"],["AhaDNS","https://doh.nl.ahadns.net/dns-query"],["RethinkDNS — basic","https://basic.rethinkdns.com/dns-query"],["LibreDNS","https://doh.libredns.gr/dns-query"],["LibreDNS — ads","https://doh.libredns.gr/ads"],["BlahDNS — Германия","https://doh-de.blahdns.com/dns-query"],["BlahDNS — Япония","https://doh-jp.blahdns.com/dns-query"],["BlahDNS — Швейцария (только IPv6)","https://doh-ch.blahdns.com/dns-query"],["Shadow DNS","https://dns.shadowvpn.io/dns-query"],["WeDNS (WeVPN) — Unfiltered","https://dns.wevpn.com/dns-query"],["WeDNS (WeVPN) — WeBlock","https://dns-weblock.wevpn.com/dns-query"],["Njalla","https://dns.njal.la/dns-query"]]],["Семейные",[["AdGuard DNS — Default (реклама, фишинг)","https://dns.adguard-dns.com/dns-query"],["AdGuard DNS — Family (+18+, малварь)","https://family.adguard-dns.com/dns-query"],["AdGuard DNS — Unfiltered","https://unfiltered.adguard-dns.com/dns-query"],["CleanBrowsing — Security","https://doh.cleanbrowsing.org/doh/security-filter"],["CleanBrowsing — Adult (malware & 18+)","https://doh.cleanbrowsing.org/doh/adult-filter"],["CleanBrowsing — family-filter","https://doh.cleanbrowsing.org/doh/family-filter"],["DNS.Forge — Normal (базовый адблок)","https://dnsforge.de/dns-query"],["DNS.Forge — Clean (+родительский контроль)","https://clean.dnsforge.de/dns-query"],["DNS.Forge — Hard (жёсткие списки блокировки)","https://hard.dnsforge.de/dns-query"],["DNS.Forge — Blank (без фильтров)","https://blank.dnsforge.de/dns-query"],["DNS for Family","https://dns-doh.dnsforfamily.com/dns-query"]]],["Европа",[["DNS4EU — Unfiltered","https://unfiltered.joindns4.eu/dns-query"],["DNS4EU — Protective","https://protective.joindns4.eu/dns-query"],["DNS4EU — Protective + Child","https://child.joindns4.eu/dns-query"],["DNS4EU — Protective + AdBlock","https://noads.joindns4.eu/dns-query"],["DNS4EU — child-noads","https://child-noads.joindns4.eu/dns-query"],["SWITCH DNS","https://dns.switch.ch/dns-query"],["UncensoredDNS — Anycast","https://anycast.uncensoreddns.org/dns-query"],["UncensoredDNS — Unicast DK","https://unicast.uncensoreddns.org/dns-query"],["FFMUC — Full","https://doh.ffmuc.net/dns-query"],["Applied Privacy — dot1","https://doh.applied-privacy.net/query"],["Wikimedia DNS","https://wikimedia-dns.org/dns-query"],["HaGeZi — Falkenstein (Full)","https://root.hagezi.org/dns-query"],["HaGeZi — Nürnberg (Full)","https://wurzn.hagezi.org/dns-query"],["HaGeZi — Helsinki (Full)","https://juuri.hagezi.org/dns-query"],["HaGeZi — Threat-only","https://ctif.hagezi.org/dns-query"],["Freedom MyDNS — Freedom","https://freedom.mydns.network/dns-query"],["BELNET","https://dns.belnet.be/dns-query"],["AA ISP","https://dns.aa.net.uk/dns-query"],["DigitalSize","https://dns.digitalsize.net/dns-query"],["CZ.NIC ODVR — ODVR","https://odvr.nic.cz/dns-query"],["CZ.NIC ODVR","https://odvr.nic.cz/doh"],["Kernel Error","https://dns.kernel-error.de/dns-query"],["Restena — dnspub","https://dnspub.restena.lu/dns-query"],["Restena — kaitain","https://kaitain.restena.lu/dns-query"],["Digitale Gesellschaft","https://dns.digitale-gesellschaft.ch/dns-query"],["DynX — Adblocker UDP/TCP","https://dns.dynx.pro/dns-query"],["DynX — Adblock & Family","https://dns.dynx.pro/dns-query/family"],["DNS Bunker","https://dnsbunker.org/dns-query"],["NWPS.fi — PUBLIC","https://public.ns.nwps.fi/dns-query"],["NWPS.fi — KIDS","https://kids.ns.nwps.fi/dns-query"],["NWPS.fi — PROTECTIVE","https://protective.ns.nwps.fi/dns-query"],["NWPS.fi — UNFILTERED","https://unfiltered.ns.nwps.fi/dns-query"],["DNSGuard","https://dns.dnsguard.pub/dns-query"],["AS212683","https://dns.as212683.net/dns-query"],["Hostux","https://dns.hostux.net/dns-query"],["Hostux — AdBlocking","https://dns.hostux.net/ads"],["Arnor DNS","https://nsec.arnor.org/dns-query"],["DNS4All","https://doh.dns4all.eu/dns-query"],["DNS4All — DNS64","https://doh64.dns4all.eu/dns-query"],["DNSHome","https://dns.dnshome.de/dns-query"],["EasyHNS","https://dns.easyhns.com/dns-query"],["Cert EE","https://dns.cert.ee/dns-query"],["DeCloudUs","https://dns.decloudus.com/dns-query"],["Pumplex","https://dns.pumplex.com/dns-query"]]],["Азия",[["Quad101","https://dns.twnic.tw/dns-query"],["DNSPod (Tencent)","https://doh.pub/dns-query"],["DNSPod (Tencent) — SM2 (гос. крипто КНР)","https://sm2.doh.pub/dns-query"],["OneDNS (pure) — Pure (без фильтрации)","https://doh-pure.onedns.net/dns-query"],["TiarAP — tiarap.org","https://doh.tiarap.org/dns-query"],["TiarAP — tiar.app","https://doh.tiar.app/dns-query"],["TiarAP — jp","https://jp.tiarap.org/dns-query"],["TiarAP — jp","https://jp.tiar.app/dns-query"],["Seby DNS — Primary","https://doh.seby.io/dns-query"],["Seby DNS — Alt","https://doh-2.seby.io/dns-query"],["IIJ Public DNS","https://public.dns.iij.jp/dns-query"],["BebasDNS","https://dns.bebasid.com/dns-query"],["BebasDNS — Security","https://security.dns.bebasid.com/dns-query"],["BebasDNS — Unfiltered","https://unfiltered.dns.bebasid.com/dns-query"],["BebasDNS — Family","https://family.dns.bebasid.com/dns-query"],["BebasDNS — Hagezi","https://dns.bebasid.com/dns-hagezi"],["BebasDNS — OISD","https://dns.bebasid.com/dns-oisd"],["BebasDNS — antivirus","https://antivirus.bebasid.com/dns-query"],["BebasDNS — unfiltered","https://dns.bebasid.com/unfiltered"],["BebasDNS — adblock","https://internetsehat.bebasid.com/adblock"],["BebasDNS — internetsehat","https://internetsehat.bebasid.com/dns-query"],["Caliph DNS","https://dns.caliph.dev/dns-query"],["DNS over Tor — Hong Kong","https://hongkong.dnsovertor.cc/dns-query"],["DNS over Tor — Japan","https://japan.dnsovertor.cc/dns-query"],["DNS over Tor — Chuncheon 1","https://chuncheon.dnsovertor.cc/dns-query"],["DNS over Tor — Chuncheon 2","https://chuncheon1.dnsovertor.cc/dns-query"],["DNS over Tor — Seoul","https://seoul.dnsovertor.cc/dns-query"],["DNS over Tor — Singapore","https://singapore.dnsovertor.cc/dns-query"],["SEIA DNS","https://dns.seia.io/dns-query"],["SEIA DNS — Secondary","https://secondary.dns.seia.io/dns-query"],["18bit DNS","https://doh.18bit.cn/dns-query"],["360 DNS","https://doh.360.cn/dns-query"],["OneDNS","https://doh.onedns.net/dns-query"]]],["Северная Америка",[["CIRA Canadian Shield — Private (просто резолвинг)","https://private.canadianshield.cira.ca/dns-query"],["CIRA Canadian Shield — Protected (+малварь/фишинг)","https://protected.canadianshield.cira.ca/dns-query"],["CIRA Canadian Shield — Family (+порно)","https://family.canadianshield.cira.ca/dns-query"],["OpenDNS (Cisco)","https://doh.opendns.com/dns-query"],["OpenDNS (Cisco) — FamilyShield (порно, прокси, фишинг)","https://doh.familyshield.opendns.com/dns-query"],["OpenDNS (Cisco)","https://doh.sandbox.opendns.com/dns-query"],["Ibuki DNS","https://ibuki.cgnat.net/dns-query"],["HE.net — ordns","https://ordns.he.net/dns-query"]]],["Россия",[["Яндекс DNS — Базовый","https://common.dot.dns.yandex.net/dns-query"],["Яндекс DNS — Безопасный","https://safe.dot.dns.yandex.net/dns-query"],["Яндекс DNS — Семейный","https://family.dot.dns.yandex.net/dns-query"]]]];
+function initDoHCatalog() {
+  const total = DOH_CATALOG.reduce((n, g) => n + g[1].length, 0);
+  ['selProxyDoH', 'selDirectDoH'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = `<option value="">— Каталог DoH dns.quic.best (${total}) —</option>` +
+      DOH_CATALOG.map(([grp, items]) =>
+        `<optgroup label="${esc(grp)} (${items.length})">` +
+        items.map(([name, url]) => `<option value="${esc(url)}">${esc(name)} · ${esc(url.replace(/^https:\/\//, ''))}</option>`).join('') +
+        `</optgroup>`
+      ).join('');
+  });
+}
+function syncDoHSelect(inputId, selId) {
+  const inp = document.getElementById(inputId);
+  const sel = document.getElementById(selId);
+  if (!inp || !sel) return;
+  const first = (inp.value || '').split(',')[0].trim();
+  const has = Array.from(sel.options).some(o => o.value === first);
+  sel.value = has ? first : '';
+}
+function pickDoHFromCatalog(inputId, sel, appendId) {
+  const url = (sel && sel.value || '').trim();
+  if (!url) return;
+  const inp = document.getElementById(inputId);
+  const append = appendId && document.getElementById(appendId)?.checked;
+  if (!append) { inp.value = url; return; }
+  const cur = (inp.value || '').split(',').map(x => x.trim()).filter(Boolean);
+  if (!cur.includes(url)) cur.push(url);
+  inp.value = cur.join(',');
+}
+
+initDoHCatalog();
 termAppend('Web Terminal (AmneziaWG 3.1). Выберите кнопку сверху или введите команду.\n', 'term-dim');
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(true); });
 refresh(true);
