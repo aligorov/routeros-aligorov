@@ -1,94 +1,123 @@
 # A-amneziawg-mikrotik
 
-Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go` `v3.1.20260828` + `awg-quick` `v3.1.20260812`) для RouterOS со встроенным **WebUI (`:8092`)**, **мульти-профилями (`.conf`)**, **GeoSite / GeoIP + правилами `PROXY / DIRECT / DROP`**, вкладкой **Настройки**, **QR-генератором**, **DNS-форвардером (`:53`)**, **health-зондом (`:8081`)** для `/tool/netwatch` и **REST-синхронизацией RouterOS**.
+Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go v3.1.20260828` + `awg-quick v3.1.20260812`) для **MikroTik RouterOS (`/app`)** с современным **WebUI (`:8092`)**, одновременной работой нескольких туннелей (**Multi-Tunnel**), автоматическим переключением (**Auto-Failover**), маршрутизацией по **GeoSite / GeoIP**, встроенным **DoH DNS-форвардером (`:53`)**, **Telegram-уведомлениями** и синхронизацией с **RouterOS REST API**.
 
-- Образ: `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`1.3.3`, `arm64`, `amd64`, `arm/v7`).
-- WebUI: `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox).
-- Сеть: RouterOS `/app` создаёт выделенный `veth` автоматически (без предварительного создания сети).
-- Том: `awg-config` → `/etc/amnezia/amneziawg` (`*.conf`, `.active`, `settings.json`, `rules.conf`, `geo/`, `domains.txt`).
+- **Образ:** `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`v1.4.0`, `linux/arm64`)
+- **WebUI:** `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox)
+- **Сеть:** `/app` автоматически создаёт выделенный `veth` (без ручной подготовки интерфейсов)
+- **Том:** `awg-config` → `/etc/amnezia/amneziawg` (`*.conf`, `.active`, `settings.json`, `rules.conf`, `geo/`, `domains.txt`)
+- **Порты:** `8092:8080/tcp` (WebUI), `51821:51820/udp` (AWG Server), внутри контейнера также `:53/udp+tcp` (DNS) и `:8081/tcp` (health-зонд туннеля)
+
+---
+
+## Возможности (v1.4.0)
+
+- **Multi-Tunnel и приоритеты профилей** — загрузка любого числа `.conf` (drag-and-drop в браузере), порядок приоритетов (`#1` — Primary), одновременный подъём нескольких туннелей в отдельных таблицах (`awg`, `202+`, `210`), проверка конфликтов подсетей `Address` и переключение Primary в один клик.
+- **Auto-Failover (`Cold Switch` и `Hot Standby`)** — контроль здоровья каждого профиля по `Hybrid` (`Handshake + TCP-probe`), только `Handshake` или только `TCP-probe`; настройка интервала, порога ошибок, cooldown и авто-возврата (**Failback**) на приоритет `#1`.
+- **Правила маршрутизации и GeoSite / GeoIP** — поддержка баз `geosite.dat` и `geoip.dat` (по умолчанию из `Loyalsoldier/v2ray-rules-dat`) с автообновлением по расписанию; политика по умолчанию (`PROXY` / `DIRECT`), правила `PROXY` (основной или конкретный туннель `PROXY:<iface>`), `DIRECT`, `DROP`, готовые пресеты (Реклама → `DROP`, РФ → `DIRECT`, YouTube/Telegram → `PROXY`) и проверка маршрута для любого домена или IP.
+- **DNS-форвардер + DoH (RFC 8484)** — локальный DNS на `:53` (UDP/TCP), раздельные **Proxy DNS** (строго через туннель с `fwmark`) и **Direct DNS**, плюс встроенный каталог из **179 DoH-серверов** (`dns.quic.best`, включая `w.quic.best`) с поддержкой fallback-цепочек.
+- **Telegram-уведомления** — отправка алертов о старте, failover-переключениях, падениях и ежедневной сводки в ЛС, группу или топик форума (`message_thread_id`, с отдельным топиком для критических алертов); маршрут доставки до `api.telegram.org` (`Auto` / напрямую / через туннель) и поддержка зеркала Bot API.
+- **Генератор / QR, Web-терминал и Логи** — генерация ключей и параметров обфускации AWG 3.1 (`Jc`, `S1`, `S2`), экспорт клиентских конфигов и QR-кодов, встроенный shell-терминал (`awg show`, `ip route`, диагностика) и полноэкранный просмотр логов с фильтром.
+- **Интеграция с RouterOS** — health-эндпоинт `:8081` для `/tool/netwatch`, авто-синхронизация маршрутов `AllowedIPs` и DNS-доменов через RouterOS REST API.
+
+---
+
+## Интерфейс
+
+### Статус туннелей, Multi-Tunnel и Failover
+![Статус и Multi-Tunnel Failover](screenshots/status.png)
+
+### Правила маршрутизации и GeoSite / GeoIP
+![Правила и Geo-базы](screenshots/rules.png)
+
+### Настройки DNS (DoH), Failover и Telegram-уведомлений
+![Настройки DNS, Failover и Telegram](screenshots/settings.png)
+
+---
 
 ## Установка и обновление
 
-**Шаг 1 — приложение из App Store:**
-1. В **Winbox → App → App** нажмите **Update** (обновить каталог).
-2. Выберите **`A-amneziawg-mikrotik`** (в описании должно быть `AmneziaWG 3.1 (v1.3.3)...`) и нажмите **Enable**.
-   > Если ранее стояла старая версия под тем же тегом `:1`, выполните в терминале RouterOS `/app/disable A-amneziawg-mikrotik; /app/remove A-amneziawg-mikrotik; /app/cleanup; /app/enable A-amneziawg-mikrotik`, чтобы RouterOS скачал свежий образ.
+1. В **Winbox → App → App** нажмите **Update** (обновить каталог стора).
+2. Выберите **`A-amneziawg-mikrotik`** и нажмите **Enable**.
+   > Для принудительного обновления уже установленного контейнера под тем же тегом `:1`:
+   > ```routeros
+   > /app/disable A-amneziawg-mikrotik; /app/remove A-amneziawg-mikrotik; /app/cleanup; /app/enable A-amneziawg-mikrotik
+   > ```
 3. Откройте **Open WebUI** (`http://<ip-роутера>:8092`):
-   - **Конфиги (.conf)** — управление профилями (радио-переключатель активного конфига + `+ Новый профиль` + **QR-код**).
-   - **Правила / Geo** — подгрузка баз `geosite.dat` / `geoip.dat` (по умолчанию из `Loyalsoldier/v2ray-rules-dat`), выбор режима по умолчанию (**PROXY** / **DIRECT**), быстрые пресеты (`Реклама → DROP`, `РФ → DIRECT`, `YouTube/Telegram → PROXY`) и тест правил.
-   - **Настройки** — DNS (Proxy/Direct), `Auto-Route`, `Kill-Switch`, `Multi-Tunnel`, URL баз Geo и параметры RouterOS REST API.
-   - Альтернатива без UI: переменная `AWG_CONF_B64` (base64-конфиг) в **Environment** или файлы `*.conf` в томе `awg-config`.
+   - **Конфиги (.conf)** — загрузите или вставьте один или несколько `.conf`, задайте приоритет.
+   - **Правила / Geo** — загрузите Geo-базы и при необходимости выберите пресеты (`РФ → DIRECT`, `Реклама → DROP` и др.).
+   - **Настройки** — укажите Proxy/Direct DNS (или выберите из каталога DoH), настройте `Multi-Tunnel`, `Failover`, `Telegram` и `ROS_URL`.
+   - *Без WebUI:* передайте конфиг в переменной `AWG_CONF_B64` (base64) или поместите `*.conf` в том `awg-config`.
 
-**Шаг 2 (опционально) — policy routing, Netwatch и DNS-форвардинг:**
-В комплекте есть опциональный скрипт [`router-setup.rsc`](router-setup.rsc) для выборочной маршрутизации по `address-list=AmneziaWGRoS`, Netwatch-пробы и DNS-заглушек Apple Private Relay:
+---
+
+## Выборочная маршрутизация в RouterOS (опционально)
+
+Чтобы заворачивать в контейнер только нужные подсети/списки устройств с роутера, можно импортировать скрипт [`router-setup.rsc`](router-setup.rsc):
 
 ```routeros
 /tool fetch url="https://aligorov.github.io/routeros-aligorov/apps/a-amneziawg-mikrotik/router-setup.rsc" dst-path=awg-setup.rsc
 /import awg-setup.rsc
 ```
 
-> Так как `app.yaml` не привязан к внешнему `veth AmneziaWGRoS` (чтобы приложение ставилось в один клик без подготовки), `/app` выделит контейнеру свой IP (посмотрите в `/container/print` или **Winbox → Interfaces → VETH**). После установки подставьте этот IP в `gateway=` маршрута `AmneziaWGRoS_default`, `host=` Netwatch `AWG_Health` и `forward-to=` DNS-записей (вместо заготовки `192.168.253.2`), либо используйте собственный gateway из `/app`.
+> RouterOS `/app` назначает контейнеру свой `veth` и IP автоматически (узнать актуальный IP можно в `/container/print` или **Winbox → Interfaces → VETH**). После импорта скрипта подставьте этот IP в `gateway=` маршрута `AmneziaWGRoS_default`, `host=` пробы Netwatch `AWG_Health` и `forward-to=` DNS-записей (вместо шаблонного `192.168.253.2`).
 
-Скрипт идемпотентный. Он создаёт:
-- заготовку `veth` `AmneziaWGRoS` (`192.168.253.2/30`, gw `192.168.253.1`) и список `InAccept`;
-- таблицу маршрутизации `AmneziaWGRoS` (`0.0.0.0/0 -> 192.168.253.2` + `blackhole` fallback);
-- `mangle` для выборочной маршрутизации по `/ip/firewall/address-list` (`list=AmneziaWGRoS`) и правку `fasttrack`;
-- `NXDOMAIN` для Apple Private Relay (`mask.icloud.com`, `doh.dns.apple.com`);
-- заготовки `AWG_Server_DSTNAT` и Netwatch-пробы `AWG_Health` (`:8081`, обе отключены по умолчанию).
+Что создаёт [`router-setup.rsc`](router-setup.rsc):
+- таблицу маршрутизации `AmneziaWGRoS` (`0.0.0.0/0 → <ip-контейнера>` + `blackhole` fallback);
+- правила `mangle` для маршрутизации трафика из `/ip/firewall/address-list` (`list=AmneziaWGRoS`);
+- блокировку `NXDOMAIN` для Apple Private Relay (`mask.icloud.com`, `doh.dns.apple.com`);
+- заготовки `AWG_Server_DSTNAT` (`51821/udp`) и Netwatch-пробы `AWG_Health` (`:8081`, выключены по умолчанию).
 
-Если списки `LAN`/`WAN` только что создались — добавьте в них интерфейсы (**Interfaces → Interface List**).
+---
 
-## Максимальная интеграция с RouterOS
+## Интеграция с RouterOS
 
-### 1. Авто-синхронизация маршрутов (`AllowedIPs`) и доменов через REST API
-Укажите в **Winbox → App → A-amneziawg-mikrotik → Environment**:
-- `ROS_URL`: `https://192.168.253.1` (или `http://192.168.253.1`, если включён `www`)
-- `ROS_USER` / `ROS_PASS`: сервисный пользователь RouterOS (группа `write` + `api`/`rest`)
-
-После этого контроллер `awg-ctl` автоматически:
-- **Site-to-Site:** все не-дефолтные подсети из `AllowedIPs` (например `10.10.0.0/16`, `192.168.50.0/24`) прописывает в `/ip/route` с `gateway=192.168.253.2` и комментарием `awg-ctl:<iface>`;
-- **Домены из WebUI:** список во вкладке **Домены / RouterOS** синхронизируется в `/ip/dns/static` как `type=FWD` → `192.168.253.2` (`address-list=AmneziaWGRoS`, `match-subdomain=yes`).
-
-### 2. DNS без утечек
-Встроенный DNS-форвардер слушает `192.168.253.2:53` (UDP+TCP) и отправляет запросы на `DNS = ...` из активного `.conf` (или `DNS_UPSTREAM`) строго через туннель. Для ручного форвардинга домена на роутере:
-```routeros
-/ip/dns/static/add name=ifconfig.me type=FWD forward-to=192.168.253.2 match-subdomain=yes address-list=AmneziaWGRoS
-```
-
-### 3. Failover через Netwatch
-После первого успешного запуска туннеля можно включить автопереключение при падении handshake/интерфейса:
-- При желании задайте `AWG_HEALTH_MAX_HANDSHAKE_SEC=180` (для client-режима).
-- Включите пробу на роутере:
+- **REST API синк (маршруты и домены):** задайте `ROS_URL` (адрес шлюза роутера, например `https://192.168.253.1`), `ROS_USER` и `ROS_PASS` в **Настройках** WebUI или в **Environment** Winbox. Контроллер автоматически пропишет не-дефолтные подсети из `AllowedIPs` в `/ip/route` и синхронизирует домены в `/ip/dns/static`.
+- **DNS без утечек:** форвардер `:53` контейнера отправляет Proxy-запросы строго через туннель (с `fwmark`, если включён `Proxy DNS строго через туннель`). Для перенаправления отдельных доменов с MikroTik:
   ```routeros
-  /tool/netwatch/enable [find comment="AWG_Health"]
+  /ip/dns/static/add name=ifconfig.me type=FWD forward-to=<ip-контейнера> match-subdomain=yes address-list=AmneziaWGRoS
   ```
-  При недоступности `192.168.253.2:8081` роутер отключит маршрут `AmneziaWGRoS_default` (сработает `blackhole`), а при восстановлении — включит обратно.
+- **Netwatch-проба (`:8081`):** при включении `/tool/netwatch/enable [find comment="AWG_Health"]` роутер отключит маршрут `AmneziaWGRoS_default` в случае падения туннеля и вернёт его при восстановлении (не путать с `:8080/health`, который отвечает за готовность самого WebUI).
+- **Вся подсеть или Server Mode:**
+  - входящий порт сервера: `/ip/firewall/nat/enable [find comment="AWG_Server_DSTNAT"]`;
+  - завернуть конкретное устройство/подсеть через контейнер: `/routing/rule/add src-address=192.168.88.50/32 action=lookup table=AmneziaWGRoS`.
 
-### 4. Server Mode / Вся подсеть
-- Включить входящий порт `51821/udp` для сервера: `/ip/firewall/nat/enable [find comment="AWG_Server_DSTNAT"]`
-- Завернуть конкретное устройство или подсеть целиком: `/routing/rule/add src-address=192.168.88.50/32 action=lookup table=AmneziaWGRoS`
+---
 
 ## Переменные окружения
 
+Настройки также удобно редактировать прямо в WebUI (хранятся в `settings.json` тома `awg-config`), а переменные окружения задают начальные значения по умолчанию:
+
 | Переменная | Назначение | По умолчанию |
 |---|---|---|
+| `AWG_DEFAULT_POLICY` | Политика по умолчанию (`proxy` / `direct`) | `"proxy"` |
 | `AWG_AUTO_ROUTE` | Авто-инъекция `MASQUERADE`, `TCPMSS`, `Table = awg`, `ip rule` (`on`/`off`) | `"on"` |
-| `AWG_KILLSWITCH` | Включить `blackhole` и запрет утечек мимо туннеля (`on`/`off`) | `"on"` |
-| `AWG_CONF_B64` | Base64-содержимое `.conf` для быстрого старта без UI/файлов | `""` |
-| `DNS_ENABLE` / `DNS_UPSTREAM` | DNS-форвардер внутри туннеля (`:53`) и fallback-серверы | `"on"` / `1.1.1.1:53,8.8.8.8:53` |
-| `UI_USER` / `UI_PASSWORD` | Basic Auth для WebUI (если пароль пустой — без авторизации) | `admin` / `""` |
+| `AWG_KILLSWITCH` | Включить `blackhole` при падении VPN (`on`/`off`) | `"on"` |
+| `AWG_MULTI_TUNNEL` | Поднимать все включённые `.conf` одновременно (`on`/`off`) | `"off"` |
+| `AWG_FAILOVER_MODE` | Авто-переключение (`off` / `switch` / `standby`) | `"off"` |
+| `AWG_FAILOVER_TRIGGER` | Триггер failover (`hybrid` / `handshake` / `probe`) | `"hybrid"` |
+| `AWG_CONF_B64` | Base64-содержимое `.conf` для старта без UI и файлов | `""` |
+| `DNS_ENABLE` / `DNS_UPSTREAM` | DNS-форвардер (`on`/`off`) и базовые upstream-серверы | `"on"` / `"1.1.1.1:53,8.8.8.8:53"` |
+| `UI_USER` / `UI_PASSWORD` | Basic Auth для WebUI (при пустом пароле — без авторизации) | `"admin"` / `""` |
 | `ROS_URL` / `ROS_USER` / `ROS_PASS` | RouterOS REST API для авто-синка `AllowedIPs` и доменов | `""` |
-| `AWG_HEALTH_MAX_HANDSHAKE_SEC` | Макс. возраст handshake (сек) для `/health` (`0` = не проверять) | `"0"` |
-| `LOG_LEVEL` | Уровень логирования `amneziawg-go` (`verbose`, `error`, `silent`) | `error` |
-| `TZ` | Часовой пояс (POSIX-строки: `UTC`, `MSK-3`) | `UTC` |
+| `TG_ENABLE` / `TG_BOT_TOKEN` / `TG_CHAT_ID` | Telegram-уведомления (можно настроить целиком из WebUI) | `""` |
+| `TG_THREAD_ID` / `TG_ALERT_THREAD_ID` | ID топика форума Telegram (`0` — общий чат) | `"0"` |
+| `AWG_HEALTH_MAX_HANDSHAKE_SEC` | Макс. возраст handshake для пробы `:8081` (`0` = не проверять) | `"0"` |
+| `LOG_LEVEL` | Уровень логирования `amneziawg-go` (`verbose`, `error`, `silent`) | `"error"` |
+| `TZ` | Часовой пояс (POSIX: `UTC`, `MSK-3`) | `"UTC"` |
 
-## Пересборка мульти-арх образа (`arm64`, `amd64`, `arm/v7`)
+---
+
+## Сборка и публикация образа
 
 ```bash
+# arm64 (роутеры MikroTik ARM64)
+./scripts/ghcr-push.sh apps/a-amneziawg-mikrotik/image amneziawg-mikrotik 1
+
+# мульти-арх сборка (arm64, amd64, arm/v7)
 docker buildx build --builder multiarch \
   --platform linux/arm64,linux/amd64,linux/arm/v7 \
-  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.3.3 \
+  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.4.0 \
   -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1 \
-  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:latest \
   --push apps/a-amneziawg-mikrotik/image
 ```
