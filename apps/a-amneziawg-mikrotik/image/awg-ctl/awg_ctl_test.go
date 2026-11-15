@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseAwgDumpAndMeta(t *testing.T) {
@@ -144,5 +148,197 @@ func TestActiveConfigPersist(t *testing.T) {
 	}
 	if err := mgr.SetActiveConfig("missing.conf"); err == nil {
 		t.Fatalf("expected error for missing profile")
+	}
+}
+
+func TestSaveConfigValidationRejectsMalformedEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	logger := NewRingLogger(20)
+	mgr := NewTunnelManager(tmp, filepath.Join(tmp, "run"), "eth0", true, true, logger)
+	st, _ := NewSettingsStore(tmp)
+	geo := NewGeoStore(tmp, logger)
+	pol := NewPolicyEngine(tmp, st, geo, mgr, logger)
+	ros := NewROSClient(tmp, logger)
+	w := NewWebServer(":0", mgr, nil, ros, st, geo, pol, logger)
+	w.uiUser = "admin"
+	w.uiPass = "secret123"
+	handler := w.Handler()
+
+	badCases := []struct {
+		name string
+		conf string
+	}{
+		{"double_port", "[Interface]\nPrivateKey = x=\n[Peer]\nPublicKey = y=\nEndpoint = 64.118.133.197:443:443\nAllowedIPs = 0.0.0.0/0\n"},
+		{"missing_port", "[Interface]\nPrivateKey = x=\n[Peer]\nPublicKey = y=\nEndpoint = 64.118.133.197\n"},
+		{"empty_endpoint", "[Interface]\nPrivateKey = x=\n[Peer]\nPublicKey = y=\nEndpoint = \n"},
+		{"bad_port_range", "[Interface]\nPrivateKey = x=\n[Peer]\nPublicKey = y=\nEndpoint = 1.2.3.4:70000\n"},
+		{"bad_listen_port", "[Interface]\nPrivateKey = x=\nListenPort = 0\n"},
+		{"bad_mtu", "[Interface]\nPrivateKey = x=\nMTU = 12\n"},
+		{"bad_address_cidr", "[Interface]\nPrivateKey = x=\nAddress = not-a-cidr\n"},
+		{"bad_allowedips", "[Interface]\nPrivateKey = x=\n[Peer]\nPublicKey = y=\nAllowedIPs = 999.999.0.0/24\n"},
+		{"missing_interface", "[Peer]\nPublicKey = y=\nEndpoint = 1.2.3.4:51820\n"},
+	}
+	for _, tc := range badCases {
+		if err := mgr.SaveConfig("bad.conf", tc.conf); err == nil {
+			t.Fatalf("%s: expected SaveConfig to reject invalid config", tc.name)
+		}
+		payload, _ := json.Marshal(map[string]any{"content": tc.conf, "apply": true})
+		req := httptest.NewRequest(http.MethodPost, "/api/configs/bad.conf", bytes.NewReader(payload))
+		req.SetBasicAuth("admin", "secret123")
+		req.Header.Set("Content-Type", "application/json")
+		rw := httptest.NewRecorder()
+		handler.ServeHTTP(rw, req)
+		if rw.Code != http.StatusBadRequest {
+			t.Fatalf("%s: expected HTTP 400, got %d (%s)", tc.name, rw.Code, rw.Body.String())
+		}
+	}
+
+	goodCases := []string{
+		"[Interface]\nPrivateKey = x=\nAddress = 10.0.0.2/32\nListenPort = 51820\nMTU = 1420\n[Peer]\nPublicKey = y=\nEndpoint = 64.118.133.197:443\nAllowedIPs = 0.0.0.0/0\n",
+		"[Interface]\nPrivateKey = x=\n[Peer]\nPublicKey = y=\nEndpoint = [2001:db8::1]:51820\nAllowedIPs = ::/0\n",
+		"[Interface]\n# Endpoint = bad:bad:bad\nPrivateKey = x=\n",
+	}
+	for i, conf := range goodCases {
+		if err := mgr.SaveConfig(fmt.Sprintf("ok%d.conf", i), conf); err != nil {
+			t.Fatalf("valid case %d rejected: %v", i, err)
+		}
+	}
+}
+
+func TestStatusNonBlockingDuringSlowStartAll(t *testing.T) {
+	tmp := t.TempDir()
+	logger := NewRingLogger(30)
+	mgr := NewTunnelManager(tmp, filepath.Join(tmp, "run"), "eth0", false, false, logger)
+	mgr.ipCmdFn = func(args ...string) error { return nil }
+
+	upStarted := make(chan struct{})
+	releaseUp := make(chan struct{})
+	mgr.runCmdFn = func(ctx context.Context, name string, args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "up" {
+			close(upStarted)
+			select {
+			case <-releaseUp:
+				return "", nil
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+		}
+		return "", nil
+	}
+
+	conf := "[Interface]\nPrivateKey = x=\nAddress = 10.0.0.2/32\n[Peer]\nPublicKey = y=\nEndpoint = 1.2.3.4:51820\nAllowedIPs = 0.0.0.0/0\n"
+	if err := mgr.SaveConfig("slow.conf", conf); err != nil {
+		t.Fatal(err)
+	}
+
+	st, _ := NewSettingsStore(tmp)
+	geo := NewGeoStore(tmp, logger)
+	pol := NewPolicyEngine(tmp, st, geo, mgr, logger)
+	ros := NewROSClient(tmp, logger)
+	w := NewWebServer(":0", mgr, nil, ros, st, geo, pol, logger)
+	w.uiUser = "admin"
+	w.uiPass = "secret123"
+	handler := w.Handler()
+
+	applyDone := make(chan error, 1)
+	go func() {
+		applyDone <- mgr.ApplySavedConfig("slow.conf")
+	}()
+
+	select {
+	case <-upStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for slow awg-quick up to begin")
+	}
+
+	// While awg-quick up is blocked, /api/status must NOT block waiting for mgr.mu.
+	statusDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+		req.SetBasicAuth("admin", "secret123")
+		rw := httptest.NewRecorder()
+		handler.ServeHTTP(rw, req)
+		statusDone <- rw
+	}()
+
+	var rw *httptest.ResponseRecorder
+	select {
+	case rw = <-statusDone:
+	case <-time.After(500 * time.Millisecond):
+		close(releaseUp)
+		t.Fatal("GET /api/status deadlocked/blocked while StartAll was running")
+	}
+	if rw.Code != http.StatusOK {
+		close(releaseUp)
+		t.Fatalf("expected /api/status 200 during apply, got %d (%s)", rw.Code, rw.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rw.Body.Bytes(), &payload); err != nil {
+		close(releaseUp)
+		t.Fatal(err)
+	}
+	if applying, _ := payload["applying"].(bool); !applying {
+		close(releaseUp)
+		t.Fatalf("expected applying=true in /api/status, got %v", payload["applying"])
+	}
+	if op, _ := payload["applying_op"].(string); op != "Запуск slow.conf" {
+		close(releaseUp)
+		t.Fatalf("expected applying_op='Запуск slow.conf', got %q", op)
+	}
+
+	close(releaseUp)
+	select {
+	case err := <-applyDone:
+		if err != nil {
+			t.Fatalf("ApplySavedConfig failed: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ApplySavedConfig did not finish after release")
+	}
+	if applying, _ := mgr.ApplyingState(); applying {
+		t.Fatal("expected applying=false after ApplySavedConfig returned")
+	}
+}
+
+func TestRunCmdTimeoutKillsHungProcess(t *testing.T) {
+	tmp := t.TempDir()
+	logger := NewRingLogger(20)
+	mgr := NewTunnelManager(tmp, filepath.Join(tmp, "run"), "eth0", false, false, logger)
+	mgr.cmdTimeout = 120 * time.Millisecond
+
+	start := time.Now()
+	err := mgr.runCmd("sh", "-c", "echo partial-line; sleep 10")
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("expected timeout error from hung command")
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("expected command timeout quickly (<2s), took %s", elapsed)
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("expected timed out error, got: %v", err)
+	}
+	logs := strings.Join(logger.Lines(), "\n")
+	if !strings.Contains(logs, "partial-line") {
+		t.Fatalf("expected partial stdout/stderr logged before timeout, got: %s", logs)
+	}
+}
+
+func TestSplitBatchChunks(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("route flush table 210\n\n")
+	for i := 0; i < 1205; i++ {
+		fmt.Fprintf(&b, "route replace 10.%d.%d.0/24 dev awg0 table 210\n", i/256, i%256)
+	}
+	chunks := splitBatchChunks(b.String(), 500)
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 chunks for 1206 lines, got %d", len(chunks))
+	}
+	if !strings.HasPrefix(chunks[0], "route flush table 210\n") {
+		t.Fatalf("first chunk must start with route flush, got %q", chunks[0][:40])
+	}
+	if strings.Count(strings.TrimSuffix(chunks[0], "\n"), "\n")+1 != 500 ||
+		strings.Count(strings.TrimSuffix(chunks[2], "\n"), "\n")+1 != 206 {
+		t.Fatalf("unexpected chunk line counts")
 	}
 }

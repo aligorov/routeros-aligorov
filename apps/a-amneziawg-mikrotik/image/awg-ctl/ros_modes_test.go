@@ -1056,3 +1056,188 @@ func TestROSBackfillRecentDNSSeedResolveAndIPDNSWarning(t *testing.T) {
 		t.Fatalf("expected /ip/dns container warning in schema report.Warnings, got %+v", rep.Warnings)
 	}
 }
+
+func TestROSLoopGuardBeforeMarkRoutingAndInAccept(t *testing.T) {
+	dir := t.TempDir()
+	logger := NewRingLogger(50)
+
+	var mu sync.Mutex
+	nextID := 100
+	allocID := func() string {
+		nextID++
+		return "*" + strconv.Itoa(nextID)
+	}
+	tables := []map[string]any{{".id": "*1", "name": "zapret", "disabled": "false"}}
+	routes := []map[string]any{{".id": "*1", "dst-address": "0.0.0.0/0", "gateway": "172.19.0.99", "routing-table": "zapret", "disabled": "false"}}
+	mangles := []map[string]any{
+		{".id": "*46", "chain": "prerouting", "action": "mark-routing", "dst-address-list": "zapresenka", "in-interface-list": "LAN", "new-routing-mark": "zapret", "passthrough": "yes", "disabled": "false"},
+		{".id": "*48", "chain": "prerouting", "action": "accept", "src-address": "172.18.0.99", "comment": "AWG_Accept_Container", "disabled": "false"},
+		{".id": "*49", "chain": "prerouting", "action": "accept", "connection-mark": "no-mark", "connection-state": "established", "comment": "AWG_Accept_no_mark", "disabled": "false"},
+		{".id": "*4A", "chain": "prerouting", "action": "mark-routing", "connection-mark": "zapret", "in-interface-list": "LAN", "new-routing-mark": "zapret", "passthrough": "no", "comment": "AWG_Route_Conn", "disabled": "false"},
+		{".id": "*4B", "chain": "prerouting", "action": "mark-connection", "connection-mark": "no-mark", "connection-state": "new", "dst-address-list": "zapresenka", "dst-address-type": "!local", "in-interface-list": "LAN", "new-connection-mark": "zapret", "passthrough": "yes", "comment": "AWG_Mark_AddressList", "disabled": "false"},
+		{".id": "*4C", "chain": "prerouting", "action": "mark-routing", "connection-mark": "zapret", "in-interface-list": "LAN", "new-routing-mark": "zapret", "passthrough": "no", "comment": "AWG_Route_New", "disabled": "false"},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.URL.Path == "/rest/system/resource" || r.URL.Path == "/rest/system/resource/print":
+			_ = json.NewEncoder(rw).Encode(map[string]any{"board-name": "RB5009UG+S+", "version": "7.25.1"})
+		case r.URL.Path == "/rest/system/identity" || r.URL.Path == "/rest/system/identity/print":
+			_ = json.NewEncoder(rw).Encode(map[string]any{"name": "coredom25"})
+		case r.URL.Path == "/rest/interface/list/member" || r.URL.Path == "/rest/interface/list/member/print":
+			_ = json.NewEncoder(rw).Encode([]map[string]any{{".id": "*1", "list": "LAN", "interface": "bridge"}})
+		case r.URL.Path == "/rest/routing/table" || r.URL.Path == "/rest/routing/table/print":
+			_ = json.NewEncoder(rw).Encode(tables)
+		case r.URL.Path == "/rest/ip/route" || r.URL.Path == "/rest/ip/route/print":
+			_ = json.NewEncoder(rw).Encode(routes)
+		case r.URL.Path == "/rest/ip/firewall/filter" || r.URL.Path == "/rest/ip/firewall/filter/print":
+			_ = json.NewEncoder(rw).Encode([]map[string]any{})
+		case r.URL.Path == "/rest/ip/dns" || r.URL.Path == "/rest/ip/dns/print":
+			_ = json.NewEncoder(rw).Encode(map[string]any{"servers": "172.19.0.99", "allow-remote-requests": "true"})
+		case r.URL.Path == "/rest/ip/firewall/mangle" || r.URL.Path == "/rest/ip/firewall/mangle/print":
+			cp := make([]map[string]any, len(mangles))
+			copy(cp, mangles)
+			_ = json.NewEncoder(rw).Encode(cp)
+		case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/rest/ip/firewall/mangle/"):
+			id := strings.TrimPrefix(r.URL.Path, "/rest/ip/firewall/mangle/")
+			for _, m := range mangles {
+				if strField(m, ".id") == id {
+					for k, v := range body {
+						m[k] = v
+					}
+					_ = json.NewEncoder(rw).Encode(m)
+					return
+				}
+			}
+			http.NotFound(rw, r)
+		case r.Method == http.MethodPut && r.URL.Path == "/rest/ip/firewall/mangle":
+			body[".id"] = allocID()
+			placeBefore := strField(body, "place-before")
+			delete(body, "place-before")
+			if placeBefore != "" {
+				inserted := false
+				for i, m := range mangles {
+					if strField(m, ".id") == placeBefore {
+						next := append([]map[string]any{}, mangles[:i]...)
+						next = append(next, body)
+						next = append(next, mangles[i:]...)
+						mangles = next
+						inserted = true
+						break
+					}
+				}
+				if !inserted {
+					mangles = append(mangles, body)
+				}
+			} else {
+				mangles = append(mangles, body)
+			}
+			rw.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(rw).Encode(body)
+		case r.Method == http.MethodPost && r.URL.Path == "/rest/ip/firewall/mangle/move":
+			numID := strField(body, "numbers")
+			destID := strField(body, "destination")
+			srcIdx, destIdx := -1, -1
+			for i, m := range mangles {
+				if strField(m, ".id") == numID {
+					srcIdx = i
+				}
+				if strField(m, ".id") == destID {
+					destIdx = i
+				}
+			}
+			if srcIdx == -1 || destIdx == -1 {
+				http.Error(rw, "not found", http.StatusBadRequest)
+				return
+			}
+			moved := mangles[srcIdx]
+			without := append([]map[string]any{}, mangles[:srcIdx]...)
+			without = append(without, mangles[srcIdx+1:]...)
+			destIdxAfter := -1
+			for i, m := range without {
+				if strField(m, ".id") == destID {
+					destIdxAfter = i
+					break
+				}
+			}
+			next := append([]map[string]any{}, without[:destIdxAfter]...)
+			next = append(next, moved)
+			next = append(next, without[destIdxAfter:]...)
+			mangles = next
+			_ = json.NewEncoder(rw).Encode([]any{})
+		default:
+			_ = json.NewEncoder(rw).Encode([]map[string]any{})
+		}
+	}))
+	defer srv.Close()
+
+	ros := NewROSClient(dir, logger)
+	s := AppSettings{
+		ROSURL:          srv.URL,
+		ROSUser:         "user1",
+		ROSPass:         "pass",
+		ROSMode:         ROSModeAddressList,
+		ROSUseBinaryAPI: false,
+		ROSContainerIP:  "172.19.0.99",
+		ROSAddressList:  "zapresenka",
+		ROSRouteTable:   "zapret",
+	}
+	ros.Configure(s)
+	defer ros.Close()
+
+	checkMap := func(rep ROSSchemaReport) map[string]ROSSchemaCheck {
+		out := map[string]ROSSchemaCheck{}
+		for _, ch := range rep.Checks {
+			out[ch.Key] = ch
+		}
+		return out
+	}
+
+	// 1. Stale 172.18.0.99 + mark-routing *46 above AWG_Accept_Container -> mangle_loop_guard MUST fail
+	rep1 := ros.InspectSchema(s)
+	if rep1.OK || checkMap(rep1)["mangle_loop_guard"].OK {
+		t.Fatalf("expected mangle_loop_guard to fail when IP is stale and mark-routing precedes it, got %+v", rep1.Checks)
+	}
+
+	// 2. Fix IP to 172.19.0.99 while *46 (mark-routing) is STILL at index 0 above *48 -> MUST STILL fail!
+	mu.Lock()
+	mangles[1]["src-address"] = "172.19.0.99"
+	mu.Unlock()
+	rep2 := ros.InspectSchema(s)
+	if rep2.OK || checkMap(rep2)["mangle_loop_guard"].OK {
+		t.Fatalf("expected mangle_loop_guard to fail when mark-routing precedes AWG_Accept_Container, got %+v", rep2.Checks)
+	}
+
+	// 3. ProvisionSchema MUST move AWG_Accept_Container (*48) BEFORE *46 (earliest mark-routing rule)
+	prov := ros.ProvisionSchema(s, ROSProvisionOptions{})
+	if !prov.OK || !prov.Report.OK || !checkMap(prov.Report)["mangle_loop_guard"].OK {
+		t.Fatalf("expected ProvisionSchema to move AWG_Accept_Container before mark-routing, got ok=%v err=%q checks=%+v",
+			prov.OK, prov.Error, prov.Report.Checks)
+	}
+	mu.Lock()
+	firstID := strField(mangles[0], ".id")
+	mu.Unlock()
+	if firstID != "*48" {
+		t.Fatalf("expected AWG_Accept_Container (*48) at index 0 before *46, got index 0 = %q", firstID)
+	}
+
+	// 4. An explicit InAccept interface-list accept rule at index 0 also counts as valid loop guard
+	mu.Lock()
+	mangles = []map[string]any{
+		{".id": "*4D", "chain": "prerouting", "action": "accept", "in-interface-list": "InAccept", "comment": "AWG_Accept_InAccept", "disabled": "false"},
+		{".id": "*4A", "chain": "prerouting", "action": "mark-routing", "connection-mark": "zapret", "in-interface-list": "LAN", "new-routing-mark": "zapret", "passthrough": "no", "comment": "AWG_Route_Conn", "disabled": "false"},
+		{".id": "*4B", "chain": "prerouting", "action": "mark-connection", "connection-mark": "no-mark", "connection-state": "new", "dst-address-list": "zapresenka", "dst-address-type": "!local", "in-interface-list": "LAN", "new-connection-mark": "zapret", "passthrough": "yes", "comment": "AWG_Mark_AddressList", "disabled": "false"},
+		{".id": "*4C", "chain": "prerouting", "action": "mark-routing", "connection-mark": "zapret", "in-interface-list": "LAN", "new-routing-mark": "zapret", "passthrough": "no", "comment": "AWG_Route_New", "disabled": "false"},
+	}
+	mu.Unlock()
+	repInAccept := ros.InspectSchema(s)
+	if !repInAccept.OK || !checkMap(repInAccept)["mangle_loop_guard"].OK {
+		t.Fatalf("expected InAccept accept rule before mark-routing to satisfy mangle_loop_guard, got %+v", repInAccept.Checks)
+	}
+}

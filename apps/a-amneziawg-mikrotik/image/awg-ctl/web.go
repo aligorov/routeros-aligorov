@@ -3,17 +3,20 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	qrcode "github.com/skip2/go-qrcode"
@@ -38,6 +41,27 @@ func init() {
 	}
 }
 
+const (
+	sessionCookieName = "awg_session"
+	sessionTTL        = 24 * time.Hour
+	maxWebSessions    = 256
+	authMaxFailures   = 5
+	authFailWindow    = 2 * time.Minute
+	authBlockDuration = 60 * time.Second
+	authMaxTrackIPs   = 4096
+)
+
+type webSession struct {
+	user      string
+	expiresAt time.Time
+}
+
+type authFailureState struct {
+	count        int
+	windowStart  time.Time
+	blockedUntil time.Time
+}
+
 type WebServer struct {
 	listenAddr string
 	healthAddr string
@@ -54,6 +78,13 @@ type WebServer struct {
 	failover   *FailoverMonitor
 	tg         *TGNotifier
 	logger     *RingLogger
+
+	sessMu   sync.Mutex
+	sessions map[string]webSession
+
+	authMu    sync.Mutex
+	authFails map[string]authFailureState
+	setupMu   sync.Mutex
 }
 
 func (w *WebServer) SetIntegrations(fo *FailoverMonitor, tg *TGNotifier) {
@@ -81,13 +112,20 @@ func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros 
 		policy:     policy,
 		term:       NewTermRunner(srcDir),
 		logger:     logger,
+		sessions:   make(map[string]webSession),
+		authFails:  make(map[string]authFailureState),
 	}
 }
 
-func (w *WebServer) Start() error {
+func (w *WebServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", w.handleReady)
-	mux.HandleFunc("GET /", w.withAuth(w.handleIndex))
+	mux.HandleFunc("GET /", w.handleIndex)
+	mux.HandleFunc("GET /api/auth/status", w.handleAuthStatus)
+	mux.HandleFunc("POST /api/auth/setup", w.handleAuthSetup)
+	mux.HandleFunc("POST /api/auth/login", w.handleAuthLogin)
+	mux.HandleFunc("POST /api/auth/logout", w.handleAuthLogout)
+	mux.HandleFunc("POST /api/auth/password", w.withAuth(w.handleAuthPassword))
 	mux.HandleFunc("GET /api/status", w.withAuth(w.handleStatus))
 	mux.HandleFunc("GET /api/configs/{name}", w.withAuth(w.handleGetConfig))
 	mux.HandleFunc("POST /api/configs/plan", w.withAuth(w.handleSaveTunnelPlan))
@@ -121,12 +159,21 @@ func (w *WebServer) Start() error {
 	mux.HandleFunc("POST /api/ros/mode", w.withAuth(w.handleROSMode))
 	mux.HandleFunc("POST /api/term/exec", w.withAuth(w.handleTermExec))
 	mux.HandleFunc("POST /api/term/kill", w.withAuth(w.handleTermKill))
+	return w.buildHTTPHandler(mux)
+}
 
+func (w *WebServer) Start() error {
 	if w.healthAddr != "" {
 		hmux := http.NewServeMux()
 		hmux.HandleFunc("GET /", w.handleHealth)
 		hmux.HandleFunc("GET /health", w.handleHealth)
-		hsrv := &http.Server{Addr: w.healthAddr, Handler: hmux, ReadHeaderTimeout: 5 * time.Second}
+		hsrv := &http.Server{
+			Addr:              w.healthAddr,
+			Handler:           hmux,
+			ReadHeaderTimeout: 5 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			IdleTimeout:       30 * time.Second,
+		}
 		go func() {
 			w.logger.Logf("Health probe listening on %s (for RouterOS netwatch)", w.healthAddr)
 			if err := hsrv.ListenAndServe(); err != nil {
@@ -135,13 +182,23 @@ func (w *WebServer) Start() error {
 		}()
 	}
 
-	w.logger.Logf("WebUI listening on %s (auth=%v)", w.listenAddr, w.uiPass != "")
+	configured, src, _, _, _ := w.authState()
+	w.logger.Logf("WebUI listening on %s (auth_configured=%v, source=%s, term=%v)", w.listenAddr, configured, src, w.isTermEnabled())
 	srv := &http.Server{
 		Addr:              w.listenAddr,
-		Handler:           w.gzipMiddleware(mux),
+		Handler:           w.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 	return srv.ListenAndServe()
+}
+
+func (w *WebServer) buildHTTPHandler(mux http.Handler) http.Handler {
+	cop := http.NewCrossOriginProtection()
+	cop.SetDenyHandler(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
+		writeJSON(rw, http.StatusForbidden, map[string]string{"error": "cross-origin request blocked (CSRF protection)"})
+	}))
+	return w.securityHeadersMiddleware(w.gzipMiddleware(cop.Handler(w.rejectFormPOSTMiddleware(mux))))
 }
 
 type gzipResponseWriter struct {
@@ -181,20 +238,502 @@ func (w *WebServer) gzipMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (w *WebServer) withAuth(next http.HandlerFunc) http.HandlerFunc {
-	return func(rw http.ResponseWriter, r *http.Request) {
-		if w.uiPass != "" {
-			u, p, ok := r.BasicAuth()
-			uMatch := subtle.ConstantTimeCompare([]byte(u), []byte(w.uiUser)) == 1
-			pMatch := subtle.ConstantTimeCompare([]byte(p), []byte(w.uiPass)) == 1
-			if !ok || !uMatch || !pMatch {
-				rw.Header().Set("WWW-Authenticate", `Basic realm="AmneziaWG"`)
-				http.Error(rw, "Unauthorized", http.StatusUnauthorized)
+func (w *WebServer) securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("X-Frame-Options", "DENY")
+		rw.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		rw.Header().Set("X-Content-Type-Options", "nosniff")
+		rw.Header().Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(rw, r)
+	})
+}
+
+func (w *WebServer) rejectFormPOSTMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
+			ct := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type")))
+			if ct != "" && (strings.HasPrefix(ct, "application/x-www-form-urlencoded") ||
+				strings.HasPrefix(ct, "multipart/form-data") ||
+				strings.HasPrefix(ct, "text/plain")) {
+				writeJSON(rw, http.StatusUnsupportedMediaType, map[string]string{
+					"error": "form content-type not allowed; send application/json",
+				})
 				return
 			}
 		}
-		next(rw, r)
+		next.ServeHTTP(rw, r)
+	})
+}
+
+func (w *WebServer) activeUIUser() string {
+	if w.settings != nil {
+		if u := strings.TrimSpace(w.settings.Get().UIUser); u != "" {
+			return u
+		}
 	}
+	if u := strings.TrimSpace(w.uiUser); u != "" {
+		return u
+	}
+	return "admin"
+}
+
+func (w *WebServer) authState() (configured bool, source, user, envPass, passHash string) {
+	user = w.activeUIUser()
+	if strings.TrimSpace(w.uiPass) != "" {
+		return true, "env", user, w.uiPass, ""
+	}
+	if w.settings != nil {
+		st := w.settings.Get()
+		if st.UIPassHash != "" {
+			return true, "setup", user, "", st.UIPassHash
+		}
+	}
+	return false, "", user, "", ""
+}
+
+func (w *WebServer) isTermEnabled() bool {
+	if termEnvFlag() == "off" {
+		return false
+	}
+	if w.settings != nil {
+		return w.settings.Get().TermEnabled
+	}
+	return termEnvFlag() == "on"
+}
+
+func clientIPFromRequest(r *http.Request) string {
+	addr := strings.TrimSpace(r.RemoteAddr)
+	if host, _, err := net.SplitHostPort(addr); err == nil && host != "" {
+		return host
+	}
+	if addr == "" {
+		return "unknown"
+	}
+	return addr
+}
+
+func (w *WebServer) checkAuthRateLimit(ip string) (bool, int) {
+	now := time.Now()
+	w.authMu.Lock()
+	defer w.authMu.Unlock()
+	if w.authFails == nil {
+		return false, 0
+	}
+	st, ok := w.authFails[ip]
+	if !ok {
+		return false, 0
+	}
+	if !st.blockedUntil.IsZero() && now.Before(st.blockedUntil) {
+		sec := int(st.blockedUntil.Sub(now).Seconds()) + 1
+		if sec < 1 {
+			sec = 1
+		}
+		return true, sec
+	}
+	if now.Sub(st.windowStart) > authFailWindow {
+		delete(w.authFails, ip)
+	}
+	return false, 0
+}
+
+func (w *WebServer) recordAuthFailure(ip string) (bool, int) {
+	now := time.Now()
+	w.authMu.Lock()
+	defer w.authMu.Unlock()
+	if w.authFails == nil {
+		w.authFails = make(map[string]authFailureState)
+	}
+	if len(w.authFails) >= authMaxTrackIPs {
+		for k, v := range w.authFails {
+			if (v.blockedUntil.IsZero() || now.After(v.blockedUntil)) && now.Sub(v.windowStart) > authFailWindow {
+				delete(w.authFails, k)
+			}
+		}
+		if len(w.authFails) >= authMaxTrackIPs {
+			w.authFails = make(map[string]authFailureState)
+		}
+	}
+	st := w.authFails[ip]
+	if st.windowStart.IsZero() || now.Sub(st.windowStart) > authFailWindow {
+		st = authFailureState{windowStart: now}
+	}
+	st.count++
+	if st.count >= authMaxFailures {
+		st.blockedUntil = now.Add(authBlockDuration)
+		w.authFails[ip] = st
+		return true, int(authBlockDuration.Seconds())
+	}
+	w.authFails[ip] = st
+	return false, 0
+}
+
+func (w *WebServer) clearAuthFailure(ip string) {
+	w.authMu.Lock()
+	delete(w.authFails, ip)
+	w.authMu.Unlock()
+}
+
+func sessionTokenHash(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
+func (w *WebServer) issueSessionCookie(rw http.ResponseWriter, r *http.Request, user string) error {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return err
+	}
+	token := hex.EncodeToString(raw[:])
+	key := sessionTokenHash(token)
+	now := time.Now()
+
+	w.sessMu.Lock()
+	if w.sessions == nil {
+		w.sessions = make(map[string]webSession)
+	}
+	for k, s := range w.sessions {
+		if now.After(s.expiresAt) {
+			delete(w.sessions, k)
+		}
+	}
+	if len(w.sessions) >= maxWebSessions {
+		for k := range w.sessions {
+			delete(w.sessions, k)
+			if len(w.sessions) < maxWebSessions {
+				break
+			}
+		}
+	}
+	w.sessions[key] = webSession{user: user, expiresAt: now.Add(sessionTTL)}
+	w.sessMu.Unlock()
+
+	http.SetCookie(rw, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		MaxAge:   int(sessionTTL.Seconds()),
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   r.TLS != nil,
+	})
+	return nil
+}
+
+func (w *WebServer) validSessionUser(r *http.Request) (string, bool) {
+	c, err := r.Cookie(sessionCookieName)
+	if err != nil || strings.TrimSpace(c.Value) == "" {
+		return "", false
+	}
+	key := sessionTokenHash(strings.TrimSpace(c.Value))
+	now := time.Now()
+	w.sessMu.Lock()
+	defer w.sessMu.Unlock()
+	if w.sessions == nil {
+		return "", false
+	}
+	s, ok := w.sessions[key]
+	if !ok {
+		return "", false
+	}
+	if now.After(s.expiresAt) {
+		delete(w.sessions, key)
+		return "", false
+	}
+	return s.user, true
+}
+
+func (w *WebServer) revokeSessionFromRequest(r *http.Request) {
+	c, err := r.Cookie(sessionCookieName)
+	if err != nil || strings.TrimSpace(c.Value) == "" {
+		return
+	}
+	key := sessionTokenHash(strings.TrimSpace(c.Value))
+	w.sessMu.Lock()
+	delete(w.sessions, key)
+	w.sessMu.Unlock()
+}
+
+func (w *WebServer) clearAllSessions() {
+	w.sessMu.Lock()
+	w.sessions = make(map[string]webSession)
+	w.sessMu.Unlock()
+}
+
+func (w *WebServer) verifyCredentials(user, pass string) (bool, string) {
+	configured, _, expectUser, envPass, passHash := w.authState()
+	if !configured {
+		return false, ""
+	}
+	uMatch := subtle.ConstantTimeCompare([]byte(user), []byte(expectUser)) == 1
+	pMatch := false
+	if envPass != "" {
+		pMatch = subtle.ConstantTimeCompare([]byte(pass), []byte(envPass)) == 1
+	} else if passHash != "" {
+		pMatch = VerifyPasswordHash(passHash, pass)
+	}
+	if uMatch && pMatch {
+		return true, expectUser
+	}
+	return false, ""
+}
+
+func (w *WebServer) authenticateRequest(r *http.Request) (authed bool, via string, user string, hadInvalidCreds bool) {
+	if sUser, ok := w.validSessionUser(r); ok {
+		return true, "cookie", sUser, false
+	}
+	if u, p, ok := r.BasicAuth(); ok {
+		if valid, matchedUser := w.verifyCredentials(u, p); valid {
+			return true, "basic", matchedUser, false
+		}
+		return false, "", "", true
+	}
+	return false, "", "", false
+}
+
+func (w *WebServer) withAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		configured, _, _, _, _ := w.authState()
+		isAPI := strings.HasPrefix(r.URL.Path, "/api/")
+		if !configured {
+			if isAPI {
+				writeJSON(rw, http.StatusUnauthorized, map[string]any{
+					"error":       "первичная настройка пароля WebUI не завершена",
+					"needs_setup": true,
+				})
+				return
+			}
+			rw.Header().Set("WWW-Authenticate", `Basic realm="AmneziaWG"`)
+			http.Error(rw, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		ip := clientIPFromRequest(r)
+		if blocked, retryAfter := w.checkAuthRateLimit(ip); blocked {
+			rw.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+			writeJSON(rw, http.StatusTooManyRequests, map[string]any{
+				"error":       fmt.Sprintf("слишком много попыток входа, повторите через %d сек", retryAfter),
+				"retry_after": retryAfter,
+			})
+			return
+		}
+
+		authed, _, _, hadInvalidBasic := w.authenticateRequest(r)
+		if authed {
+			next(rw, r)
+			return
+		}
+		if hadInvalidBasic {
+			w.recordAuthFailure(ip)
+		}
+
+		if isAPI {
+			writeJSON(rw, http.StatusUnauthorized, map[string]any{
+				"error":       "требуется авторизация",
+				"needs_setup": false,
+			})
+			return
+		}
+		rw.Header().Set("WWW-Authenticate", `Basic realm="AmneziaWG"`)
+		http.Error(rw, "Unauthorized", http.StatusUnauthorized)
+	}
+}
+
+func (w *WebServer) handleAuthStatus(rw http.ResponseWriter, r *http.Request) {
+	configured, src, expectUser, _, _ := w.authState()
+	authed := false
+	via := ""
+	user := ""
+	if configured {
+		authed, via, user, _ = w.authenticateRequest(r)
+	}
+	defUser := ""
+	if !configured {
+		defUser = expectUser
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"needs_setup":   !configured,
+		"configured":    configured,
+		"source":        src,
+		"authenticated": authed,
+		"auth_via":      via,
+		"user":          user,
+		"default_user":  defUser,
+		"term_enabled":  w.isTermEnabled(),
+	})
+}
+
+func (w *WebServer) handleAuthSetup(rw http.ResponseWriter, r *http.Request) {
+	if w.settings == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "settings store unavailable"})
+		return
+	}
+	w.setupMu.Lock()
+	defer w.setupMu.Unlock()
+
+	configured, _, _, _, _ := w.authState()
+	if configured {
+		writeJSON(rw, http.StatusConflict, map[string]string{"error": "аутентификация уже настроена"})
+		return
+	}
+	var body struct {
+		User     string `json:"user"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if len(body.Password) < 8 || strings.TrimSpace(body.Password) == "" {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "пароль должен содержать минимум 8 символов"})
+		return
+	}
+	user := strings.TrimSpace(body.User)
+	if len(user) > 64 {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "имя пользователя слишком длинное"})
+		return
+	}
+	saved, err := w.settings.SetWebAuth(user, body.Password)
+	if err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	_ = w.issueSessionCookie(rw, r, saved.UIUser)
+	w.logger.Logf("WebUI initial password configured for user %q", saved.UIUser)
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":   true,
+		"user": saved.UIUser,
+	})
+}
+
+func (w *WebServer) handleAuthLogin(rw http.ResponseWriter, r *http.Request) {
+	configured, _, _, _, _ := w.authState()
+	if !configured {
+		writeJSON(rw, http.StatusConflict, map[string]any{
+			"error":       "сначала задайте пароль при первом входе",
+			"needs_setup": true,
+		})
+		return
+	}
+	ip := clientIPFromRequest(r)
+	if blocked, retryAfter := w.checkAuthRateLimit(ip); blocked {
+		rw.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		writeJSON(rw, http.StatusTooManyRequests, map[string]any{
+			"error":       fmt.Sprintf("слишком много попыток входа, повторите через %d сек", retryAfter),
+			"retry_after": retryAfter,
+		})
+		return
+	}
+	var body struct {
+		User     string `json:"user"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	valid, matchedUser := w.verifyCredentials(strings.TrimSpace(body.User), body.Password)
+	if !valid {
+		blocked, retryAfter := w.recordAuthFailure(ip)
+		if blocked {
+			rw.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+			writeJSON(rw, http.StatusTooManyRequests, map[string]any{
+				"error":       fmt.Sprintf("неверный логин или пароль; IP временно заблокирован на %d сек", retryAfter),
+				"retry_after": retryAfter,
+			})
+			return
+		}
+		writeJSON(rw, http.StatusUnauthorized, map[string]string{"error": "неверный логин или пароль"})
+		return
+	}
+	w.clearAuthFailure(ip)
+	if err := w.issueSessionCookie(rw, r, matchedUser); err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "user": matchedUser})
+}
+
+func (w *WebServer) handleAuthLogout(rw http.ResponseWriter, r *http.Request) {
+	w.revokeSessionFromRequest(r)
+	http.SetCookie(rw, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   r.TLS != nil,
+	})
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (w *WebServer) handleAuthPassword(rw http.ResponseWriter, r *http.Request) {
+	if w.settings == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "settings store unavailable"})
+		return
+	}
+	_, src, expectUser, _, passHash := w.authState()
+	if src != "setup" {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{
+			"error": "пароль задан переменной окружения UI_PASSWORD и изменяется в настройках контейнера",
+		})
+		return
+	}
+	ip := clientIPFromRequest(r)
+	if blocked, retryAfter := w.checkAuthRateLimit(ip); blocked {
+		rw.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		writeJSON(rw, http.StatusTooManyRequests, map[string]any{
+			"error":       fmt.Sprintf("слишком много попыток, повторите через %d сек", retryAfter),
+			"retry_after": retryAfter,
+		})
+		return
+	}
+	var body struct {
+		User            string `json:"user"`
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if !VerifyPasswordHash(passHash, body.CurrentPassword) {
+		blocked, retryAfter := w.recordAuthFailure(ip)
+		if blocked {
+			rw.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+			writeJSON(rw, http.StatusTooManyRequests, map[string]any{
+				"error":       fmt.Sprintf("неверный текущий пароль; повторите через %d сек", retryAfter),
+				"retry_after": retryAfter,
+			})
+			return
+		}
+		writeJSON(rw, http.StatusUnauthorized, map[string]string{"error": "неверный текущий пароль"})
+		return
+	}
+	if len(body.NewPassword) < 8 || strings.TrimSpace(body.NewPassword) == "" {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "новый пароль должен быть не менее 8 символов"})
+		return
+	}
+	newUser := strings.TrimSpace(body.User)
+	if newUser == "" {
+		newUser = expectUser
+	}
+	if len(newUser) > 64 {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "имя пользователя слишком длинное"})
+		return
+	}
+	saved, err := w.settings.SetWebAuth(newUser, body.NewPassword)
+	if err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	w.clearAuthFailure(ip)
+	w.clearAllSessions()
+	if _, err := r.Cookie(sessionCookieName); err == nil {
+		_ = w.issueSessionCookie(rw, r, saved.UIUser)
+	}
+	w.logger.Logf("WebUI password updated for user %q", saved.UIUser)
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "user": saved.UIUser})
 }
 
 func writeJSON(rw http.ResponseWriter, code int, v any) {
@@ -309,11 +848,14 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 		tgStatus = w.tg.Status()
 	}
 	conflicts := w.mgr.DetectConflicts(cfgs)
+	applying, applyingOp := w.mgr.ApplyingState()
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"version":        AppVersion,
 		"interfaces":     ifaces,
 		"configs":        cfgs,
 		"conflicts":      conflicts,
+		"applying":       applying,
+		"applying_op":    applyingOp,
 		"lan_iface":      w.mgr.lanIface,
 		"container_ip":   containerIP,
 		"gateway":        gw,
@@ -327,6 +869,7 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 		"failover":       foStatus,
 		"tg":             tgStatus,
 		"ros":            w.ros.Status(),
+		"term_enabled":   w.isTermEnabled(),
 		"logs":           w.logger.Lines(),
 	})
 }
@@ -378,7 +921,7 @@ func (w *WebServer) handleSaveConfig(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Apply {
-		if err := w.mgr.ActivateConfig(name); err != nil {
+		if err := w.mgr.ApplySavedConfig(name); err != nil {
 			writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -556,11 +1099,13 @@ func (w *WebServer) handleTelegramTest(rw http.ResponseWriter, r *http.Request) 
 		TGSilent        bool   `json:"tg_silent"`
 	}
 	var override *AppSettings
+	usedToken := ""
 	if r.Body != nil {
-		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err == nil && (body.TGChatID != "" || body.TGBotToken != "") {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err == nil && (body.TGChatID != "" || body.TGBotToken != "" || body.TGAPIURL != "") {
 			cur := w.settings.Get()
-			if strings.TrimSpace(body.TGBotToken) != "" {
-				cur.TGBotToken = strings.TrimSpace(body.TGBotToken)
+			newTok := strings.TrimSpace(body.TGBotToken)
+			if newTok != "" {
+				cur.TGBotToken = newTok
 			}
 			if strings.TrimSpace(body.TGChatID) != "" {
 				cur.TGChatID = strings.TrimSpace(body.TGChatID)
@@ -571,18 +1116,40 @@ func (w *WebServer) handleTelegramTest(rw http.ResponseWriter, r *http.Request) 
 				cur.TGNodeName = strings.TrimSpace(body.TGNodeName)
 			}
 			if strings.TrimSpace(body.TGAPIURL) != "" {
-				cur.TGAPIURL = strings.TrimRight(strings.TrimSpace(body.TGAPIURL), "/")
+				normNew := strings.TrimRight(strings.TrimSpace(body.TGAPIURL), "/")
+				normCur := strings.TrimRight(strings.TrimSpace(cur.TGAPIURL), "/")
+				if newTok == "" && cur.TGBotToken != "" && normNew != normCur {
+					writeJSON(rw, http.StatusBadRequest, map[string]any{
+						"ok":    false,
+						"error": "в целях безопасности введите tg_bot_token заново при изменении tg_api_url",
+						"tg":    w.tg.Status(),
+					})
+					return
+				}
+				if err := validateHTTPURL(normNew); err != nil {
+					writeJSON(rw, http.StatusBadRequest, map[string]any{
+						"ok":    false,
+						"error": "некорректный tg_api_url: " + err.Error(),
+						"tg":    w.tg.Status(),
+					})
+					return
+				}
+				cur.TGAPIURL = normNew
 			}
 			if strings.TrimSpace(body.TGVia) != "" {
 				cur.TGVia = strings.TrimSpace(body.TGVia)
 			}
 			cur.TGSilent = body.TGSilent
+			usedToken = cur.TGBotToken
 			override = &cur
 		}
 	}
+	if usedToken == "" && w.settings != nil {
+		usedToken = w.settings.Get().TGBotToken
+	}
 	msgID, err := w.tg.SendTest(override)
 	if err != nil {
-		writeJSON(rw, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error(), "tg": w.tg.Status()})
+		writeJSON(rw, http.StatusBadRequest, map[string]any{"ok": false, "error": redactTelegramSecrets(err.Error(), usedToken), "tg": w.tg.Status()})
 		return
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "message_id": msgID, "tg": w.tg.Status()})
@@ -689,8 +1256,23 @@ func (w *WebServer) handleROSTest(rw http.ResponseWriter, r *http.Request) {
 	if r.Body != nil {
 		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err == nil && (strings.TrimSpace(body.ROSURL) != "" || strings.TrimSpace(body.ROSUser) != "") {
 			cur := w.settings.Get()
-			cur.ROSURL = strings.TrimSpace(body.ROSURL)
-			cur.ROSUser = strings.TrimSpace(body.ROSUser)
+			newURL := normalizeROSBaseURL(body.ROSURL)
+			newUser := strings.TrimSpace(body.ROSUser)
+			if newURL != "" {
+				if errMsg := validateROSBaseURL(newURL); errMsg != "" {
+					writeJSON(rw, http.StatusBadRequest, ROSTestResult{OK: false, Error: "некорректный ros_url: " + errMsg})
+					return
+				}
+			}
+			if !body.ClearROSPass && body.ROSPass == "" && cur.ROSPass != "" && (newURL != cur.ROSURL || newUser != cur.ROSUser) {
+				writeJSON(rw, http.StatusBadRequest, ROSTestResult{
+					OK:    false,
+					Error: "в целях безопасности введите ros_pass заново при изменении ros_url или ros_user",
+				})
+				return
+			}
+			cur.ROSURL = newURL
+			cur.ROSUser = newUser
 			if body.ClearROSPass {
 				cur.ROSPass = ""
 			} else if body.ROSPass != "" {
@@ -708,11 +1290,17 @@ func (w *WebServer) handleROSTest(rw http.ResponseWriter, r *http.Request) {
 			if body.ROSUseBinaryAPI != nil {
 				cur.ROSUseBinaryAPI = *body.ROSUseBinaryAPI
 			}
+			prevTLS := cur.ROSAPITLS
+			if body.ROSAPITLS != nil {
+				cur.ROSAPITLS = *body.ROSAPITLS
+			}
 			if body.ROSAPIPort != nil {
 				cur.ROSAPIPort = *body.ROSAPIPort
 			}
-			if body.ROSAPITLS != nil {
-				cur.ROSAPITLS = *body.ROSAPITLS
+			if !prevTLS && cur.ROSAPITLS && cur.ROSAPIPort == 8728 {
+				cur.ROSAPIPort = 8729
+			} else if prevTLS && !cur.ROSAPITLS && cur.ROSAPIPort == 8729 {
+				cur.ROSAPIPort = 8728
 			}
 			override = &cur
 		}
@@ -855,6 +1443,30 @@ func (w *WebServer) handleSaveSettings(rw http.ResponseWriter, r *http.Request) 
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	if strings.TrimSpace(upd.GeoSiteURL) != "" {
+		if err := validateHTTPURL(upd.GeoSiteURL); err != nil {
+			writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "некорректный geosite_url: " + err.Error()})
+			return
+		}
+	}
+	if strings.TrimSpace(upd.GeoIPURL) != "" {
+		if err := validateHTTPURL(upd.GeoIPURL); err != nil {
+			writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "некорректный geoip_url: " + err.Error()})
+			return
+		}
+	}
+	if strings.TrimSpace(upd.TGAPIURL) != "" {
+		if err := validateHTTPURL(upd.TGAPIURL); err != nil {
+			writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "некорректный tg_api_url: " + err.Error()})
+			return
+		}
+	}
+	if strings.TrimSpace(upd.ROSURL) != "" {
+		if errMsg := validateROSBaseURL(normalizeROSBaseURL(upd.ROSURL)); errMsg != "" {
+			writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "некорректный ros_url: " + errMsg})
+			return
+		}
+	}
 	prev := w.settings.Get()
 	next, err := w.settings.Update(upd)
 	if err != nil {
@@ -863,6 +1475,7 @@ func (w *WebServer) handleSaveSettings(rw http.ResponseWriter, r *http.Request) 
 	}
 
 	w.mgr.SetRuntimeOptions(next.AutoRoute, next.KillSwitch, next.MultiTunnel)
+	w.mgr.SetAllowHooks(next.AllowConfigHooks)
 	w.mgr.SetTunnelPlan(next.TunnelOrder, next.DisabledConfigs)
 	if w.dns != nil {
 		w.dns.ConfigureFromSettings(next)
@@ -907,10 +1520,10 @@ func (w *WebServer) handleGetRules(rw http.ResponseWriter, _ *http.Request) {
 	}
 	raw, rules := w.policy.RawAndRules()
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"raw":    raw,
-		"rules":  rules,
-		"stats":  w.policy.Stats(),
-		"geo":    w.geo.Status(),
+		"raw":   raw,
+		"rules": rules,
+		"stats": w.policy.Stats(),
+		"geo":   w.geo.Status(),
 	})
 }
 
@@ -1030,6 +1643,10 @@ func (w *WebServer) handleGeoUpdate(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (w *WebServer) handleTermExec(rw http.ResponseWriter, r *http.Request) {
+	if !w.isTermEnabled() {
+		writeJSON(rw, http.StatusForbidden, map[string]string{"error": "Web-терминал отключён политикой безопасности (включите в Настройках или установите TERM_ENABLE=on)"})
+		return
+	}
 	if w.term == nil {
 		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "terminal runner unavailable"})
 		return
@@ -1057,6 +1674,10 @@ func (w *WebServer) handleTermExec(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (w *WebServer) handleTermKill(rw http.ResponseWriter, r *http.Request) {
+	if !w.isTermEnabled() {
+		writeJSON(rw, http.StatusForbidden, map[string]string{"error": "Web-терминал отключён политикой безопасности (включите в Настройках или установите TERM_ENABLE=on)"})
+		return
+	}
 	if w.term == nil {
 		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "terminal runner unavailable"})
 		return

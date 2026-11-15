@@ -87,3 +87,5 @@
 :put "ГОТОВО. Теперь установите A-amneziawg-mikrotik из App Store (Winbox -> App)."
 :put "WebUI после старта: http://<ip-роутера>:8092 или http://192.168.253.2:8080"
 :put "DNS внутри туннеля: 192.168.253.2:53 (для /ip/dns/static type=FWD)"
+# БЕЗОПАСНОСТЬ: Не пробрасывайте порты WebUI (8092) и DNS (53) с WAN в Интернет!
+# Для интеграции с RouterOS рекомендуется ограничить /ip/service (www-ssl, api-ssl) параметром address=192.168.253.0/30,<LAN>

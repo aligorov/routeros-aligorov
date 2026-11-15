@@ -17,6 +17,11 @@ import (
 	"time"
 )
 
+const (
+	dnsMaxUDPWorkers = 128
+	dnsMaxTCPWorkers = 64
+)
+
 type DNSForwarder struct {
 	listenAddr string
 	fallback   []string
@@ -28,6 +33,8 @@ type DNSForwarder struct {
 	settings   *SettingsStore
 	ros        *ROSClient
 	logger     *RingLogger
+	udpSem     chan struct{}
+	tcpSem     chan struct{}
 }
 
 func isDoHUpstream(s string) bool {
@@ -76,6 +83,8 @@ func NewDNSForwarder(listenAddr string, fallbackRaw string, logger *RingLogger) 
 		upstreams:  append([]string(nil), fb...),
 		directUps:  []string{"77.88.8.8:53", "1.1.1.1:53"},
 		logger:     logger,
+		udpSem:     make(chan struct{}, dnsMaxUDPWorkers),
+		tcpSem:     make(chan struct{}, dnsMaxTCPWorkers),
 	}
 }
 
@@ -175,13 +184,29 @@ func (d *DNSForwarder) serveUDP(pc net.PacketConn) {
 		}
 		pkt := make([]byte, n)
 		copy(pkt, buf[:n])
-		go func() {
-			resp, err := d.handleDNSQuery(pkt, "udp")
-			if err != nil || len(resp) == 0 {
-				return
-			}
-			_, _ = pc.WriteTo(resp, addr)
-		}()
+		if d.udpSem == nil {
+			go func() {
+				resp, err := d.handleDNSQuery(pkt, "udp")
+				if err != nil || len(resp) == 0 {
+					return
+				}
+				_, _ = pc.WriteTo(resp, addr)
+			}()
+			continue
+		}
+		select {
+		case d.udpSem <- struct{}{}:
+			go func() {
+				defer func() { <-d.udpSem }()
+				resp, err := d.handleDNSQuery(pkt, "udp")
+				if err != nil || len(resp) == 0 {
+					return
+				}
+				_, _ = pc.WriteTo(resp, addr)
+			}()
+		default:
+			// Drop under flood instead of spawning unbounded goroutines
+		}
 	}
 }
 
@@ -191,7 +216,19 @@ func (d *DNSForwarder) serveTCP(ln net.Listener) {
 		if err != nil {
 			return
 		}
-		go d.handleTCP(conn)
+		if d.tcpSem == nil {
+			go d.handleTCP(conn)
+			continue
+		}
+		select {
+		case d.tcpSem <- struct{}{}:
+			go func() {
+				defer func() { <-d.tcpSem }()
+				d.handleTCP(conn)
+			}()
+		default:
+			_ = conn.Close()
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"net/netip"
@@ -150,7 +151,9 @@ func NewPolicyEngine(cfgDir string, settings *SettingsStore, geo *GeoStore, mgr 
 	pe.detectRouteFn = defaultDetectRoute
 	pe.runBatchFn = runIPBatch
 	pe.runCmdFn = func(name string, args ...string) error {
-		cmd := exec.Command(name, args...)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, name, args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			msg := strings.TrimSpace(string(out))
@@ -1253,6 +1256,13 @@ func (p *PolicyEngine) ApplyRouting() error {
 		_ = p.runCmdFn("iptables", "-D", "FORWARD", "-i", lanIface, "!", "-o", tunIface, "-j", "DROP")
 	}
 
+	// Defense-in-depth IPv6 leak guard: unless AWG_ENABLE_IPV6=on (or an IPv6 tunnel is configured),
+	// keep IPv6 forwarding disabled and default-drop IPv6 FORWARD chain. Best-effort on kernels without IPv6.
+	if os.Getenv("AWG_ENABLE_IPV6") != "on" && !p.hasIPv6Config() {
+		_ = p.runCmdFn("sysctl", "-w", "net.ipv6.conf.all.forwarding=0")
+		_ = p.runCmdFn("ip6tables", "-P", "FORWARD", "DROP")
+	}
+
 	p.mu.Lock()
 	p.lastGateway = gw
 	p.lastTunIface = tunIface
@@ -1382,8 +1392,45 @@ func (p *PolicyEngine) BuildBatchScript(
 	return b.String(), staticCount
 }
 
+const ipBatchChunkLines = 500
+
+func splitBatchChunks(script string, maxLines int) []string {
+	if maxLines <= 0 {
+		maxLines = ipBatchChunkLines
+	}
+	var nonEmpty []string
+	for _, l := range strings.Split(script, "\n") {
+		if strings.TrimSpace(l) != "" {
+			nonEmpty = append(nonEmpty, l)
+		}
+	}
+	if len(nonEmpty) == 0 {
+		return nil
+	}
+	chunks := make([]string, 0, (len(nonEmpty)+maxLines-1)/maxLines)
+	for i := 0; i < len(nonEmpty); i += maxLines {
+		end := i + maxLines
+		if end > len(nonEmpty) {
+			end = len(nonEmpty)
+		}
+		chunks = append(chunks, strings.Join(nonEmpty[i:end], "\n")+"\n")
+	}
+	return chunks
+}
+
 func runIPBatch(script string) error {
-	cmd := exec.Command("ip", "-batch", "-")
+	for _, chunk := range splitBatchChunks(script, ipBatchChunkLines) {
+		if err := runIPBatchChunk(chunk); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runIPBatchChunk(script string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ip", "-batch", "-")
 	cmd.Stdin = strings.NewReader(script)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1397,7 +1444,9 @@ func runIPBatch(script string) error {
 }
 
 func defaultDetectRoute(lanIface string) (string, []netip.Prefix) {
-	out, err := exec.Command("ip", "-4", "route", "show", "table", "main").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ip", "-4", "route", "show", "table", "main").Output()
 	if err != nil {
 		return "", nil
 	}
@@ -1434,4 +1483,43 @@ func defaultDetectRoute(lanIface string) (string, []netip.Prefix) {
 		}
 	}
 	return gw, connected
+}
+
+func (p *PolicyEngine) hasIPv6Config() bool {
+	cfgDir := filepath.Dir(p.rulesPath)
+	if cfgDir == "" || cfgDir == "." {
+		return false
+	}
+	entries, err := os.ReadDir(cfgDir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".conf") {
+			continue
+		}
+		if strings.EqualFold(e.Name(), "rules.conf") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(cfgDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(raw), "\n") {
+			trim := strings.TrimSpace(line)
+			if strings.HasPrefix(trim, "#") || strings.HasPrefix(trim, ";") {
+				continue
+			}
+			eq := strings.IndexByte(trim, '=')
+			if eq <= 0 {
+				continue
+			}
+			key := strings.ToLower(strings.TrimSpace(trim[:eq]))
+			val := trim[eq+1:]
+			if key == "address" && strings.Contains(val, ":") {
+				return true
+			}
+		}
+	}
+	return false
 }

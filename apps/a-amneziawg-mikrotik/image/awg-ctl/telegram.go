@@ -4,15 +4,27 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
+
+var reTGBotURLToken = regexp.MustCompile(`/bot[0-9]{4,}:[A-Za-z0-9_-]{8,}`)
+
+func redactTelegramSecrets(msg, token string) string {
+	out := reTGBotURLToken.ReplaceAllString(msg, "/bot***REDACTED***")
+	if tok := strings.TrimSpace(token); tok != "" {
+		out = strings.ReplaceAll(out, tok, "***REDACTED***")
+	}
+	return out
+}
 
 type TGEventKind string
 
@@ -315,8 +327,9 @@ func (n *TGNotifier) sendSyncWithSettings(st AppSettings, kind TGEventKind, titl
 
 	status, respBody, err := n.sendHTTPFn(ctx, st.TGVia, st.TGAPIURL, st.TGBotToken, payload)
 	if err != nil {
-		n.recordResult(err)
-		return 0, err
+		cleanErr := errors.New(redactTelegramSecrets(err.Error(), st.TGBotToken))
+		n.recordResult(cleanErr)
+		return 0, cleanErr
 	}
 
 	var apiResp struct {
@@ -362,6 +375,9 @@ func (n *TGNotifier) defaultSendHTTP(ctx context.Context, via, apiURL, token str
 	if apiURL == "" {
 		apiURL = DefaultTelegramAPI
 	}
+	if err := validateHTTPURL(apiURL); err != nil {
+		return 0, nil, fmt.Errorf("некорректный tg_api_url: %w", err)
+	}
 	endpoint := strings.TrimRight(apiURL, "/") + "/bot" + token + "/sendMessage"
 
 	doPost := func(dialer netDialFunc) (int, []byte, error) {
@@ -370,12 +386,12 @@ func (n *TGNotifier) defaultSendHTTP(ctx context.Context, via, apiURL, token str
 		cli := &http.Client{Transport: tr, Timeout: 8 * time.Second}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 		if err != nil {
-			return 0, nil, err
+			return 0, nil, errors.New(redactTelegramSecrets(err.Error(), token))
 		}
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := cli.Do(req)
 		if err != nil {
-			return 0, nil, err
+			return 0, nil, errors.New(redactTelegramSecrets(err.Error(), token))
 		}
 		defer resp.Body.Close()
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))

@@ -30,6 +30,7 @@ func main() {
 
 	mgr := NewTunnelManager(srcDir, runDir, lanIface, st.AutoRoute, st.KillSwitch, logger)
 	mgr.SetRuntimeOptions(st.AutoRoute, st.KillSwitch, st.MultiTunnel)
+	mgr.SetAllowHooks(st.AllowConfigHooks)
 	mgr.SetTunnelPlan(st.TunnelOrder, st.DisabledConfigs)
 	if err := mgr.SeedFromEnv(); err != nil {
 		logger.Logf("ERROR seeding env config: %v", err)

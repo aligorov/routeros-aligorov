@@ -1,8 +1,14 @@
 package main
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -87,12 +93,21 @@ type AppSettings struct {
 	ROSBGPRemoteAS       uint32 `json:"ros_bgp_remote_as"`       // RouterOS ASN for BGP mode
 	ROSBGPPeerIP         string `json:"ros_bgp_peer_ip"`         // RouterOS BGP peer IP (empty = auto)
 	ROSBGPRouteTable     string `json:"ros_bgp_route_table"`     // target routing table on RouterOS (default "main")
+
+	AllowConfigHooks bool   `json:"allow_config_hooks"`         // permit PreUp/PostUp/PreDown/PostDown when saving .conf
+	TermEnabled      bool   `json:"term_enabled"`               // enable WebUI shell terminal (/api/term/*)
+	UIUser           string `json:"ui_user,omitempty"`          // WebUI username (first-run setup / override)
+	UIPassHash       string `json:"ui_password_hash,omitempty"` // PBKDF2-HMAC-SHA256 WebUI password hash (never returned in View)
 }
 
 type SettingsView struct {
 	AppSettings
-	ROSPassSet bool `json:"ros_pass_set"`
-	TGTokenSet bool `json:"tg_token_set"`
+	ROSPassSet       bool   `json:"ros_pass_set"`
+	TGTokenSet       bool   `json:"tg_token_set"`
+	UIAuthConfigured bool   `json:"ui_auth_configured"`
+	UIAuthSource     string `json:"ui_auth_source,omitempty"`
+	UINeedsSetup     bool   `json:"ui_needs_setup"`
+	TermEnvDisabled  bool   `json:"term_env_disabled,omitempty"`
 }
 
 type SettingsUpdate struct {
@@ -131,6 +146,12 @@ func defaultSettingsFromEnv() AppSettings {
 	nodeName, _ := os.Hostname()
 	if n := strings.TrimSpace(os.Getenv("TG_NODE_NAME")); n != "" {
 		nodeName = n
+	}
+
+	rosAPITLS := envOr("ROS_API_TLS", "off") == "on"
+	defAPIPort := 8728
+	if rosAPITLS {
+		defAPIPort = 8729
 	}
 
 	return AppSettings{
@@ -183,8 +204,8 @@ func defaultSettingsFromEnv() AppSettings {
 		ROSSyncDomains:       envOr("ROS_SYNC_DOMAINS", "on") == "on",
 		ROSMode:              normalizeROSMode(envOr("ROS_MODE", ROSModeGateway)),
 		ROSUseBinaryAPI:      envOr("ROS_BINARY_API", "on") != "off",
-		ROSAPIPort:           clampInt(atoiDef(os.Getenv("ROS_API_PORT"), 8728), 1, 65535, 8728),
-		ROSAPITLS:            envOr("ROS_API_TLS", "off") == "on",
+		ROSAPIPort:           clampInt(atoiDef(os.Getenv("ROS_API_PORT"), defAPIPort), 1, 65535, defAPIPort),
+		ROSAPITLS:            rosAPITLS,
 		ROSDynamicTimeout:    normalizeROSDynamicTimeout(envOr("ROS_DYNAMIC_TIMEOUT", "12:00:00")),
 		ROSSyncPolicyCIDRs:   envOr("ROS_SYNC_POLICY_CIDRS", "on") != "off",
 		ROSStaticPrefixLimit: clampInt(atoiDef(os.Getenv("ROS_STATIC_PREFIX_LIMIT"), 2500), 10, 100000, 2500),
@@ -192,7 +213,33 @@ func defaultSettingsFromEnv() AppSettings {
 		ROSBGPRemoteAS:       uint32(clampInt(atoiDef(os.Getenv("ROS_BGP_REMOTE_AS"), 65510), 1, 2147483647, 65510)),
 		ROSBGPPeerIP:         normalizeROSContainerIP(os.Getenv("ROS_BGP_PEER_IP")),
 		ROSBGPRouteTable:     envOr("ROS_BGP_ROUTE_TABLE", "main"),
+
+		AllowConfigHooks: envOr("AWG_ALLOW_HOOKS", "off") == "on",
+		TermEnabled:      termEnvFlag() == "on",
+		UIUser:           envOr("UI_USER", "admin"),
 	}
+}
+
+func termEnvFlag() string {
+	return strings.ToLower(strings.TrimSpace(os.Getenv("TERM_ENABLE")))
+}
+
+// validateHTTPURL verifies that raw uses http:// or https:// with a non-empty host and no embedded credentials.
+func validateHTTPURL(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return err
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("допустимы только схемы http:// или https://")
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("не указан хост в URL")
+	}
+	if u.User != nil {
+		return fmt.Errorf("учётные данные в URL запрещены")
+	}
+	return nil
 }
 
 func atoiDef(raw string, def int) int {
@@ -275,11 +322,15 @@ func normalizeSettings(s, fallback AppSettings) AppSettings {
 	if strings.TrimSpace(s.ProxyDNS) == "" {
 		s.ProxyDNS = fallback.ProxyDNS
 	}
-	if strings.TrimSpace(s.GeoSiteURL) == "" {
+	if strings.TrimSpace(s.GeoSiteURL) == "" || validateHTTPURL(s.GeoSiteURL) != nil {
 		s.GeoSiteURL = fallback.GeoSiteURL
+	} else {
+		s.GeoSiteURL = strings.TrimSpace(s.GeoSiteURL)
 	}
-	if strings.TrimSpace(s.GeoIPURL) == "" {
+	if strings.TrimSpace(s.GeoIPURL) == "" || validateHTTPURL(s.GeoIPURL) != nil {
 		s.GeoIPURL = fallback.GeoIPURL
+	} else {
+		s.GeoIPURL = strings.TrimSpace(s.GeoIPURL)
 	}
 	if s.GeoAutoUpdateHours < 0 {
 		s.GeoAutoUpdateHours = 0
@@ -334,7 +385,7 @@ func normalizeSettings(s, fallback AppSettings) AppSettings {
 		s.TGNodeName = fallback.TGNodeName
 	}
 	s.TGAPIURL = strings.TrimRight(strings.TrimSpace(s.TGAPIURL), "/")
-	if s.TGAPIURL == "" {
+	if s.TGAPIURL == "" || validateHTTPURL(s.TGAPIURL) != nil {
 		s.TGAPIURL = DefaultTelegramAPI
 	}
 	s.TGVia = strings.ToLower(strings.TrimSpace(s.TGVia))
@@ -382,6 +433,18 @@ func normalizeSettings(s, fallback AppSettings) AppSettings {
 	s.ROSBGPRouteTable = strings.TrimSpace(s.ROSBGPRouteTable)
 	if s.ROSBGPRouteTable == "" {
 		s.ROSBGPRouteTable = "main"
+	}
+	if termEnvFlag() == "off" {
+		s.TermEnabled = false
+	} else if termEnvFlag() == "on" {
+		s.TermEnabled = true
+	}
+	s.UIUser = strings.TrimSpace(s.UIUser)
+	if s.UIUser == "" {
+		s.UIUser = fallback.UIUser
+		if s.UIUser == "" {
+			s.UIUser = "admin"
+		}
 	}
 	return s
 }
@@ -503,6 +566,74 @@ func formatROSDuration(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d:%02d", hh, mm, ss)
 }
 
+const pbkdf2Iterations = 100000
+
+// HashPassword derives a salted PBKDF2-HMAC-SHA256 hash using only the Go stdlib.
+func HashPassword(password string) (string, error) {
+	if len(password) < 6 {
+		return "", fmt.Errorf("пароль должен быть не короче 6 символов")
+	}
+	var salt [16]byte
+	if _, err := rand.Read(salt[:]); err != nil {
+		return "", err
+	}
+	dk := pbkdf2SHA256([]byte(password), salt[:], pbkdf2Iterations, 32)
+	return fmt.Sprintf("pbkdf2-sha256$%d$%s$%s",
+		pbkdf2Iterations,
+		base64.RawStdEncoding.EncodeToString(salt[:]),
+		base64.RawStdEncoding.EncodeToString(dk)), nil
+}
+
+// VerifyPasswordHash checks a plaintext password against an encoded PBKDF2-HMAC-SHA256 hash.
+func VerifyPasswordHash(encoded, password string) bool {
+	parts := strings.Split(strings.TrimSpace(encoded), "$")
+	if len(parts) != 4 || parts[0] != "pbkdf2-sha256" {
+		return false
+	}
+	iters, err := strconv.Atoi(parts[1])
+	if err != nil || iters < 10000 || iters > 1000000 {
+		return false
+	}
+	salt, err1 := base64.RawStdEncoding.DecodeString(parts[2])
+	want, err2 := base64.RawStdEncoding.DecodeString(parts[3])
+	if err1 != nil || err2 != nil || len(salt) == 0 || len(want) == 0 {
+		return false
+	}
+	got := pbkdf2SHA256([]byte(password), salt, iters, len(want))
+	return subtle.ConstantTimeCompare(got, want) == 1
+}
+
+func pbkdf2SHA256(password, salt []byte, iter, keyLen int) []byte {
+	prf := func(data []byte) []byte {
+		mac := hmac.New(sha256.New, password)
+		mac.Write(data)
+		return mac.Sum(nil)
+	}
+	numBlocks := (keyLen + sha256.Size - 1) / sha256.Size
+	var dk []byte
+	for block := 1; block <= numBlocks; block++ {
+		var buf [4]byte
+		buf[0] = byte(block >> 24)
+		buf[1] = byte(block >> 16)
+		buf[2] = byte(block >> 8)
+		buf[3] = byte(block)
+		in := make([]byte, len(salt)+4)
+		copy(in, salt)
+		copy(in[len(salt):], buf[:])
+		u := prf(in)
+		out := make([]byte, len(u))
+		copy(out, u)
+		for i := 2; i <= iter; i++ {
+			u = prf(u)
+			for j := range out {
+				out[j] ^= u[j]
+			}
+		}
+		dk = append(dk, out...)
+	}
+	return dk[:keyLen]
+}
+
 func (s *SettingsStore) Get() AppSettings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -512,14 +643,44 @@ func (s *SettingsStore) Get() AppSettings {
 func (s *SettingsStore) View() SettingsView {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	envPass := strings.TrimSpace(os.Getenv("UI_PASSWORD"))
+	authSource := ""
+	if envPass != "" {
+		authSource = "env"
+	} else if s.val.UIPassHash != "" {
+		authSource = "setup"
+	}
 	v := SettingsView{
-		AppSettings: s.val,
-		ROSPassSet:  s.val.ROSPass != "",
-		TGTokenSet:  s.val.TGBotToken != "",
+		AppSettings:      s.val,
+		ROSPassSet:       s.val.ROSPass != "",
+		TGTokenSet:       s.val.TGBotToken != "",
+		UIAuthConfigured: authSource != "",
+		UIAuthSource:     authSource,
+		UINeedsSetup:     authSource == "",
+		TermEnvDisabled:  termEnvFlag() == "off",
 	}
 	v.ROSPass = ""
 	v.TGBotToken = ""
+	v.UIPassHash = ""
 	return v
+}
+
+func (s *SettingsStore) SetWebAuth(user, password string) (AppSettings, error) {
+	hash, err := HashPassword(password)
+	if err != nil {
+		return s.val, err
+	}
+	user = strings.TrimSpace(user)
+	if user == "" {
+		user = envOr("UI_USER", "admin")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.val
+	next.UIUser = user
+	next.UIPassHash = hash
+	next = normalizeSettings(next, defaultSettingsFromEnv())
+	return s.saveLocked(next)
 }
 
 func (s *SettingsStore) saveLocked(next AppSettings) (AppSettings, error) {
@@ -554,6 +715,17 @@ func (s *SettingsStore) Update(upd SettingsUpdate) (AppSettings, error) {
 	}
 
 	next := normalizeSettings(upd.AppSettings, defaultSettingsFromEnv())
+	// Auto-switch default RouterOS Binary API port 8728 <-> 8729 when TLS toggle changes.
+	if !s.val.ROSAPITLS && next.ROSAPITLS && next.ROSAPIPort == 8728 {
+		next.ROSAPIPort = 8729
+	} else if s.val.ROSAPITLS && !next.ROSAPITLS && next.ROSAPIPort == 8729 {
+		next.ROSAPIPort = 8728
+	}
+	// Always preserve credentials not edited directly by settings forms.
+	next.UIPassHash = s.val.UIPassHash
+	if strings.TrimSpace(upd.UIUser) == "" {
+		next.UIUser = s.val.UIUser
+	}
 	if upd.ClearROSPass {
 		next.ROSPass = ""
 	} else if next.ROSPass == "" {

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
 	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,7 +17,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+)
+
+const (
+	defaultCmdTimeout  = 25 * time.Second
+	defaultShowTimeout = 5 * time.Second
+	defaultIPTimeout   = 10 * time.Second
 )
 
 var validConfNameRe = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,15}\.conf$`)
@@ -69,12 +78,14 @@ type ConfigMeta struct {
 
 type TunnelManager struct {
 	mu          sync.Mutex
+	opMu        sync.Mutex
 	srcDir      string
 	runDir      string
 	lanIface    string
 	autoRoute   bool
 	killSwitch  bool
 	multiTunnel bool
+	allowHooks  bool
 	order       []string
 	disabled    map[string]bool
 	started     []string
@@ -83,9 +94,13 @@ type TunnelManager struct {
 	ifaceMark   map[string]int
 	startedAt   map[string]time.Time
 	startErrors map[string]string
+	applying    bool
+	applyingOp  string
 	logger      *RingLogger
 	onChange    func()
 	ipCmdFn     func(args ...string) error
+	runCmdFn    func(ctx context.Context, name string, args ...string) (string, error)
+	cmdTimeout  time.Duration
 
 	epMu            sync.Mutex
 	cachedEndpoints []string
@@ -100,14 +115,19 @@ func NewTunnelManager(srcDir, runDir, lanIface string, autoRoute, killSwitch boo
 		autoRoute:   autoRoute,
 		killSwitch:  killSwitch,
 		multiTunnel: envOr("AWG_MULTI_TUNNEL", "off") == "on",
+		allowHooks:  envOr("AWG_ALLOW_HOOKS", "off") == "on",
 		disabled:    map[string]bool{},
 		ifaceTable:  map[string]string{},
 		ifaceMark:   map[string]int{},
 		startedAt:   map[string]time.Time{},
 		startErrors: map[string]string{},
 		logger:      logger,
+		cmdTimeout:  defaultCmdTimeout,
+		runCmdFn:    defaultRunCmdFn,
 		ipCmdFn: func(args ...string) error {
-			out, err := exec.Command("ip", args...).CombinedOutput()
+			ctx, cancel := context.WithTimeout(context.Background(), defaultIPTimeout)
+			defer cancel()
+			out, err := exec.CommandContext(ctx, "ip", args...).CombinedOutput()
 			if err != nil {
 				msg := strings.TrimSpace(string(out))
 				if msg != "" {
@@ -129,6 +149,13 @@ func (m *TunnelManager) SetRuntimeOptions(autoRoute, killSwitch, multiTunnel boo
 	m.autoRoute = autoRoute
 	m.killSwitch = killSwitch
 	m.multiTunnel = multiTunnel
+	m.mu.Unlock()
+}
+
+// SetAllowHooks updates whether .conf uploads with PreUp/PostUp/PreDown/PostDown are allowed.
+func (m *TunnelManager) SetAllowHooks(allow bool) {
+	m.mu.Lock()
+	m.allowHooks = allow
 	m.mu.Unlock()
 }
 
@@ -200,7 +227,7 @@ var interfaceOnlyKeys = map[string]bool{
 	"address": true, "dns": true, "mtu": true, "table": true,
 	"preup": true, "postup": true, "predown": true, "postdown": true,
 	"saveconfig": true,
-	"jc": true, "jmin": true, "jmax": true,
+	"jc":         true, "jmin": true, "jmax": true,
 	"s1": true, "s2": true, "s3": true, "s4": true,
 	"h1": true, "h2": true, "h3": true, "h4": true,
 	"i1": true, "i2": true, "i3": true, "i4": true, "i5": true,
@@ -419,7 +446,34 @@ func (m *TunnelManager) SetActiveConfig(name string) error {
 	return os.WriteFile(m.activeFilePath(), []byte(name+"\n"), 0o600)
 }
 
+func (m *TunnelManager) setApplying(active bool, op string) {
+	m.mu.Lock()
+	m.applying = active
+	m.applyingOp = op
+	m.mu.Unlock()
+}
+
+// ApplyingState reports whether a tunnel lifecycle operation (start/stop/restart/switch)
+// is currently in progress, along with its human-readable label.
+func (m *TunnelManager) ApplyingState() (bool, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.applying, m.applyingOp
+}
+
+func (m *TunnelManager) invalidateEndpointsCache() {
+	m.epMu.Lock()
+	m.endpointsAt = time.Time{}
+	m.epMu.Unlock()
+}
+
 func (m *TunnelManager) ActivateConfig(name string) error {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	return m.activateConfigOp(name)
+}
+
+func (m *TunnelManager) activateConfigOp(name string) error {
 	if err := m.SetActiveConfig(name); err != nil {
 		return err
 	}
@@ -434,7 +488,7 @@ func (m *TunnelManager) ActivateConfig(name string) error {
 		if ifaces, err := m.ShowInterfaces(); err == nil {
 			for _, ifc := range ifaces {
 				if ifc.Name == targetIface {
-					if err := m.SwitchPrimaryFast(name); err == nil {
+					if err := m.switchPrimaryFastOp(name); err == nil {
 						return nil
 					}
 					break
@@ -442,12 +496,30 @@ func (m *TunnelManager) ActivateConfig(name string) error {
 			}
 		}
 	}
-	return m.RestartAll()
+	return m.restartAllOp()
+}
+
+// ApplySavedConfig sets name as active and reloads tunnels so edits in the saved .conf
+// (such as Endpoint, keys, or AllowedIPs) take effect immediately.
+func (m *TunnelManager) ApplySavedConfig(name string) error {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	if err := m.SetActiveConfig(name); err != nil {
+		return err
+	}
+	m.logger.Logf("Applying saved profile %s", name)
+	return m.restartAllOp()
 }
 
 // SwitchPrimaryFast switches Primary routing (table awg -> new interface) in <100ms
 // without tearing down running tunnels in Multi-Tunnel / Hot-Standby mode.
 func (m *TunnelManager) SwitchPrimaryFast(name string) error {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	return m.switchPrimaryFastOp(name)
+}
+
+func (m *TunnelManager) switchPrimaryFastOp(name string) error {
 	if err := m.SetActiveConfig(name); err != nil {
 		return err
 	}
@@ -631,32 +703,183 @@ func (m *TunnelManager) ReadConfig(name string) (string, error) {
 	return string(b), nil
 }
 
+// ExtractConfigHooks returns unique awg-quick/wg-quick lifecycle hook keys found in a config.
+func ExtractConfigHooks(content string) []string {
+	seen := map[string]bool{}
+	var found []string
+	for _, rawLine := range strings.Split(normalizeLF(content), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "[") {
+			continue
+		}
+		eq := strings.IndexByte(line, '=')
+		if eq <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:eq])
+		lower := strings.ToLower(key)
+		switch lower {
+		case "preup", "postup", "predown", "postdown":
+			if !seen[lower] {
+				seen[lower] = true
+				found = append(found, key)
+			}
+		}
+	}
+	return found
+}
+
+// ValidateConfig performs fast structural validation on a WireGuard/AmneziaWG .conf
+// before saving so malformed entries (such as Endpoint = ip:port:port) fail immediately
+// instead of hanging awg-quick/awg setconf DNS retries.
+func ValidateConfig(content string) error {
+	clean := normalizeLF(content)
+	hasInterface := false
+	for i, rawLine := range strings.Split(clean, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			if end := strings.IndexByte(line, ']'); end > 1 {
+				if strings.EqualFold(strings.TrimSpace(line[1:end]), "Interface") {
+					hasInterface = true
+				}
+			}
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(k))
+		val := strings.TrimSpace(v)
+		ln := i + 1
+		switch key {
+		case "endpoint":
+			if err := validateEndpoint(val); err != nil {
+				return fmt.Errorf("line %d: %w", ln, err)
+			}
+		case "listenport", "mtu":
+			if val != "" {
+				minVal := 1
+				if key == "mtu" {
+					minVal = 68
+				}
+				n, err := strconv.Atoi(val)
+				if err != nil || n < minVal || n > 65535 {
+					return fmt.Errorf("line %d: invalid %s %q (must be %d..65535)", ln, strings.TrimSpace(k), val, minVal)
+				}
+			}
+		case "address", "allowedips":
+			if val != "" {
+				if err := validateCIDRList(strings.TrimSpace(k), val); err != nil {
+					return fmt.Errorf("line %d: %w", ln, err)
+				}
+			}
+		}
+	}
+	if !hasInterface {
+		return fmt.Errorf("config must contain [Interface] section")
+	}
+	return nil
+}
+
+func validateEndpoint(val string) error {
+	if val == "" {
+		return fmt.Errorf("Endpoint must not be empty")
+	}
+	if strings.ContainsAny(val, " \t") {
+		return fmt.Errorf("invalid Endpoint %q: unexpected whitespace", val)
+	}
+	host, portStr, err := net.SplitHostPort(val)
+	if err != nil || host == "" {
+		return fmt.Errorf("invalid Endpoint %q: expected host:port or [ipv6]:port (e.g. 1.2.3.4:51820)", val)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1 || port > 65535 {
+		return fmt.Errorf("invalid Endpoint %q: port %q must be 1..65535", val, portStr)
+	}
+	return nil
+}
+
+func validateCIDRList(field, val string) error {
+	for _, p := range strings.Split(val, ",") {
+		item := strings.TrimSpace(p)
+		if item == "" {
+			continue
+		}
+		if _, err := netip.ParsePrefix(item); err == nil {
+			continue
+		}
+		if _, err := netip.ParseAddr(item); err == nil {
+			continue
+		}
+		return fmt.Errorf("invalid %s entry %q (expected IP or CIDR)", field, item)
+	}
+	return nil
+}
+
 func (m *TunnelManager) SaveConfig(name, content string) error {
 	if !validConfNameRe.MatchString(name) {
 		return fmt.Errorf("invalid config filename %q (allowed: [a-zA-Z0-9_-]{1,15}.conf)", name)
 	}
 	clean := normalizeLF(content)
-	if !strings.Contains(clean, "[Interface]") {
-		return fmt.Errorf("config must contain [Interface] section")
+	if err := ValidateConfig(clean); err != nil {
+		return err
+	}
+	if hooks := ExtractConfigHooks(clean); len(hooks) > 0 {
+		m.mu.Lock()
+		allowHooks := m.allowHooks
+		m.mu.Unlock()
+		if !allowHooks {
+			return fmt.Errorf("shell hooks (%s) in .conf are disabled by security policy (enable allow_config_hooks in Settings or AWG_ALLOW_HOOKS=on)", strings.Join(hooks, ", "))
+		}
 	}
 	if err := os.MkdirAll(m.srcDir, 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(m.srcDir, name), []byte(clean), 0o600)
+	if err := os.WriteFile(filepath.Join(m.srcDir, name), []byte(clean), 0o600); err != nil {
+		return err
+	}
+	m.invalidateEndpointsCache()
+	return nil
 }
 
 func (m *TunnelManager) DeleteConfig(name string) error {
 	if !validConfNameRe.MatchString(name) {
 		return fmt.Errorf("invalid config filename %q", name)
 	}
-	m.mu.Lock()
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	m.setApplying(true, "Удаление "+name)
+	defer m.setApplying(false, "")
+
 	runPath := filepath.Join(m.runDir, name)
 	if _, err := os.Stat(runPath); err == nil {
 		_ = m.runCmd("/usr/bin/awg-quick", "down", runPath)
 		_ = os.Remove(runPath)
 	}
+	iface := strings.TrimSuffix(name, ".conf")
+	m.mu.Lock()
+	filtered := m.started[:0]
+	for _, p := range m.started {
+		if p != runPath {
+			filtered = append(filtered, p)
+		}
+	}
+	m.started = filtered
+	if m.primaryCfg == name {
+		m.primaryCfg = ""
+	}
+	delete(m.startedAt, iface)
+	delete(m.ifaceTable, iface)
+	delete(m.ifaceMark, iface)
+	delete(m.startErrors, name)
 	m.mu.Unlock()
+
 	err := os.Remove(filepath.Join(m.srcDir, name))
+	m.invalidateEndpointsCache()
 	if m.onChange != nil {
 		go m.onChange()
 	}
@@ -710,8 +933,14 @@ func (m *TunnelManager) injectAutoRoute(text string, table string, primary bool)
 }
 
 func (m *TunnelManager) StartAll() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	return m.startAllOp()
+}
+
+func (m *TunnelManager) startAllOp() error {
+	m.setApplying(true, "Запуск профилей")
+	defer m.setApplying(false, "")
 
 	if err := os.MkdirAll(m.runDir, 0o700); err != nil {
 		return err
@@ -725,9 +954,7 @@ func (m *TunnelManager) StartAll() error {
 		}
 	}
 
-	m.mu.Unlock()
 	configs, err := m.ListConfigs()
-	m.mu.Lock()
 	if err != nil {
 		return err
 	}
@@ -736,20 +963,28 @@ func (m *TunnelManager) StartAll() error {
 		return nil
 	}
 
-	target := selectStartConfigs(configs, m.GetActiveConfig(), m.multiTunnel)
+	m.mu.Lock()
+	multi := m.multiTunnel
+	autoRoute := m.autoRoute
+	ipCmd := m.ipCmdFn
 	m.started = nil
 	m.primaryCfg = ""
 	m.ifaceTable = map[string]string{}
 	m.ifaceMark = map[string]int{}
 	m.startedAt = map[string]time.Time{}
 	m.startErrors = map[string]string{}
+	m.mu.Unlock()
 
+	target := selectStartConfigs(configs, m.GetActiveConfig(), multi)
 	var firstErr error
 	startedCount := 0
 	for _, cfg := range target {
+		m.setApplying(true, "Запуск "+cfg.Name)
 		srcBytes, err := os.ReadFile(filepath.Join(m.srcDir, cfg.Name))
 		if err != nil {
+			m.mu.Lock()
 			m.startErrors[cfg.Name] = err.Error()
+			m.mu.Unlock()
 			if firstErr == nil {
 				firstErr = err
 			}
@@ -764,44 +999,55 @@ func (m *TunnelManager) StartAll() error {
 		prepared := m.injectAutoRoute(normalizeLF(string(srcBytes)), table, isPrimary)
 		runPath := filepath.Join(m.runDir, cfg.Name)
 		if err := os.WriteFile(runPath, []byte(prepared), 0o600); err != nil {
+			m.mu.Lock()
 			m.startErrors[cfg.Name] = err.Error()
+			m.mu.Unlock()
 			if firstErr == nil {
 				firstErr = err
 			}
 			continue
 		}
-		if m.autoRoute && m.ipCmdFn != nil {
-			_ = m.ipCmdFn("route", "flush", "table", table)
+		if autoRoute && ipCmd != nil {
+			_ = ipCmd("route", "flush", "table", table)
 		}
 		m.logger.Logf("Starting %s (table=%s, primary=%v)...", cfg.Name, table, isPrimary)
 		if err := m.runCmd("/usr/bin/awg-quick", "up", runPath); err != nil {
+			m.mu.Lock()
 			m.startErrors[cfg.Name] = err.Error()
+			m.mu.Unlock()
 			m.logger.Logf("ERROR starting %s: %v", cfg.Name, err)
 			if firstErr == nil {
 				firstErr = fmt.Errorf("awg-quick up %s: %w", cfg.Name, err)
 			}
-			if !m.multiTunnel {
-				m.stopStartedLocked()
+			if !multi {
+				m.stopStartedOp()
 				return firstErr
 			}
 			continue
 		}
+		now := time.Now()
+		var probeTbl, markHex string
+		var probeMark int
+		m.mu.Lock()
 		m.started = append(m.started, runPath)
-		m.startedAt[cfg.Interface] = time.Now()
+		m.startedAt[cfg.Interface] = now
 		m.ifaceTable[cfg.Interface] = table
 		if isPrimary {
 			m.primaryCfg = cfg.Name
 		}
 		// Install dedicated per-tunnel probe table + fwmark (0x201, 0x202, ...) when Multi-Tunnel is active
 		// so health probes always traverse THAT exact tunnel even if table "awg" swaps to another primary.
-		if m.multiTunnel && m.ipCmdFn != nil {
-			probeTbl := strconv.Itoa(probeNum)
-			probeMark := 0x201 + startedCount
+		if multi && ipCmd != nil {
+			probeTbl = strconv.Itoa(probeNum)
+			probeMark = 0x201 + startedCount
 			m.ifaceMark[cfg.Interface] = probeMark
-			markHex := fmt.Sprintf("0x%x", probeMark)
-			_ = m.ipCmdFn("route", "replace", "default", "dev", cfg.Interface, "table", probeTbl)
-			_ = m.ipCmdFn("rule", "del", "priority", "241", "from", "all", "fwmark", markHex, "lookup", probeTbl)
-			_ = m.ipCmdFn("rule", "add", "priority", "241", "from", "all", "fwmark", markHex, "lookup", probeTbl)
+			markHex = fmt.Sprintf("0x%x", probeMark)
+		}
+		m.mu.Unlock()
+		if probeMark != 0 && ipCmd != nil {
+			_ = ipCmd("route", "replace", "default", "dev", cfg.Interface, "table", probeTbl)
+			_ = ipCmd("rule", "del", "priority", "241", "from", "all", "fwmark", markHex, "lookup", probeTbl)
+			_ = ipCmd("rule", "add", "priority", "241", "from", "all", "fwmark", markHex, "lookup", probeTbl)
 		}
 		startedCount++
 	}
@@ -816,72 +1062,125 @@ func (m *TunnelManager) StartAll() error {
 }
 
 func (m *TunnelManager) StopAll() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.stopStartedLocked()
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	m.stopStartedOp()
 	if m.onChange != nil {
 		go m.onChange()
 	}
 }
 
-func (m *TunnelManager) stopStartedLocked() {
-	for ifc, mk := range m.ifaceMark {
-		if m.ipCmdFn != nil && mk >= 0x201 {
-			tbl := strconv.Itoa(mk - 0x200 + 200)
-			_ = m.ipCmdFn("rule", "del", "priority", "241", "from", "all", "fwmark", fmt.Sprintf("0x%x", mk), "lookup", tbl)
-			_ = m.ipCmdFn("route", "flush", "table", tbl)
-		}
-		delete(m.ifaceMark, ifc)
+func (m *TunnelManager) stopStartedOp() {
+	m.setApplying(true, "Остановка туннелей")
+	defer m.setApplying(false, "")
+
+	m.mu.Lock()
+	ipCmd := m.ipCmdFn
+	marks := make(map[string]int, len(m.ifaceMark))
+	for k, v := range m.ifaceMark {
+		marks[k] = v
 	}
-	for i := len(m.started) - 1; i >= 0; i-- {
-		p := m.started[i]
+	started := append([]string(nil), m.started...)
+	m.ifaceMark = map[string]int{}
+	m.started = nil
+	m.primaryCfg = ""
+	m.ifaceTable = map[string]string{}
+	m.startedAt = map[string]time.Time{}
+	m.mu.Unlock()
+
+	for _, mk := range marks {
+		if ipCmd != nil && mk >= 0x201 {
+			tbl := strconv.Itoa(mk - 0x200 + 200)
+			_ = ipCmd("rule", "del", "priority", "241", "from", "all", "fwmark", fmt.Sprintf("0x%x", mk), "lookup", tbl)
+			_ = ipCmd("route", "flush", "table", tbl)
+		}
+	}
+	for i := len(started) - 1; i >= 0; i-- {
+		p := started[i]
 		m.logger.Logf("Stopping %s...", p)
 		if err := m.runCmd("/usr/bin/awg-quick", "down", p); err != nil {
 			m.logger.Logf("WARN: awg-quick down %s: %v", p, err)
 		}
 	}
-	m.started = nil
-	m.primaryCfg = ""
-	m.ifaceTable = map[string]string{}
-	m.startedAt = map[string]time.Time{}
 }
 
 func (m *TunnelManager) RestartAll() error {
-	m.StopAll()
-	return m.StartAll()
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	return m.restartAllOp()
+}
+
+func (m *TunnelManager) restartAllOp() error {
+	m.stopStartedOp()
+	err := m.startAllOp()
+	if err != nil && m.onChange != nil {
+		go m.onChange()
+	}
+	return err
 }
 
 func (m *TunnelManager) runCmd(name string, args ...string) error {
+	timeout := m.cmdTimeout
+	if timeout <= 0 {
+		timeout = defaultCmdTimeout
+	}
+	runner := m.runCmdFn
+	if runner == nil {
+		runner = defaultRunCmdFn
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	out, err := runner(ctx, name, args...)
+	if trimmed := strings.TrimSpace(out); trimmed != "" {
+		for _, line := range strings.Split(trimmed, "\n") {
+			m.logger.Logf("%s: %s", filepath.Base(name), line)
+		}
+	}
+	if err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("%s %s timed out after %s: %w", filepath.Base(name), strings.Join(args, " "), timeout, ctx.Err())
+	}
+	return err
+}
+
+func defaultRunCmdFn(ctx context.Context, name string, args ...string) (string, error) {
 	// Write output to a regular file instead of a Go pipe so backgrounded
 	// amneziawg-go daemons inheriting stdout/stderr do not block cmd.Run().
 	logFile, err := os.CreateTemp("", "awg-cmd-*.log")
 	if err != nil {
-		cmd := exec.Command(name, args...)
+		cmd := exec.CommandContext(ctx, name, args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		return cmd.Run()
+		return "", cmd.Run()
 	}
 	logPath := logFile.Name()
 	defer os.Remove(logPath)
 
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			// Kill the whole process group only if ctx timed out / canceled mid-command.
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
+	cmd.WaitDelay = 2 * time.Second
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	runErr := cmd.Run()
 	_ = logFile.Close()
 
 	if data, readErr := os.ReadFile(logPath); readErr == nil {
-		if out := strings.TrimSpace(string(data)); out != "" {
-			for _, line := range strings.Split(out, "\n") {
-				m.logger.Logf("%s: %s", filepath.Base(name), line)
-			}
-		}
+		return string(data), runErr
 	}
-	return runErr
+	return "", runErr
 }
 
 func (m *TunnelManager) ShowInterfaces() ([]InterfaceStatus, error) {
-	out, err := exec.Command("/usr/bin/awg", "show", "all", "dump").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), defaultShowTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "/usr/bin/awg", "show", "all", "dump").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -1051,13 +1350,15 @@ func (m *TunnelManager) AllEndpoints() []string {
 }
 
 func GenerateKeypair() (priv, pub, psk string, err error) {
-	privB, err := exec.Command("/usr/bin/awg", "genkey").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), defaultIPTimeout)
+	defer cancel()
+	privB, err := exec.CommandContext(ctx, "/usr/bin/awg", "genkey").Output()
 	if err != nil {
 		return "", "", "", err
 	}
 	priv = strings.TrimSpace(string(privB))
 
-	cmd := exec.Command("/usr/bin/awg", "pubkey")
+	cmd := exec.CommandContext(ctx, "/usr/bin/awg", "pubkey")
 	cmd.Stdin = strings.NewReader(priv + "\n")
 	pubB, err := cmd.Output()
 	if err != nil {
@@ -1065,7 +1366,7 @@ func GenerateKeypair() (priv, pub, psk string, err error) {
 	}
 	pub = strings.TrimSpace(string(pubB))
 
-	pskB, err := exec.Command("/usr/bin/awg", "genpsk").Output()
+	pskB, err := exec.CommandContext(ctx, "/usr/bin/awg", "genpsk").Output()
 	if err != nil {
 		return "", "", "", err
 	}

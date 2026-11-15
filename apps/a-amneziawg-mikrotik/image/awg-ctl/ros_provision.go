@@ -346,6 +346,57 @@ func (c *ROSClient) snapshotSettingsForSchema(s AppSettings, opts *ROSProvisionO
 	return conn, s, mode, listName, tableName
 }
 
+// isContainerLoopGuardRule returns (true, viaIface) when a prerouting accept rule
+// shields return traffic from the container (either by gateway src-address or
+// an explicit container/InAccept ingress interface match).
+func isContainerLoopGuardRule(r map[string]any, gatewayIP string) (ok bool, viaIface bool) {
+	if strField(r, "action") != "accept" {
+		return false, false
+	}
+	if rosAddrMatchPrefixOrIP(strField(r, "src-address"), gatewayIP) {
+		return true, false
+	}
+	cmt := strField(r, "comment")
+	inList := strField(r, "in-interface-list")
+	inIface := strField(r, "in-interface")
+	if strings.EqualFold(inList, "InAccept") || cmt == "AWG_Accept_InAccept" {
+		return true, true
+	}
+	if strings.HasPrefix(cmt, "AWG_Accept_") && cmt != "AWG_Accept_Container" && cmt != "AWG_Accept_no_mark" &&
+		((inList != "" && !strings.EqualFold(inList, "LAN")) || inIface != "") {
+		return true, true
+	}
+	if inIface != "" {
+		lower := strings.ToLower(inIface)
+		if strings.Contains(lower, "docker") || strings.Contains(lower, "veth") {
+			return true, true
+		}
+	}
+	return false, false
+}
+
+// isMarkOrRouteRuleForTable reports whether a prerouting mangle rule belongs to
+// the schema's connection-marking or policy-routing pipeline for listName/tableName.
+func isMarkOrRouteRuleForTable(r map[string]any, mode, listName, tableName string) bool {
+	act := strField(r, "action")
+	cmt := strField(r, "comment")
+	switch act {
+	case "mark-routing":
+		return (tableName != "" && strField(r, "new-routing-mark") == tableName) ||
+			cmt == "AWG_Route_Conn" || cmt == "AWG_Route_New"
+	case "mark-connection":
+		if mode == ROSModeGateway && cmt == "AWG_GW_Mark_All" && strField(r, "new-connection-mark") != "" {
+			return true
+		}
+		if listName != "" && strField(r, "dst-address-list") == listName && strField(r, "new-connection-mark") != "" {
+			return true
+		}
+		return cmt == "AWG_Mark_AddressList" || (tableName != "" && strField(r, "new-connection-mark") == tableName)
+	default:
+		return false
+	}
+}
+
 // InspectSchema inspects the RouterOS configuration for the active ros_mode
 // without mutating router state.
 func (c *ROSClient) InspectSchema(s AppSettings) ROSSchemaReport {
@@ -491,7 +542,7 @@ func (c *ROSClient) InspectSchema(s AppSettings) ROSSchemaReport {
 		report.Checks = append(report.Checks, tblCheck, rtCheck, checkFasttrack())
 
 		mangleRows, err := c.rosPrint(ctx, conn, "/ip/firewall/mangle", []string{
-			".id", "chain", "action", "src-address", "in-interface-list",
+			".id", "chain", "action", "src-address", "in-interface", "in-interface-list",
 			"dst-address-list", "connection-mark", "new-connection-mark",
 			"new-routing-mark", "disabled", "comment",
 		})
@@ -499,7 +550,9 @@ func (c *ROSClient) InspectSchema(s AppSettings) ROSSchemaReport {
 			report.Checks = append(report.Checks, ROSSchemaCheck{Key: "mangle", Title: "Mangle правила", OK: false, Detail: err.Error()})
 		} else {
 			loopGuardIdx := -1
+			loopGuardViaIface := false
 			markIdx := -1
+			firstMarkOrRouteIdx := -1
 			routeConnOK := false
 			routeNewOK := false
 			gwMarkAllOK := false
@@ -509,9 +562,12 @@ func (c *ROSClient) InspectSchema(s AppSettings) ROSSchemaReport {
 				}
 				act := strField(r, "action")
 				cmt := strField(r, "comment")
-				if act == "accept" && (rosAddrMatchPrefixOrIP(strField(r, "src-address"), conn.gatewayIP) || cmt == "AWG_Accept_Container") {
-					if loopGuardIdx == -1 && rosAddrMatchPrefixOrIP(strField(r, "src-address"), conn.gatewayIP) {
+				if ok, viaIface := isContainerLoopGuardRule(r, conn.gatewayIP); ok {
+					if loopGuardIdx == -1 {
 						loopGuardIdx = i
+						loopGuardViaIface = viaIface
+					} else if !viaIface {
+						loopGuardViaIface = false
 					}
 				}
 				if act == "mark-connection" && mode == ROSModeAddressList && strField(r, "dst-address-list") == listName && strField(r, "new-connection-mark") != "" {
@@ -525,6 +581,9 @@ func (c *ROSClient) InspectSchema(s AppSettings) ROSSchemaReport {
 						markIdx = i
 					}
 				}
+				if isMarkOrRouteRuleForTable(r, mode, listName, tableName) && firstMarkOrRouteIdx == -1 {
+					firstMarkOrRouteIdx = i
+				}
 				if act == "mark-routing" && strField(r, "new-routing-mark") == tableName {
 					if cmt == "AWG_Route_Conn" || strField(r, "connection-mark") == tableName {
 						if !routeConnOK {
@@ -536,12 +595,14 @@ func (c *ROSClient) InspectSchema(s AppSettings) ROSSchemaReport {
 				}
 			}
 
-			lgOK := loopGuardIdx >= 0 && (markIdx == -1 || loopGuardIdx < markIdx)
+			lgOK := loopGuardIdx >= 0 && (firstMarkOrRouteIdx == -1 || loopGuardIdx < firstMarkOrRouteIdx)
 			lgDetail := "src-address=" + conn.gatewayIP
 			if loopGuardIdx == -1 {
 				lgDetail = fmt.Sprintf("нет accept для src-address=%s перед mark-правилами", conn.gatewayIP)
-			} else if markIdx >= 0 && loopGuardIdx > markIdx {
-				lgDetail = "loop-guard находится ПОСЛЕ mark-connection (нужно поднять выше)"
+			} else if firstMarkOrRouteIdx >= 0 && loopGuardIdx > firstMarkOrRouteIdx {
+				lgDetail = "loop-guard находится ПОСЛЕ mark-connection / mark-routing (нужно поднять выше)"
+			} else if loopGuardViaIface {
+				lgDetail = "in-interface / InAccept"
 			}
 			report.Checks = append(report.Checks, ROSSchemaCheck{
 				Key:    "mangle_loop_guard",
@@ -732,6 +793,7 @@ func (c *ROSClient) InspectSchema(s AppSettings) ROSSchemaReport {
 	if mode == ROSModeAddressList || mode == ROSModeBGP {
 		c.appendIPDNSRoutingWarnings(ctx, conn, listName, &report)
 	}
+	c.appendIPServiceSecurityWarnings(ctx, conn, &report)
 
 	allOK := len(report.Checks) > 0
 	for _, ch := range report.Checks {
@@ -982,7 +1044,7 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 			break
 		}
 		mangles, err := c.rosPrint(ctx, conn, "/ip/firewall/mangle", []string{
-			".id", "chain", "action", "src-address", "dst-address", "in-interface-list",
+			".id", "chain", "action", "src-address", "dst-address", "in-interface", "in-interface-list",
 			"dst-address-type", "dst-address-list", "connection-mark", "connection-state",
 			"new-connection-mark", "new-routing-mark", "passthrough", "disabled", "comment",
 		})
@@ -999,8 +1061,7 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 			if cmt == "AWG_Accept_Container" && containerIdx == -1 {
 				containerIdx = i
 			}
-			if strField(r, "action") == "mark-connection" &&
-				(cmt == "AWG_Mark_AddressList" || cmt == "AWG_GW_Mark_All" || strField(r, "dst-address-list") == listName) {
+			if strField(r, "chain") == "prerouting" && isMarkOrRouteRuleForTable(r, mode, listName, tableName) {
 				if markAnchorID == "" {
 					markAnchorID = strField(r, ".id")
 					markAnchorIdx = i
@@ -1008,7 +1069,7 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 			}
 		}
 
-		// Always place container loop-guard before any mark-connection rule.
+		// Always place container loop-guard before any mark-connection or mark-routing rule.
 		containerRuleID, err := upsertMangleRule(mangles, "AWG_Accept_Container", map[string]string{
 			"chain":       "prerouting",
 			"action":      "accept",
@@ -1325,5 +1386,35 @@ func (c *ROSClient) appendIPDNSRoutingWarnings(ctx context.Context, conn rosConn
 				}
 				return ""
 			}()))
+	}
+}
+
+func (c *ROSClient) appendIPServiceSecurityWarnings(ctx context.Context, conn rosConnConfig, report *ROSSchemaReport) {
+	if report == nil {
+		return
+	}
+	rows, err := c.rosPrint(ctx, conn, "/ip/service", []string{".id", "name", "port", "address", "certificate", "disabled"})
+	if err != nil || len(rows) == 0 {
+		return
+	}
+	for _, r := range rows {
+		if isTruthyROS(r["disabled"]) {
+			continue
+		}
+		name := strings.ToLower(strField(r, "name"))
+		addr := strings.TrimSpace(strField(r, "address"))
+		cert := strings.TrimSpace(strField(r, "certificate"))
+		switch name {
+		case "api", "www", "api-ssl", "www-ssl":
+			if addr == "" {
+				report.Warnings = append(report.Warnings, fmt.Sprintf(
+					"Безопасность RouterOS: сервис /ip/service %s (port=%s) открыт с любых IP (address=\"\"). Рекомендуется ограничить address= подсетью контейнера и LAN.",
+					name, strField(r, "port")))
+			}
+			if name == "api-ssl" && (cert == "" || strings.EqualFold(cert, "none")) {
+				report.Warnings = append(report.Warnings,
+					"RouterOS /ip/service api-ssl включён без сертификата (certificate=none): TLS API-клиенты не смогут подключиться, пока не выбран сертификат.")
+			}
+		}
 	}
 }

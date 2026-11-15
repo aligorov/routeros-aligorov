@@ -28,11 +28,11 @@ const (
 )
 
 type GeoSiteCategory struct {
-	Full     map[string]struct{}
-	Root     map[string]struct{}
-	Plains   []string
-	Regexes  []*regexp.Regexp
-	Count    int
+	Full    map[string]struct{}
+	Root    map[string]struct{}
+	Plains  []string
+	Regexes []*regexp.Regexp
+	Count   int
 }
 
 func (c *GeoSiteCategory) Match(host string) bool {
@@ -312,8 +312,11 @@ func (g *GeoStore) DownloadAndReload(siteURL, ipURL string, needSites, needIPs m
 	return nil
 }
 
-func (g *GeoStore) downloadFile(url, dst string) error {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func (g *GeoStore) downloadFile(rawURL, dst string) error {
+	if err := validateHTTPURL(rawURL); err != nil {
+		return fmt.Errorf("invalid geo url: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
 	if err != nil {
 		return err
 	}
@@ -324,7 +327,7 @@ func (g *GeoStore) downloadFile(url, dst string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
+		return fmt.Errorf("HTTP %d from %s", resp.StatusCode, rawURL)
 	}
 	tmp := dst + ".tmp"
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)

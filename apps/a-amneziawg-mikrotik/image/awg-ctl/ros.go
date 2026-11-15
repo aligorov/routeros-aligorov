@@ -1013,8 +1013,15 @@ func (c *ROSClient) TestConnection(override *AppSettings) ROSTestResult {
 	if override != nil {
 		baseURL := normalizeROSBaseURL(override.ROSURL)
 		urlErr := validateROSBaseURL(baseURL)
+		user := strings.TrimSpace(override.ROSUser)
 		pass := override.ROSPass
 		if pass == "" {
+			if conn.pass != "" && (baseURL != conn.baseURL || user != conn.user) {
+				return ROSTestResult{
+					OK:    false,
+					Error: "for security, re-enter ros_pass when changing ros_url or ros_user",
+				}
+			}
 			pass = conn.pass
 		}
 		gw := normalizeROSContainerIP(override.ROSContainerIP)
@@ -1023,7 +1030,7 @@ func (c *ROSClient) TestConnection(override *AppSettings) ROSTestResult {
 		}
 		ovCopy := *override
 		ovCopy.ROSURL = baseURL
-		ovCopy.ROSUser = strings.TrimSpace(override.ROSUser)
+		ovCopy.ROSUser = user
 		ovCopy.ROSPass = pass
 		binCfg, _ := rosBinEndpointFromSettings(ovCopy)
 		conn = rosConnConfig{

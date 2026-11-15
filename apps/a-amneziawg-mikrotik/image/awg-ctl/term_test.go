@@ -77,6 +77,7 @@ func TestTermRunnerCDStreamAndKill(t *testing.T) {
 }
 
 func TestWebETagGzipAndTermEndpoint(t *testing.T) {
+	t.Setenv("TERM_ENABLE", "on")
 	dir := t.TempDir()
 	logger := NewRingLogger(20)
 	mgr := NewTunnelManager(dir, filepath.Join(dir, "run"), "eth0", true, true, logger)

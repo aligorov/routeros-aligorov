@@ -93,6 +93,12 @@
   #toast.bad { border-color:var(--bad); color:#fecaca; }
   #toast.ok { border-color:var(--ok); color:#bbf7d0; }
 
+  /* Auth modal overlay */
+  .auth-overlay { position:fixed; inset:0; z-index:120; background:rgba(7,10,16,.88); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:16px; }
+  .auth-overlay.hide { display:none !important; }
+  .auth-box { width:100%; max-width:400px; background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:22px; box-shadow:0 18px 48px rgba(0,0,0,.6); }
+  .auth-box h2 { margin-top:0; margin-bottom:6px; font-size:1.1rem; }
+
   @media (max-width:640px) {
     .wrap { padding:10px; }
     .tab { padding:6px 8px; font-size:.79rem; flex:1 1 auto; text-align:center; }
@@ -116,6 +122,7 @@
       <button onclick="tunnelAction('up', this)">Поднять</button>
       <button class="danger" onclick="tunnelAction('down', this)">Остановить</button>
       <button onclick="refresh(true)">Обновить</button>
+      <button id="btnLogout" class="sm hide" onclick="logoutWeb(this)">Выйти</button>
     </div>
   </header>
 
@@ -363,11 +370,14 @@
         </div>
         <div><label class="mut">Автообновление Geo (ч, 0 = выкл)</label><input id="setGeoHours" type="number" min="0" value="0"></div>
       </div>
-      <div class="row" style="gap:16px;margin-bottom:12px">
+      <div class="row" style="gap:16px;margin-bottom:12px;flex-wrap:wrap">
         <label class="chk"><input type="checkbox" id="setAutoRoute"> Auto-Route (NAT + policy FIB)</label>
         <label class="chk"><input type="checkbox" id="setKillSwitch"> Kill-Switch (blackhole при падении VPN)</label>
         <label class="chk"><input type="checkbox" id="setDNSBind"> Proxy DNS строго через туннель (fwmark)</label>
+        <label class="chk"><input type="checkbox" id="setTermEnabled"> Включить Web-терминал (root sh)</label>
+        <label class="chk"><input type="checkbox" id="setAllowConfigHooks"> Разрешить shell-хуки в .conf (PreUp/PostUp)</label>
       </div>
+      <div id="termEnvNote" class="mut hide" style="margin-bottom:10px;color:var(--warn)">TERM_ENABLE=off: Web-терминал принудительно отключён переменной окружения контейнера.</div>
       <div class="grid">
         <div><label class="mut">GeoSite URL</label><input id="setGeoSiteURL"></div>
         <div><label class="mut">GeoIP URL</label><input id="setGeoIPURL"></div>
@@ -493,7 +503,7 @@
 
       <div class="row" style="gap:16px;margin-bottom:14px;flex-wrap:wrap">
         <label class="chk"><input type="checkbox" id="setRosUseBinAPI"> Использовать Binary API (:8728)</label>
-        <label class="chk"><input type="checkbox" id="setRosAPITLS"> TLS для Binary API (:8729)</label>
+        <label class="chk"><input type="checkbox" id="setRosAPITLS" onchange="onRosAPITLSChange()"> TLS для Binary API (:8729)</label>
         <label class="chk"><input type="checkbox" id="setRosTLS"> Пропускать проверку TLS</label>
         <label class="chk" id="lblRosSyncPolicyCIDRs"><input type="checkbox" id="setRosSyncPolicyCIDRs"> Синхронизировать статические CIDR/GeoIP из правил</label>
         <label class="chk" id="lblRosSyncRoutes"><input type="checkbox" id="setRosSyncRoutes"> Синхронизировать маршруты AllowedIPs</label>
@@ -517,10 +527,35 @@
         <span class="mut" id="setMsg"></span>
       </div>
     </div>
+
+    <div class="card" id="webAuthCard">
+      <h2>Доступ к WebUI и безопасность</h2>
+      <div class="mut" id="webAuthInfo" style="margin-bottom:10px">Проверка статуса аутентификации...</div>
+      <div id="webAuthPassForm" class="hide">
+        <div class="grid" style="margin-bottom:10px">
+          <div><label class="mut">Логин WebUI</label><input id="setWebUser" placeholder="admin"></div>
+          <div><label class="mut">Текущий пароль</label><input id="setWebCurPass" type="password" autocomplete="current-password"></div>
+          <div><label class="mut">Новый пароль (мин. 8 символов)</label><input id="setWebNewPass" type="password" autocomplete="new-password"></div>
+        </div>
+        <div class="row">
+          <button onclick="changeWebPassword(this)">Сменить пароль WebUI</button>
+          <span class="mut" id="webAuthMsg"></span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- TERMINAL -->
   <div id="tab-term" class="tab-pane fullpane-pane hide">
+    <div id="termDisabledBanner" class="card hide" style="border-color:var(--warn)">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div>
+          <strong>Web-терминал отключён политикой безопасности</strong>
+          <div class="mut" id="termDisabledText">Включите «Включить Web-терминал (root sh)» во вкладке «Настройки» или задайте TERM_ENABLE=on.</div>
+        </div>
+        <button id="btnGoSettingsTerm" class="sm" onclick="showTab('settings', document.querySelector('.tab[data-tab=settings]'))">Открыть Настройки</button>
+      </div>
+    </div>
     <div class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
         <h2 style="margin:0">Терминал контейнера (sh)</h2>
@@ -561,10 +596,30 @@
     </div>
   </div>
 </div>
+<div id="authOverlay" class="auth-overlay hide">
+  <div class="auth-box">
+    <h2 id="authTitle">Вход в AmneziaWG</h2>
+    <p class="mut" id="authSubtitle" style="margin-top:0;margin-bottom:14px">Введите учётные данные для доступа к панели управления.</p>
+    <div style="margin-bottom:10px">
+      <label class="mut">Пользователь</label>
+      <input id="authUser" autocomplete="username" value="admin">
+    </div>
+    <div style="margin-bottom:10px">
+      <label class="mut" id="authPassLbl">Пароль</label>
+      <input id="authPass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')submitAuthModal()">
+    </div>
+    <div id="authPass2Wrap" class="hide" style="margin-bottom:12px">
+      <label class="mut">Повторите пароль (мин. 8 символов)</label>
+      <input id="authPass2" type="password" autocomplete="new-password" onkeydown="if(event.key==='Enter')submitAuthModal()">
+    </div>
+    <div id="authErr" class="mut hide" style="color:var(--bad);margin-bottom:10px"></div>
+    <button class="primary" id="authSubmitBtn" style="width:100%" onclick="submitAuthModal(this)">Войти</button>
+  </div>
+</div>
 <div id="toast"></div>
 
 <script>
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc = s => String(s ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 let editingNew = false;
 let refreshInFlight = false;
 let lastStatus = null;
@@ -599,12 +654,218 @@ function showTab(id, btn) {
   if (id === 'term') setTimeout(() => document.getElementById('termInput').focus(), 20);
 }
 
+let authState = { ready: false, mode: 'login', source: '', authenticated: false, via: '', termEnabled: false };
+
+function openAuthModal(mode, errMsg = '', defUser = '') {
+  authState.mode = mode === 'setup' ? 'setup' : 'login';
+  authState.authenticated = false;
+  const ov = document.getElementById('authOverlay');
+  const title = document.getElementById('authTitle');
+  const sub = document.getElementById('authSubtitle');
+  const lbl = document.getElementById('authPassLbl');
+  const p2 = document.getElementById('authPass2Wrap');
+  const btn = document.getElementById('authSubmitBtn');
+  const uInp = document.getElementById('authUser');
+  const pInp = document.getElementById('authPass');
+  const p2Inp = document.getElementById('authPass2');
+  const errEl = document.getElementById('authErr');
+  if (authState.mode === 'setup') {
+    title.textContent = 'Первичная настройка пароля WebUI';
+    sub.textContent = 'Пароль ещё не задан. Установите логин и пароль (от 8 символов) для защиты панели AmneziaWG.';
+    lbl.textContent = 'Новый пароль (мин. 8 символов)';
+    pInp.autocomplete = 'new-password';
+    p2.classList.remove('hide');
+    btn.textContent = 'Сохранить пароль и войти';
+    if (defUser) uInp.value = defUser;
+  } else {
+    title.textContent = 'Вход в AmneziaWG';
+    sub.textContent = 'Введите логин и пароль для доступа к панели управления.';
+    lbl.textContent = 'Пароль';
+    pInp.autocomplete = 'current-password';
+    p2.classList.add('hide');
+    btn.textContent = 'Войти';
+  }
+  p2Inp.value = '';
+  if (errMsg) {
+    errEl.textContent = errMsg;
+    errEl.classList.remove('hide');
+  } else {
+    errEl.textContent = '';
+    errEl.classList.add('hide');
+  }
+  ov.classList.remove('hide');
+  setTimeout(() => pInp.focus(), 30);
+}
+
+function closeAuthModal() {
+  document.getElementById('authOverlay').classList.add('hide');
+  document.getElementById('authPass').value = '';
+  document.getElementById('authPass2').value = '';
+  const errEl = document.getElementById('authErr');
+  errEl.textContent = '';
+  errEl.classList.add('hide');
+}
+
+async function checkAuthStatus() {
+  try {
+    const st = await api('/api/auth/status', { timeoutMs: 8000 });
+    authState.ready = true;
+    authState.source = st.source || '';
+    authState.authenticated = !!st.authenticated;
+    authState.via = st.auth_via || '';
+    authState.termEnabled = !!st.term_enabled;
+    const logoutBtn = document.getElementById('btnLogout');
+    if (logoutBtn) logoutBtn.classList.toggle('hide', st.auth_via !== 'cookie');
+    updateTermDisabledBanner(authState.termEnabled);
+    if (st.needs_setup) {
+      openAuthModal('setup', '', st.default_user || 'admin');
+      return false;
+    }
+    if (!st.authenticated) {
+      openAuthModal('login', '');
+      return false;
+    }
+    closeAuthModal();
+    return true;
+  } catch (e) {
+    const pill = document.getElementById('globalPill');
+    if (pill) { pill.className = 'badge bad'; pill.textContent = 'OFFLINE'; }
+    const vb = document.getElementById('verBadge');
+    if (vb && vb.textContent === 'v...') vb.textContent = 'v?';
+    document.getElementById('meta').textContent = 'Ошибка авторизации: ' + e.message;
+    return false;
+  }
+}
+
+async function submitAuthModal(btn) {
+  const errEl = document.getElementById('authErr');
+  errEl.classList.add('hide');
+  const user = document.getElementById('authUser').value.trim();
+  const password = document.getElementById('authPass').value;
+  const pass2 = document.getElementById('authPass2').value;
+  if (authState.mode === 'setup') {
+    if (password.length < 8) {
+      errEl.textContent = 'Пароль должен содержать минимум 8 символов';
+      errEl.classList.remove('hide');
+      return;
+    }
+    if (password !== pass2) {
+      errEl.textContent = 'Пароли не совпадают';
+      errEl.classList.remove('hide');
+      return;
+    }
+  } else if (!password) {
+    errEl.textContent = 'Введите пароль';
+    errEl.classList.remove('hide');
+    return;
+  }
+  await withBusy(btn || document.getElementById('authSubmitBtn'), async () => {
+    try {
+      const endpoint = authState.mode === 'setup' ? '/api/auth/setup' : '/api/auth/login';
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ user, password })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (r.status === 409 && endpoint === '/api/auth/setup') {
+          openAuthModal('login', 'Пароль уже настроен, выполните вход.');
+          return;
+        }
+        errEl.textContent = data.error || ('HTTP ' + r.status);
+        errEl.classList.remove('hide');
+        return;
+      }
+      authState.authenticated = true;
+      authState.via = 'cookie';
+      document.getElementById('btnLogout')?.classList.remove('hide');
+      closeAuthModal();
+      await checkAuthStatus();
+      await refresh(true);
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.classList.remove('hide');
+    }
+  });
+}
+
+async function logoutWeb(btn) {
+  await withBusy(btn, async () => {
+    try { await fetch('/api/auth/logout', {method:'POST'}); } catch (_) {}
+    authState.authenticated = false;
+    authState.via = '';
+    document.getElementById('btnLogout')?.classList.add('hide');
+    openAuthModal('login', 'Сессия завершена');
+  });
+}
+
+async function changeWebPassword(btn) {
+  const msg = document.getElementById('webAuthMsg');
+  msg.textContent = 'Сохранение...';
+  await withBusy(btn, async () => {
+    try {
+      const r = await api('/api/auth/password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          user: document.getElementById('setWebUser').value.trim(),
+          current_password: document.getElementById('setWebCurPass').value,
+          new_password: document.getElementById('setWebNewPass').value
+        })
+      });
+      document.getElementById('setWebCurPass').value = '';
+      document.getElementById('setWebNewPass').value = '';
+      msg.textContent = 'Пароль обновлён (' + esc(r.user || 'admin') + ')';
+      toast('Пароль WebUI обновлён', 'ok');
+    } catch (e) {
+      msg.textContent = 'Ошибка: ' + e.message;
+      toast(e.message, 'bad');
+    }
+  });
+}
+
+function onRosAPITLSChange() {
+  const tls = document.getElementById('setRosAPITLS').checked;
+  const portEl = document.getElementById('setRosAPIPort');
+  const curPort = parseInt(portEl.value || '0', 10);
+  if (tls && (!curPort || curPort === 8728)) portEl.value = 8729;
+  else if (!tls && curPort === 8729) portEl.value = 8728;
+}
+
+function updateTermDisabledBanner(enabled) {
+  const ban = document.getElementById('termDisabledBanner');
+  if (!ban) return;
+  ban.classList.toggle('hide', !!enabled);
+}
+
 async function api(url, opts) {
-  const r = await fetch(url, opts);
+  const { timeoutMs = 12000, ...fetchOpts } = opts || {};
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const tid = timeoutMs > 0 ? setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs) : null;
+  if (fetchOpts.signal) {
+    if (fetchOpts.signal.aborted) ctrl.abort();
+    else fetchOpts.signal.addEventListener('abort', () => ctrl.abort(), { once: true });
+  }
+  let r;
+  try {
+    r = await fetch(url, { ...fetchOpts, signal: ctrl.signal });
+  } catch (e) {
+    if (timedOut) throw new Error('Таймаут запроса (' + Math.round(timeoutMs / 1000) + 's): ' + url);
+    throw e;
+  } finally {
+    if (tid) clearTimeout(tid);
+  }
   const ct = r.headers.get('content-type') || '';
   if (ct.includes('application/json')) {
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    if (!r.ok) {
+      if (r.status === 401 && !String(url).startsWith('/api/auth/')) {
+        openAuthModal(data.needs_setup ? 'setup' : 'login', data.error || '');
+      }
+      throw new Error(data.error || ('HTTP ' + r.status));
+    }
     return data;
   }
   if (!r.ok) throw new Error(await r.text());
@@ -644,11 +905,15 @@ function fmtProbeCell(h) {
 }
 
 async function refresh(manual = false) {
-  if (refreshInFlight || (!manual && document.hidden)) return;
+  if (!authState.authenticated || refreshInFlight || (!manual && document.hidden)) return;
   refreshInFlight = true;
   try {
-    const st = await api('/api/status');
+    const st = await api('/api/status', { timeoutMs: 10000 });
     lastStatus = st;
+    if (typeof st.term_enabled === 'boolean') {
+      authState.termEnabled = st.term_enabled;
+      updateTermDisabledBanner(st.term_enabled);
+    }
     document.getElementById('verBadge').textContent = 'v' + (st.version || '?');
 
     const ifaces = st.interfaces || [];
@@ -661,7 +926,11 @@ async function refresh(manual = false) {
     (fo.tunnels || []).forEach(h => { healthByName[h.name] = h; });
 
     const pill = document.getElementById('globalPill');
-    if (ifaces.length > 0) {
+    if (st.applying) {
+      pill.className = 'badge warn';
+      pill.textContent = st.applying_op || 'ПРИМЕНЕНИЕ...';
+      setTimeout(() => refresh(false), 1500);
+    } else if (ifaces.length > 0) {
       const prim = cfgs.find(c => c.primary)?.interface || ifaces[0].name;
       pill.className = 'badge ok';
       pill.textContent = st.multi_tunnel ? `MULTI · ${ifaces.length} UP (${prim})` : `UP · ${prim}`;
@@ -671,6 +940,7 @@ async function refresh(manual = false) {
     }
 
     document.getElementById('meta').textContent =
+      (st.applying ? `[${st.applying_op || 'Применение...'}] · ` : '') +
       `${(st.default_policy||'proxy').toUpperCase()} · ${st.lan_iface||'—'} (${st.container_ip||'no IP'}, gw ${st.gateway||'—'}) · rules: ${pol.rules_count||0} · failover: ${fo.mode||'off'} · TG: ${tg.enabled ? 'on' : 'off'}`;
 
     const rosMode = ros.mode || 'gateway';
@@ -894,6 +1164,12 @@ async function refresh(manual = false) {
       renderLogs(false);
     }
   } catch (e) {
+    if (!lastStatus) {
+      const pill = document.getElementById('globalPill');
+      if (pill) { pill.className = 'badge bad'; pill.textContent = 'OFFLINE'; }
+      const vb = document.getElementById('verBadge');
+      if (vb && vb.textContent === 'v...') vb.textContent = 'v?';
+    }
     document.getElementById('meta').textContent = 'Ошибка: ' + e.message;
   } finally {
     refreshInFlight = false;
@@ -1084,7 +1360,7 @@ async function activateProfile(name) {
   const msg = document.getElementById('cfgMsg');
   msg.textContent = 'Переключение на ' + name + '...';
   try {
-    await api('/api/configs/' + encodeURIComponent(name) + '/activate', {method:'POST'});
+    await api('/api/configs/' + encodeURIComponent(name) + '/activate', {method:'POST', timeoutMs:60000});
     msg.textContent = 'Активен: ' + name;
     toast('Профиль ' + name + ' включён');
   } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
@@ -1098,12 +1374,13 @@ async function saveConfig(apply, btn) {
   document.getElementById('cfgName').value = name;
   const content = document.getElementById('cfgText').value;
   const msg = document.getElementById('cfgMsg');
-  msg.textContent = 'Сохранение...';
+  msg.textContent = apply ? 'Сохранение и применение...' : 'Сохранение...';
   await withBusy(btn, async () => {
     try {
       await api('/api/configs/' + encodeURIComponent(name), {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({content, apply})
+        body: JSON.stringify({content, apply}),
+        timeoutMs: apply ? 60000 : 12000
       });
       editingNew = false;
       msg.textContent = apply ? 'Сохранено и применено' : 'Сохранено';
@@ -1117,7 +1394,7 @@ async function deleteConfig() {
   const name = document.getElementById('cfgName').value.trim();
   if (!name || !confirm('Удалить ' + name + '?')) return;
   try {
-    await api('/api/configs/' + encodeURIComponent(name), {method:'DELETE'});
+    await api('/api/configs/' + encodeURIComponent(name), {method:'DELETE', timeoutMs:30000});
     newConfig();
     toast('Удалён: ' + name);
     await refresh(true);
@@ -1127,7 +1404,7 @@ async function deleteConfig() {
 async function tunnelAction(act, btn) {
   await withBusy(btn, async () => {
     try {
-      await api('/api/tunnel/' + act, {method:'POST'});
+      await api('/api/tunnel/' + act, {method:'POST', timeoutMs:60000});
       toast('Выполнено: ' + act);
     } catch (e) { toast(e.message, 'bad'); }
     await refresh(true);
@@ -1432,6 +1709,29 @@ async function loadSettings() {
     document.getElementById('setKillSwitch').checked = !!s.kill_switch;
     document.getElementById('setMultiTunnel').checked = !!s.multi_tunnel;
     document.getElementById('setDNSBind').checked = !!s.dns_bind_tunnel;
+    const termChk = document.getElementById('setTermEnabled');
+    if (termChk) {
+      termChk.checked = !!s.term_enabled;
+      termChk.disabled = !!s.term_env_disabled;
+    }
+    document.getElementById('termEnvNote')?.classList.toggle('hide', !s.term_env_disabled);
+    const hooksChk = document.getElementById('setAllowConfigHooks');
+    if (hooksChk) hooksChk.checked = !!s.allow_config_hooks;
+    const webInfo = document.getElementById('webAuthInfo');
+    const webForm = document.getElementById('webAuthPassForm');
+    if (webInfo && webForm) {
+      if (s.ui_auth_source === 'env') {
+        webInfo.textContent = 'Пароль WebUI задан переменной окружения UI_PASSWORD (логин: ' + (s.ui_user || 'admin') + '). Для смены отредактируйте env контейнера.';
+        webForm.classList.add('hide');
+      } else if (s.ui_auth_source === 'setup') {
+        webInfo.textContent = 'Локальный пароль WebUI активен (PBKDF2-HMAC-SHA256, логин: ' + (s.ui_user || 'admin') + ').';
+        document.getElementById('setWebUser').value = s.ui_user || 'admin';
+        webForm.classList.remove('hide');
+      } else {
+        webInfo.textContent = 'Пароль WebUI ещё не настроен.';
+        webForm.classList.add('hide');
+      }
+    }
     document.getElementById('setGeoSiteURL').value = s.geosite_url || '';
     document.getElementById('setGeoIPURL').value = s.geoip_url || '';
 
@@ -1512,6 +1812,8 @@ async function saveSettings(btn) {
         kill_switch: document.getElementById('setKillSwitch').checked,
         multi_tunnel: document.getElementById('setMultiTunnel').checked,
         dns_bind_tunnel: document.getElementById('setDNSBind').checked,
+        term_enabled: !!document.getElementById('setTermEnabled')?.checked,
+        allow_config_hooks: !!document.getElementById('setAllowConfigHooks')?.checked,
         geosite_url: document.getElementById('setGeoSiteURL').value.trim(),
         geoip_url: document.getElementById('setGeoIPURL').value.trim(),
 
@@ -1858,7 +2160,12 @@ async function execTerm(cmd) {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({command: c, cwd: termState.cwd})
     });
-    if (!resp.ok) throw new Error(await resp.text());
+    if (!resp.ok) {
+      let msg = await resp.text();
+      try { const j = JSON.parse(msg); if (j.error) msg = j.error; } catch (_) {}
+      if (resp.status === 401) await checkAuthStatus();
+      throw new Error(msg || ('HTTP ' + resp.status));
+    }
     const reader = resp.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
@@ -1939,8 +2246,8 @@ function pickDoHFromCatalog(inputId, sel, appendId) {
 
 initDoHCatalog();
 termAppend('Web Terminal (AmneziaWG 3.1). Выберите кнопку сверху или введите команду.\n', 'term-dim');
-document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(true); });
-refresh(true);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && authState.authenticated) refresh(true); });
+checkAuthStatus().then(ok => { if (ok) refresh(true); });
 setInterval(() => refresh(false), 10000);
 </script>
 </body>

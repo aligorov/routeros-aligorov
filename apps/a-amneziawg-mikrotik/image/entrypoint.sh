@@ -56,7 +56,13 @@ detect_lan_iface() {
 ensure_tun
 fix_resolvconf
 sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || printf '[entrypoint] WARN: could not set net.ipv4.ip_forward=1\n'
-sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1 || true
+if [ "${AWG_ENABLE_IPV6:-off}" = "on" ]; then
+    sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1 || true
+else
+    sysctl -w net.ipv6.conf.all.forwarding=0 >/dev/null 2>&1 || true
+    sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
+    sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true
+fi
 fix_ip_rules
 
 if [ -z "${AWG_LAN_IFACE:-}" ]; then
