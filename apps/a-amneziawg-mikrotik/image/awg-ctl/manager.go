@@ -748,9 +748,10 @@ func (m *TunnelManager) StartAll() error {
 			continue
 		}
 		isPrimary := (startedCount == 0)
+		probeNum := 201 + startedCount
 		table := "awg"
 		if !isPrimary {
-			table = strconv.Itoa(200 + startedCount)
+			table = strconv.Itoa(probeNum)
 		}
 		prepared := m.injectAutoRoute(normalizeLF(string(srcBytes)), table, isPrimary)
 		runPath := filepath.Join(m.runDir, cfg.Name)
@@ -760,6 +761,9 @@ func (m *TunnelManager) StartAll() error {
 				firstErr = err
 			}
 			continue
+		}
+		if m.autoRoute && m.ipCmdFn != nil {
+			_ = m.ipCmdFn("route", "flush", "table", table)
 		}
 		m.logger.Logf("Starting %s (table=%s, primary=%v)...", cfg.Name, table, isPrimary)
 		if err := m.runCmd("/usr/bin/awg-quick", "up", runPath); err != nil {
@@ -783,7 +787,7 @@ func (m *TunnelManager) StartAll() error {
 		// Install dedicated per-tunnel probe table + fwmark (0x201, 0x202, ...) when Multi-Tunnel is active
 		// so health probes always traverse THAT exact tunnel even if table "awg" swaps to another primary.
 		if m.multiTunnel && m.ipCmdFn != nil {
-			probeTbl := strconv.Itoa(201 + startedCount)
+			probeTbl := strconv.Itoa(probeNum)
 			probeMark := 0x201 + startedCount
 			m.ifaceMark[cfg.Interface] = probeMark
 			markHex := fmt.Sprintf("0x%x", probeMark)
