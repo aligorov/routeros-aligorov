@@ -116,6 +116,10 @@ func NewTunnelManager(srcDir, runDir, lanIface string, autoRoute, killSwitch boo
 	}
 }
 
+func (m *TunnelManager) LanIface() string {
+	return m.lanIface
+}
+
 func (m *TunnelManager) SetRuntimeOptions(autoRoute, killSwitch, multiTunnel bool) {
 	m.mu.Lock()
 	m.autoRoute = autoRoute
@@ -650,7 +654,7 @@ func (m *TunnelManager) DeleteConfig(name string) error {
 	m.mu.Unlock()
 	err := os.Remove(filepath.Join(m.srcDir, name))
 	if m.onChange != nil {
-		m.onChange()
+		go m.onChange()
 	}
 	return err
 }

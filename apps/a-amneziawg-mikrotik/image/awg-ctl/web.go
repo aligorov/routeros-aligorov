@@ -113,6 +113,8 @@ func (w *WebServer) Start() error {
 	mux.HandleFunc("GET /api/domains", w.withAuth(w.handleGetDomains))
 	mux.HandleFunc("POST /api/domains", w.withAuth(w.handleSaveDomains))
 	mux.HandleFunc("POST /api/ros/sync", w.withAuth(w.handleROSSync))
+	mux.HandleFunc("POST /api/ros/test", w.withAuth(w.handleROSTest))
+	mux.HandleFunc("POST /api/ros/cleanup", w.withAuth(w.handleROSCleanup))
 	mux.HandleFunc("POST /api/term/exec", w.withAuth(w.handleTermExec))
 	mux.HandleFunc("POST /api/term/kill", w.withAuth(w.handleTermKill))
 
@@ -641,6 +643,65 @@ func (w *WebServer) handleROSSync(rw http.ResponseWriter, _ *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "ros": w.ros.Status()})
 }
 
+func (w *WebServer) handleROSTest(rw http.ResponseWriter, r *http.Request) {
+	if w.ros == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "ros client unavailable"})
+		return
+	}
+	var body struct {
+		ROSURL           string  `json:"ros_url"`
+		ROSUser          string  `json:"ros_user"`
+		ROSPass          string  `json:"ros_pass"`
+		ClearROSPass     bool    `json:"clear_ros_pass"`
+		ROSTLSSkipVerify *bool   `json:"ros_tls_insecure"`
+		ROSContainerIP   *string `json:"ros_container_ip"`
+		ROSRouteTable    *string `json:"ros_route_table"`
+	}
+	var override *AppSettings
+	if r.Body != nil {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err == nil && (strings.TrimSpace(body.ROSURL) != "" || strings.TrimSpace(body.ROSUser) != "") {
+			cur := w.settings.Get()
+			cur.ROSURL = strings.TrimSpace(body.ROSURL)
+			cur.ROSUser = strings.TrimSpace(body.ROSUser)
+			if body.ClearROSPass {
+				cur.ROSPass = ""
+			} else if body.ROSPass != "" {
+				cur.ROSPass = body.ROSPass
+			}
+			if body.ROSTLSSkipVerify != nil {
+				cur.ROSTLSSkipVerify = *body.ROSTLSSkipVerify
+			}
+			if body.ROSContainerIP != nil {
+				cur.ROSContainerIP = *body.ROSContainerIP
+			}
+			if body.ROSRouteTable != nil {
+				cur.ROSRouteTable = *body.ROSRouteTable
+			}
+			override = &cur
+		}
+	}
+	res := w.ros.TestConnection(override)
+	writeJSON(rw, http.StatusOK, res)
+}
+
+func (w *WebServer) handleROSCleanup(rw http.ResponseWriter, _ *http.Request) {
+	if w.ros == nil || !w.ros.Status().Enabled {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "ROS_URL and ROS_USER are not configured"})
+		return
+	}
+	routesDel, dnsDel, err := w.ros.CleanupManaged()
+	if err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":             true,
+		"routes_deleted": routesDel,
+		"dns_deleted":    dnsDel,
+		"ros":            w.ros.Status(),
+	})
+}
+
 func (w *WebServer) handleGetSettings(rw http.ResponseWriter, _ *http.Request) {
 	if w.settings == nil {
 		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "settings store unavailable"})
@@ -673,6 +734,11 @@ func (w *WebServer) handleSaveSettings(rw http.ResponseWriter, r *http.Request) 
 	}
 	if w.ros != nil {
 		w.ros.Configure(next)
+		if w.ros.Status().Enabled {
+			go func() {
+				_ = w.ros.SyncAll(w.mgr)
+			}()
+		}
 	}
 	var applyErr string
 	if prev.AutoRoute != next.AutoRoute || prev.MultiTunnel != next.MultiTunnel {

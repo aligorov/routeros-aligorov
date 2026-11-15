@@ -2,7 +2,7 @@
 
 Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go v3.1.20260828` + `awg-quick v3.1.20260812`) для **MikroTik RouterOS (`/app`)** с современным **WebUI (`:8092`)**, одновременной работой нескольких туннелей (**Multi-Tunnel**), автоматическим переключением (**Auto-Failover**), маршрутизацией по **GeoSite / GeoIP**, встроенным **DoH DNS-форвардером (`:53`)**, **Telegram-уведомлениями** и синхронизацией с **RouterOS REST API**.
 
-- **Образ:** `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`v1.4.0`, `linux/arm64`)
+- **Образ:** `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`v1.4.1`, `linux/arm64`)
 - **WebUI:** `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox)
 - **Сеть:** `/app` автоматически создаёт выделенный `veth` (без ручной подготовки интерфейсов)
 - **Том:** `awg-config` → `/etc/amnezia/amneziawg` (`*.conf`, `.active`, `settings.json`, `rules.conf`, `geo/`, `domains.txt`)
@@ -10,7 +10,7 @@
 
 ---
 
-## Возможности (v1.4.0)
+## Возможности (v1.4.1)
 
 - **Multi-Tunnel и приоритеты профилей** — загрузка любого числа `.conf` (drag-and-drop в браузере), порядок приоритетов (`#1` — Primary), одновременный подъём нескольких туннелей в отдельных таблицах (`awg`, `202+`, `210`), проверка конфликтов подсетей `Address` и переключение Primary в один клик.
 - **Auto-Failover (`Cold Switch` и `Hot Standby`)** — контроль здоровья каждого профиля по `Hybrid` (`Handshake + TCP-probe`), только `Handshake` или только `TCP-probe`; настройка интервала, порога ошибок, cooldown и авто-возврата (**Failback**) на приоритет `#1`.
@@ -72,7 +72,7 @@
 
 ## Интеграция с RouterOS
 
-- **REST API синк (маршруты и домены):** задайте `ROS_URL` (адрес шлюза роутера, например `https://192.168.253.1`), `ROS_USER` и `ROS_PASS` в **Настройках** WebUI или в **Environment** Winbox. Контроллер автоматически пропишет не-дефолтные подсети из `AllowedIPs` в `/ip/route` и синхронизирует домены в `/ip/dns/static`.
+- **REST API синк (маршруты и домены):** задайте `ROS_URL` (`https://<ip-шлюза>`, по умолчанию при установке через `/app` это `https://172.18.0.1`), `ROS_USER` и `ROS_PASS` в **Настройках** WebUI или в **Environment** Winbox. IP контейнера (`ROS_CONTAINER_IP`) определяется автоматически; в RouterOS у пользователя должна быть группа с политикой `read,write,api,rest-api` и разрешён сервис `www-ssl` (либо `rest-plain=yes` для `http://`) с подсети контейнера. Контроллер пропишет не-дефолтные подсети из `AllowedIPs` в `/ip/route` и домены в `/ip/dns/static`.
 - **DNS без утечек:** форвардер `:53` контейнера отправляет Proxy-запросы строго через туннель (с `fwmark`, если включён `Proxy DNS строго через туннель`). Для перенаправления отдельных доменов с MikroTik:
   ```routeros
   /ip/dns/static/add name=ifconfig.me type=FWD forward-to=<ip-контейнера> match-subdomain=yes address-list=AmneziaWGRoS
@@ -99,7 +99,8 @@
 | `AWG_CONF_B64` | Base64-содержимое `.conf` для старта без UI и файлов | `""` |
 | `DNS_ENABLE` / `DNS_UPSTREAM` | DNS-форвардер (`on`/`off`) и базовые upstream-серверы | `"on"` / `"1.1.1.1:53,8.8.8.8:53"` |
 | `UI_USER` / `UI_PASSWORD` | Basic Auth для WebUI (при пустом пароле — без авторизации) | `"admin"` / `""` |
-| `ROS_URL` / `ROS_USER` / `ROS_PASS` | RouterOS REST API для авто-синка `AllowedIPs` и доменов | `""` |
+| `ROS_URL` / `ROS_USER` / `ROS_PASS` | RouterOS REST API (`https://...`) для синка `AllowedIPs` и доменов | `""` |
+| `ROS_CONTAINER_IP` / `ROS_ROUTE_TABLE` | IP контейнера для маршрутов/DNS и целевая таблица маршрутизации | авто / `main` |
 | `TG_ENABLE` / `TG_BOT_TOKEN` / `TG_CHAT_ID` | Telegram-уведомления (можно настроить целиком из WebUI) | `""` |
 | `TG_THREAD_ID` / `TG_ALERT_THREAD_ID` | ID топика форума Telegram (`0` — общий чат) | `"0"` |
 | `AWG_HEALTH_MAX_HANDSHAKE_SEC` | Макс. возраст handshake для пробы `:8081` (`0` = не проверять) | `"0"` |
@@ -117,7 +118,7 @@
 # мульти-арх сборка (arm64, amd64, arm/v7)
 docker buildx build --builder multiarch \
   --platform linux/arm64,linux/amd64,linux/arm/v7 \
-  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.4.0 \
+  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.4.1 \
   -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1 \
   --push apps/a-amneziawg-mikrotik/image
 ```

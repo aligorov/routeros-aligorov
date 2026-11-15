@@ -10,7 +10,7 @@ import (
 	"sync"
 )
 
-const AppVersion = "1.4.0"
+const AppVersion = "1.4.1"
 
 const (
 	DefaultGeoSiteURL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
@@ -62,6 +62,7 @@ type AppSettings struct {
 	ROSPass          string `json:"ros_pass,omitempty"`
 	ROSTLSSkipVerify bool   `json:"ros_tls_insecure"`
 	ROSContainerIP   string `json:"ros_container_ip"`
+	ROSRouteTable    string `json:"ros_route_table"`
 	ROSForwardDNS    string `json:"ros_forward_dns"`
 	ROSAddressList   string `json:"ros_address_list"`
 	ROSSyncRoutes    bool   `json:"ros_sync_routes"`
@@ -147,11 +148,12 @@ func defaultSettingsFromEnv() AppSettings {
 		TGSilent:          false,
 		TGDailyDigestHour: -1,
 
-		ROSURL:           strings.TrimRight(strings.TrimSpace(os.Getenv("ROS_URL")), "/"),
+		ROSURL:           normalizeROSBaseURL(os.Getenv("ROS_URL")),
 		ROSUser:          strings.TrimSpace(os.Getenv("ROS_USER")),
 		ROSPass:          os.Getenv("ROS_PASS"),
 		ROSTLSSkipVerify: envOr("ROS_TLS_INSECURE", "true") == "true",
-		ROSContainerIP:   envOr("ROS_CONTAINER_IP", "192.168.253.2"),
+		ROSContainerIP:   normalizeROSContainerIP(os.Getenv("ROS_CONTAINER_IP")),
+		ROSRouteTable:    strings.TrimSpace(os.Getenv("ROS_ROUTE_TABLE")),
 		ROSForwardDNS:    envOr("ROS_FORWARD_DNS", "AmneziaWGRoS"),
 		ROSAddressList:   envOr("ROS_ADDRESS_LIST", "AmneziaWGRoS"),
 		ROSSyncRoutes:    envOr("ROS_SYNC_ROUTES", "on") == "on",
@@ -277,11 +279,13 @@ func normalizeSettings(s, fallback AppSettings) AppSettings {
 		s.TGDailyDigestHour = -1
 	}
 
-	s.ROSURL = strings.TrimRight(strings.TrimSpace(s.ROSURL), "/")
+	s.ROSURL = normalizeROSBaseURL(s.ROSURL)
 	s.ROSUser = strings.TrimSpace(s.ROSUser)
-	if strings.TrimSpace(s.ROSContainerIP) == "" {
+	s.ROSContainerIP = normalizeROSContainerIP(s.ROSContainerIP)
+	if s.ROSContainerIP == "" {
 		s.ROSContainerIP = fallback.ROSContainerIP
 	}
+	s.ROSRouteTable = strings.TrimSpace(s.ROSRouteTable)
 	if strings.TrimSpace(s.ROSForwardDNS) == "" {
 		s.ROSForwardDNS = fallback.ROSForwardDNS
 	}

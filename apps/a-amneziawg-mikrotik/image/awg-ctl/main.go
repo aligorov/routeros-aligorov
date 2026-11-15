@@ -54,6 +54,7 @@ func main() {
 	}
 
 	rosClient := NewROSClient(srcDir, logger)
+	rosClient.SetAutoGatewayFn(func() string { return detectInterfaceIPv4(mgr.LanIface()) })
 	rosClient.Configure(st)
 
 	tg := NewTGNotifier(settingsStore, mgr, logger)
@@ -65,7 +66,9 @@ func main() {
 		}
 		_ = policy.ApplyRouting()
 		if rosClient.Status().Enabled {
-			_ = rosClient.SyncAll(mgr)
+			go func() {
+				_ = rosClient.SyncAll(mgr)
+			}()
 		}
 	}
 
@@ -107,7 +110,7 @@ func main() {
 		defer ticker.Stop()
 		for now := range ticker.C {
 			if rosClient.Status().Enabled {
-				_ = rosClient.SyncAll(mgr)
+				_ = rosClient.SyncPeriodic(mgr)
 			}
 			tg.MaybeSendDigest(now)
 			cur := settingsStore.Get()

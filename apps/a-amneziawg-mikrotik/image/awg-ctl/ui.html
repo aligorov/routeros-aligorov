@@ -268,12 +268,13 @@
     </div>
 
     <div class="card">
-      <h2>RouterOS REST — списки доменов</h2>
+      <h2>RouterOS REST — выборочный DNS FWD / address-list (опционально)</h2>
+      <div class="mut" style="margin-bottom:6px">Нужно только если трафик на MikroTik идёт мимо контейнера (через mangle/address-list). Если трафик уже идёт через шлюз контейнера (default=PROXY), достаточно блока «Правила маршрутизации» выше.</div>
       <div class="mut" id="rosInfo" style="margin-bottom:10px"></div>
       <textarea id="domText" style="min-height:95px" placeholder="ifconfig.me&#10;youtube.com"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="primary" onclick="saveDomains(this)">Сохранить и синхронизировать</button>
-        <button onclick="syncROS(this)">Синхронизировать</button>
+        <button onclick="syncROS(this, 'domMsg')">Синхронизировать</button>
         <span class="mut" id="domMsg"></span>
       </div>
     </div>
@@ -403,19 +404,28 @@
     <div class="card">
       <h2>MikroTik RouterOS REST API</h2>
       <div class="grid" style="margin-bottom:12px">
-        <div><label class="mut" id="setRosURLLbl">ROS_URL</label><input id="setRosURL" placeholder="http://192.168.254.1"></div>
-        <div><label class="mut">ROS_USER</label><input id="setRosUser" placeholder="admin"></div>
+        <div><label class="mut" id="setRosURLLbl">ROS_URL (HTTPS REST)</label><input id="setRosURL" placeholder="https://172.18.0.1"></div>
+        <div><label class="mut">ROS_USER (группа с policy=read,write,api,rest-api)</label><input id="setRosUser" placeholder="awg-api"></div>
         <div><label class="mut" id="setRosPassLbl">ROS_PASS</label><input id="setRosPass" type="password" placeholder="оставьте пустым, чтобы не менять"></div>
-        <div><label class="mut">ROS_CONTAINER_IP</label><input id="setRosGW" placeholder="192.168.253.2"></div>
-        <div><label class="mut">ROS_FORWARD_DNS</label><input id="setRosFwd" placeholder="AmneziaWGRoS"></div>
+        <div><label class="mut" id="setRosGWLbl">ROS_CONTAINER_IP (пусто = авто)</label><input id="setRosGW" placeholder="auto" oninput="updateRosGWWarning()"></div>
+        <div><label class="mut">ROS_ROUTE_TABLE (для AllowedIPs, пусто = main)</label><input id="setRosTable" placeholder="main (по умолчанию)"></div>
         <div><label class="mut">ROS_ADDRESS_LIST</label><input id="setRosAL" placeholder="AmneziaWGRoS"></div>
+        <div><label class="mut">ROS_FORWARD_DNS</label><input id="setRosFwd" placeholder="AmneziaWGRoS"></div>
       </div>
+      <div id="rosGWWarning" class="mut hide" style="margin-bottom:10px;color:var(--warn)"></div>
       <div class="row" style="gap:16px;margin-bottom:14px">
         <label class="chk"><input type="checkbox" id="setRosTLS"> Пропускать проверку TLS</label>
         <label class="chk"><input type="checkbox" id="setRosSyncRoutes"> Синхронизировать маршруты</label>
         <label class="chk"><input type="checkbox" id="setRosSyncDomains"> Синхронизировать домены</label>
         <label class="chk"><input type="checkbox" id="setRosClearPass"> Очистить ROS_PASS</label>
       </div>
+      <div class="row" style="margin-bottom:10px;flex-wrap:wrap">
+        <button onclick="testROS(this)">Проверить подключение</button>
+        <button onclick="syncROS(this, 'rosTestMsg')">Синхронизировать сейчас</button>
+        <button class="bad" onclick="cleanupROS(this)">Удалить записи awg-ctl</button>
+        <span class="mut" id="rosTestMsg"></span>
+      </div>
+      <div class="mut" id="rosSetInfo" style="margin-bottom:12px"></div>
       <div class="row">
         <button class="primary" onclick="saveSettings(this)">Сохранить и применить настройки</button>
         <span class="mut" id="setMsg"></span>
@@ -564,9 +574,15 @@ async function refresh(manual = false) {
     document.getElementById('meta').textContent =
       `${(st.default_policy||'proxy').toUpperCase()} · ${st.lan_iface||'—'} (${st.container_ip||'no IP'}, gw ${st.gateway||'—'}) · rules: ${pol.rules_count||0} · failover: ${fo.mode||'off'} · TG: ${tg.enabled ? 'on' : 'off'}`;
 
-    document.getElementById('rosInfo').textContent = ros.enabled
-      ? `Подключён (${ros.url}) · маршрутов: ${ros.routes_synced} · доменов: ${ros.domains_synced}${ros.last_error ? ' · ОШИБКА: ' + ros.last_error : ''}`
-      : 'RouterOS REST не настроен (укажите параметры во вкладке «Настройки»).';
+    const rosText = ros.enabled
+      ? `${ros.router_name ? ros.router_name + (ros.routeros_version ? ' (ROS ' + ros.routeros_version + ')' : '') + ' · ' : ''}${ros.url} · шлюз контейнера: ${ros.gateway_ip || '—'} · маршрутов: ${ros.routes_synced} · доменов: ${ros.domains_synced}${ros.last_error ? ' · ОШИБКА: ' + ros.last_error : ''}`
+      : (ros.last_error ? 'RouterOS REST ошибка конфигурации: ' + ros.last_error : 'RouterOS REST не настроен (укажите параметры во вкладке «Настройки»).');
+    document.getElementById('rosInfo').textContent = rosText;
+    const rosSetInfo = document.getElementById('rosSetInfo');
+    if (rosSetInfo) {
+      rosSetInfo.textContent = rosText + (ros.next_retry_at ? ` · повтор: ${ros.next_retry_at}` : '');
+      rosSetInfo.style.color = ros.last_error ? 'var(--warn)' : '';
+    }
 
     // 1. Interfaces cards
     const ifKey = JSON.stringify([ifaces, cfgs.map(c => [c.interface, c.primary, c.table]), fo.tunnels]);
@@ -1226,19 +1242,24 @@ async function loadSettings() {
     document.getElementById('setTGSilent').checked = !!s.tg_silent;
 
     document.getElementById('setRosURL').value = s.ros_url || '';
-    const gwHint = (lastStatus && lastStatus.gateway) ? `ROS_URL (шлюз: http://${lastStatus.gateway})` : 'ROS_URL';
+    const gwHint = (lastStatus && lastStatus.gateway) ? `ROS_URL (шлюз: https://${lastStatus.gateway})` : 'ROS_URL (HTTPS REST)';
     document.getElementById('setRosURLLbl').textContent = gwHint;
-    if (lastStatus && lastStatus.gateway) document.getElementById('setRosURL').placeholder = 'http://' + lastStatus.gateway;
+    if (lastStatus && lastStatus.gateway) document.getElementById('setRosURL').placeholder = 'https://' + lastStatus.gateway;
     document.getElementById('setRosUser').value = s.ros_user || '';
     document.getElementById('setRosPass').value = '';
     document.getElementById('setRosPassLbl').textContent = s.ros_pass_set ? 'ROS_PASS (задан)' : 'ROS_PASS (не задан)';
+    const autoRosIP = (lastStatus && lastStatus.ros && lastStatus.ros.auto_gateway_ip) || (lastStatus && lastStatus.container_ip ? String(lastStatus.container_ip).split('/')[0] : '');
+    document.getElementById('setRosGWLbl').textContent = autoRosIP ? `ROS_CONTAINER_IP (пусто = авто: ${autoRosIP})` : 'ROS_CONTAINER_IP (пусто = авто)';
+    document.getElementById('setRosGW').placeholder = autoRosIP ? `auto (${autoRosIP})` : 'auto';
     document.getElementById('setRosGW').value = s.ros_container_ip || '';
+    document.getElementById('setRosTable').value = s.ros_route_table || '';
     document.getElementById('setRosFwd').value = s.ros_forward_dns || '';
     document.getElementById('setRosAL').value = s.ros_address_list || '';
     document.getElementById('setRosTLS').checked = !!s.ros_tls_insecure;
     document.getElementById('setRosSyncRoutes').checked = !!s.ros_sync_routes;
     document.getElementById('setRosSyncDomains').checked = !!s.ros_sync_domains;
     document.getElementById('setRosClearPass').checked = false;
+    updateRosGWWarning(autoRosIP);
   } catch (e) { document.getElementById('setMsg').textContent = 'Ошибка: ' + e.message; }
 }
 
@@ -1290,6 +1311,7 @@ async function saveSettings(btn) {
         ros_pass: document.getElementById('setRosPass').value,
         clear_ros_pass: document.getElementById('setRosClearPass').checked,
         ros_container_ip: document.getElementById('setRosGW').value.trim(),
+        ros_route_table: document.getElementById('setRosTable').value.trim(),
         ros_forward_dns: document.getElementById('setRosFwd').value.trim(),
         ros_address_list: document.getElementById('setRosAL').value.trim(),
         ros_tls_insecure: document.getElementById('setRosTLS').checked,
@@ -1304,6 +1326,7 @@ async function saveSettings(btn) {
       toast(msg.textContent, r.apply_error ? 'bad' : 'ok');
       await loadSettings();
       await refresh(true);
+      if (payload.ros_url) setTimeout(() => refresh(true), 1200);
     } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
   });
 }
@@ -1351,15 +1374,82 @@ async function saveDomains(btn) {
     } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
   });
 }
-async function syncROS(btn) {
-  const msg = document.getElementById('domMsg');
+function updateRosGWWarning(autoIP) {
+  const el = document.getElementById('rosGWWarning');
+  if (!el) return;
+  const effAuto = autoIP || (lastStatus && lastStatus.ros && lastStatus.ros.auto_gateway_ip) || '';
+  const val = document.getElementById('setRosGW').value.trim();
+  if (val && effAuto && val !== effAuto) {
+    el.classList.remove('hide');
+    el.innerHTML = `Внимание: реальный IP контейнера <b>${esc(effAuto)}</b>, а указан <b>${esc(val)}</b> — маршруты и DNS в RouterOS укажут на неверный IP. <button class="sm" onclick="clearRosContainerIP()" style="margin-left:6px">Очистить (использовать авто)</button>`;
+  } else {
+    el.classList.add('hide');
+    el.textContent = '';
+  }
+}
+function clearRosContainerIP() {
+  document.getElementById('setRosGW').value = '';
+  const autoIP = (lastStatus && lastStatus.ros && lastStatus.ros.auto_gateway_ip) || '';
+  updateRosGWWarning(autoIP);
+}
+async function testROS(btn) {
+  const msg = document.getElementById('rosTestMsg');
+  msg.textContent = 'Проверка...';
+  msg.style.color = '';
   await withBusy(btn, async () => {
     try {
-      await api('/api/ros/sync', {method:'POST'});
-      msg.textContent = 'Синхронизировано';
+      const r = await api('/api/ros/test', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          ros_url: document.getElementById('setRosURL').value.trim(),
+          ros_user: document.getElementById('setRosUser').value.trim(),
+          ros_pass: document.getElementById('setRosPass').value,
+          clear_ros_pass: document.getElementById('setRosClearPass').checked,
+          ros_tls_insecure: document.getElementById('setRosTLS').checked,
+          ros_container_ip: document.getElementById('setRosGW').value.trim(),
+          ros_route_table: document.getElementById('setRosTable').value.trim()
+        })
+      });
+      if (r.ok) {
+        msg.style.color = 'var(--ok)';
+        msg.textContent = `OK: ${r.identity || 'MikroTik'} ${r.board || ''} · RouterOS ${r.version || '?'} · шлюз контейнера: ${r.gateway_ip || '—'}`;
+        toast('RouterOS REST API доступен');
+      } else {
+        msg.style.color = 'var(--bad)';
+        msg.textContent = `Ошибка: ${r.error || 'неизвестная'}${r.hint ? ' — ' + r.hint : ''}`;
+        toast(r.error || 'Ошибка подключения к RouterOS', 'bad');
+      }
+      await refresh(true);
+    } catch (e) { msg.style.color = 'var(--bad)'; msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+  });
+}
+async function syncROS(btn, msgId = 'domMsg') {
+  const msg = document.getElementById(msgId);
+  if (msg) { msg.textContent = 'Синхронизация...'; msg.style.color = ''; }
+  await withBusy(btn, async () => {
+    try {
+      const r = await api('/api/ros/sync', {method:'POST'});
+      const txt = r.ros ? `Синхронизировано (маршрутов: ${r.ros.routes_synced}, доменов: ${r.ros.domains_synced})` : 'Синхронизировано';
+      if (msg) { msg.style.color = 'var(--ok)'; msg.textContent = txt; }
       toast('RouterOS синхронизирован');
       await refresh(true);
-    } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+    } catch (e) {
+      if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = 'Ошибка: ' + e.message; }
+      toast(e.message, 'bad');
+    }
+  });
+}
+async function cleanupROS(btn) {
+  if (!confirm('Удалить все маршруты (awg-ctl:*) и DNS-записи (comment=awg-ctl) на RouterOS?')) return;
+  const msg = document.getElementById('rosTestMsg');
+  await withBusy(btn, async () => {
+    try {
+      const r = await api('/api/ros/cleanup', {method:'POST'});
+      msg.style.color = 'var(--ok)';
+      msg.textContent = `Удалено записей: маршрутов=${r.routes_deleted}, DNS=${r.dns_deleted}`;
+      toast(msg.textContent);
+      await refresh(true);
+    } catch (e) { msg.style.color = 'var(--bad)'; msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
   });
 }
 
