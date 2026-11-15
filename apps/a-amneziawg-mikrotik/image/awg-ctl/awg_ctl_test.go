@@ -47,6 +47,18 @@ func TestInjectAutoRouteAndSeed(t *testing.T) {
 	if !strings.Contains(injected, "Table = awg") || !strings.Contains(injected, "iif AmneziaWGRoS lookup awg") || !strings.Contains(injected, "ip route add blackhole default table awg metric 254") || strings.Contains(injected, "ip route replace blackhole") {
 		t.Fatalf("missing or broken injected auto-route rules:\n%s", injected)
 	}
+
+	// Regression: PostUp pasted after [Peer] must be moved under [Interface] before awg-quick runs.
+	misplaced := "[Interface]\nPrivateKey = abc=\nAddress = 10.0.0.2/32\n[Peer]\nPublicKey = def=\nAllowedIPs = 0.0.0.0/0\nPostUp = iptables -t nat -A POSTROUTING -o %i -j MASQUERADE\n"
+	norm := mgr.injectAutoRoute(misplaced, "awg", true)
+	peerIdx := strings.Index(norm, "[Peer]")
+	postUpIdx := strings.Index(norm, "PostUp = iptables -t nat -A POSTROUTING -o %i -j MASQUERADE")
+	if peerIdx < 0 || postUpIdx < 0 || postUpIdx > peerIdx {
+		t.Fatalf("expected PostUp relocated before [Peer], got:\n%s", norm)
+	}
+	if !strings.Contains(norm, "Table = awg") {
+		t.Fatalf("expected Table = awg when config had only PostUp, got:\n%s", norm)
+	}
 }
 
 func TestROSSyncMock(t *testing.T) {

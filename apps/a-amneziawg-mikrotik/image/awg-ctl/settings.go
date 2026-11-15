@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-const AppVersion = "1.3.1"
+const AppVersion = "1.3.2"
 
 const (
 	DefaultGeoSiteURL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"

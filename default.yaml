@@ -3,7 +3,7 @@
 #  Источники приложений: apps/*/app.yaml
 # =============================================================
 - name: A-amneziawg-mikrotik
-  descr: AmneziaWG 3.1 (v1.3.1) — Профили, GeoSite/GeoIP, Proxy/Direct/Drop, Настройки,
+  descr: AmneziaWG 3.1 (v1.3.2) — Профили, GeoSite/GeoIP, Proxy/Direct/Drop, Терминал,
     DNS
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/a-amneziawg-mikrotik
   category: networking

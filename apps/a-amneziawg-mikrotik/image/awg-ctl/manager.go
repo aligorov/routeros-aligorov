@@ -133,12 +133,79 @@ func (m *TunnelManager) SeedFromEnv() error {
 }
 
 func normalizeLF(s string) string {
+	s = strings.TrimPrefix(s, "\ufeff")
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
 	if s != "" && !strings.HasSuffix(s, "\n") {
 		s += "\n"
 	}
 	return s
+}
+
+var interfaceOnlyKeys = map[string]bool{
+	"privatekey": true, "listenport": true, "fwmark": true,
+	"address": true, "dns": true, "mtu": true, "table": true,
+	"preup": true, "postup": true, "predown": true, "postdown": true,
+	"saveconfig": true,
+	"jc": true, "jmin": true, "jmax": true,
+	"s1": true, "s2": true, "s3": true, "s4": true,
+	"h1": true, "h2": true, "h3": true, "h4": true,
+	"i1": true, "i2": true, "i3": true, "i4": true, "i5": true,
+}
+
+// normalizeConfigSections moves [Interface]-only directives (such as PostUp,
+// PostDown, Table, Address, DNS, MTU) back into [Interface] if they were pasted
+// after a [Peer] header, preventing awg-quick from forwarding them to awg setconf.
+func normalizeConfigSections(text string) string {
+	lines := strings.Split(strings.TrimSuffix(normalizeLF(text), "\n"), "\n")
+	var ifaceLines, restLines, misplaced []string
+	section := ""
+	seenIface := false
+
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			lowSec := strings.ToLower(trimmed)
+			if lowSec == "[interface]" {
+				if !seenIface {
+					seenIface = true
+					section = "interface"
+					ifaceLines = append(ifaceLines, l)
+					continue
+				}
+				section = "interface"
+				continue
+			}
+			section = "other"
+			restLines = append(restLines, l)
+			continue
+		}
+
+		if section != "interface" && trimmed != "" && !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, ";") {
+			if k, _, ok := strings.Cut(trimmed, "="); ok {
+				key := strings.ToLower(strings.TrimSpace(k))
+				if interfaceOnlyKeys[key] {
+					misplaced = append(misplaced, l)
+					continue
+				}
+			}
+		}
+
+		if section == "interface" {
+			ifaceLines = append(ifaceLines, l)
+		} else {
+			restLines = append(restLines, l)
+		}
+	}
+
+	if !seenIface {
+		return normalizeLF(text)
+	}
+	var out []string
+	out = append(out, ifaceLines...)
+	out = append(out, misplaced...)
+	out = append(out, restLines...)
+	return normalizeLF(strings.Join(out, "\n"))
 }
 
 func (m *TunnelManager) ListConfigs() ([]ConfigMeta, error) {
@@ -321,11 +388,12 @@ func (m *TunnelManager) DeleteConfig(name string) error {
 }
 
 func (m *TunnelManager) injectAutoRoute(text string, table string, primary bool) string {
+	text = normalizeConfigSections(text)
 	if !m.autoRoute || m.lanIface == "" {
 		return text
 	}
 	meta := parseConfigMeta("tmp.conf", text)
-	if meta.HasPostUp || meta.HasTable {
+	if meta.HasTable {
 		return text
 	}
 

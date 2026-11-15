@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
 	"crypto/subtle"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -16,6 +21,22 @@ import (
 
 //go:embed ui.html
 var uiHTML []byte
+
+var (
+	uiETag     string
+	uiHTMLGzip []byte
+)
+
+func init() {
+	sum := sha256.Sum256(uiHTML)
+	uiETag = `"` + hex.EncodeToString(sum[:8]) + `"`
+	var buf bytes.Buffer
+	if gz, err := gzip.NewWriterLevel(&buf, gzip.BestCompression); err == nil {
+		_, _ = gz.Write(uiHTML)
+		_ = gz.Close()
+		uiHTMLGzip = buf.Bytes()
+	}
+}
 
 type WebServer struct {
 	listenAddr string
@@ -29,11 +50,16 @@ type WebServer struct {
 	settings   *SettingsStore
 	geo        *GeoStore
 	policy     *PolicyEngine
+	term       *TermRunner
 	logger     *RingLogger
 }
 
 func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros *ROSClient, settings *SettingsStore, geo *GeoStore, policy *PolicyEngine, logger *RingLogger) *WebServer {
 	maxHS, _ := strconv.ParseInt(envOr("AWG_HEALTH_MAX_HANDSHAKE_SEC", "0"), 10, 64)
+	srcDir := ""
+	if mgr != nil {
+		srcDir = mgr.srcDir
+	}
 	return &WebServer{
 		listenAddr: listenAddr,
 		healthAddr: strings.TrimSpace(os.Getenv("HEALTH_LISTEN")),
@@ -46,6 +72,7 @@ func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros 
 		settings:   settings,
 		geo:        geo,
 		policy:     policy,
+		term:       NewTermRunner(srcDir),
 		logger:     logger,
 	}
 }
@@ -74,6 +101,8 @@ func (w *WebServer) Start() error {
 	mux.HandleFunc("GET /api/domains", w.withAuth(w.handleGetDomains))
 	mux.HandleFunc("POST /api/domains", w.withAuth(w.handleSaveDomains))
 	mux.HandleFunc("POST /api/ros/sync", w.withAuth(w.handleROSSync))
+	mux.HandleFunc("POST /api/term/exec", w.withAuth(w.handleTermExec))
+	mux.HandleFunc("POST /api/term/kill", w.withAuth(w.handleTermKill))
 
 	if w.healthAddr != "" {
 		hmux := http.NewServeMux()
@@ -91,10 +120,47 @@ func (w *WebServer) Start() error {
 	w.logger.Logf("WebUI listening on %s (auth=%v)", w.listenAddr, w.uiPass != "")
 	srv := &http.Server{
 		Addr:              w.listenAddr,
-		Handler:           mux,
+		Handler:           w.gzipMiddleware(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return srv.ListenAndServe()
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	gw *gzip.Writer
+}
+
+func (g *gzipResponseWriter) Write(p []byte) (int, error) {
+	return g.gw.Write(p)
+}
+
+func (g *gzipResponseWriter) Flush() {
+	_ = g.gw.Flush()
+	if f, ok := g.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *WebServer) gzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		// Pre-compressed uiHTML handles "/", QR PNG shouldn't be re-compressed,
+		// and /api/term/exec uses chunked streaming without buffering.
+		if r.URL.Path == "/" || r.URL.Path == "/api/qr" || strings.HasPrefix(r.URL.Path, "/api/term/") || !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(rw, r)
+			return
+		}
+		rw.Header().Add("Vary", "Accept-Encoding")
+		rw.Header().Set("Content-Encoding", "gzip")
+		rw.Header().Del("Content-Length")
+		gz, err := gzip.NewWriterLevel(rw, gzip.BestSpeed)
+		if err != nil {
+			next.ServeHTTP(rw, r)
+			return
+		}
+		defer gz.Close()
+		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: rw, gw: gz}, r)
+	})
 }
 
 func (w *WebServer) withAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -119,8 +185,20 @@ func writeJSON(rw http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(rw).Encode(v)
 }
 
-func (w *WebServer) handleIndex(rw http.ResponseWriter, _ *http.Request) {
+func (w *WebServer) handleIndex(rw http.ResponseWriter, r *http.Request) {
+	rw.Header().Set("Cache-Control", "no-cache")
+	rw.Header().Set("ETag", uiETag)
+	if inm := r.Header.Get("If-None-Match"); inm != "" && strings.Contains(inm, uiETag) {
+		rw.WriteHeader(http.StatusNotModified)
+		return
+	}
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+	rw.Header().Add("Vary", "Accept-Encoding")
+	if len(uiHTMLGzip) > 0 && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		rw.Header().Set("Content-Encoding", "gzip")
+		_, _ = rw.Write(uiHTMLGzip)
+		return
+	}
 	_, _ = rw.Write(uiHTML)
 }
 
@@ -203,21 +281,46 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 		defPol = st.DefaultPolicy
 		multiTun = st.MultiTunnel
 	}
+	containerIP, gw := w.containerNetInfo()
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"version":          AppVersion,
-		"interfaces":       ifaces,
-		"configs":          cfgs,
-		"lan_iface":        w.mgr.lanIface,
-		"auto_route":       w.mgr.autoRoute,
-		"kill_switch":      w.mgr.killSwitch,
-		"multi_tunnel":     multiTun,
-		"default_policy":   defPol,
-		"dns_upstreams":    upstreams,
-		"direct_dns":       directUpstreams,
-		"policy":           policyStats,
-		"ros":              w.ros.Status(),
-		"logs":             w.logger.Lines(),
+		"version":        AppVersion,
+		"interfaces":     ifaces,
+		"configs":        cfgs,
+		"lan_iface":      w.mgr.lanIface,
+		"container_ip":   containerIP,
+		"gateway":        gw,
+		"auto_route":     w.mgr.autoRoute,
+		"kill_switch":    w.mgr.killSwitch,
+		"multi_tunnel":   multiTun,
+		"default_policy": defPol,
+		"dns_upstreams":  upstreams,
+		"direct_dns":     directUpstreams,
+		"policy":         policyStats,
+		"ros":            w.ros.Status(),
+		"logs":           w.logger.Lines(),
 	})
+}
+
+func (w *WebServer) containerNetInfo() (containerIP, gateway string) {
+	if w.mgr == nil || w.mgr.lanIface == "" {
+		return "", ""
+	}
+	if ifc, err := net.InterfaceByName(w.mgr.lanIface); err == nil {
+		if addrs, err := ifc.Addrs(); err == nil {
+			for _, a := range addrs {
+				if ipn, ok := a.(*net.IPNet); ok && ipn.IP.To4() != nil {
+					containerIP = ipn.String()
+					break
+				}
+			}
+		}
+	}
+	if w.policy != nil && w.policy.detectRouteFn != nil {
+		gateway, _ = w.policy.detectRouteFn(w.mgr.lanIface)
+	} else {
+		gateway, _ = defaultDetectRoute(w.mgr.lanIface)
+	}
+	return containerIP, gateway
 }
 
 func (w *WebServer) handleGetConfig(rw http.ResponseWriter, r *http.Request) {
@@ -528,4 +631,47 @@ func (w *WebServer) handleGeoUpdate(rw http.ResponseWriter, r *http.Request) {
 		"geo":   w.geo.Status(),
 		"stats": w.policy.Stats(),
 	})
+}
+
+func (w *WebServer) handleTermExec(rw http.ResponseWriter, r *http.Request) {
+	if w.term == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "terminal runner unavailable"})
+		return
+	}
+	var body struct {
+		Command string `json:"command"`
+		Cwd     string `json:"cwd"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	rw.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+	rw.Header().Set("Cache-Control", "no-cache, no-store")
+	rw.Header().Set("X-Content-Type-Options", "nosniff")
+	rw.WriteHeader(http.StatusOK)
+
+	rc := http.NewResponseController(rw)
+	enc := json.NewEncoder(rw)
+	w.term.ExecStream(r.Context(), body.Command, body.Cwd, func(ev TermEvent) {
+		_ = enc.Encode(ev)
+		_ = rc.Flush()
+	})
+}
+
+func (w *WebServer) handleTermKill(rw http.ResponseWriter, r *http.Request) {
+	if w.term == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "terminal runner unavailable"})
+		return
+	}
+	var body struct {
+		ExecID string `json:"exec_id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	killed := w.term.Kill(strings.TrimSpace(body.ExecID))
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": killed})
 }

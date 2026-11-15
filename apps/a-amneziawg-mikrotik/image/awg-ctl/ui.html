@@ -8,37 +8,62 @@
   :root { --bg:#0f141a; --card:#171d26; --bd:#273140; --tx:#e6edf3; --mut:#8b98a8; --acc:#3b82f6; --ok:#22c55e; --bad:#ef4444; --warn:#f59e0b; }
   * { box-sizing:border-box; }
   body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--tx); }
-  .wrap { max-width:1040px; margin:22px auto; padding:0 16px; }
-  header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
-  h1 { margin:0; font-size:1.3rem; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .wrap { max-width:1080px; margin:20px auto; padding:0 14px; }
+  header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
+  h1 { margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:16px; margin-bottom:14px; }
-  .card h2 { margin:0 0 12px; font-size:1rem; color:#cbd5e1; }
-  button { background:#232c3a; color:var(--tx); border:1px solid var(--bd); border-radius:7px; padding:7px 12px; cursor:pointer; font-size:.86rem; }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:15px; margin-bottom:13px; }
+  .card h2 { margin:0 0 11px; font-size:.98rem; color:#cbd5e1; }
+  button { background:#232c3a; color:var(--tx); border:1px solid var(--bd); border-radius:7px; padding:7px 12px; cursor:pointer; font-size:.85rem; transition:filter .12s; }
   button.primary { background:var(--acc); border-color:var(--acc); color:#fff; font-weight:600; }
-  button.danger { background:#7f1d1d; border-color:#991b1b; }
-  button.sm { padding:5px 9px; font-size:.8rem; }
-  button:hover { filter:brightness(1.1); }
+  button.danger { background:#7f1d1d; border-color:#991b1b; color:#fee2e2; }
+  button.sm { padding:5px 9px; font-size:.79rem; }
+  button:hover:not(:disabled) { filter:brightness(1.12); }
   button:disabled { opacity:.55; cursor:wait; }
   input, select, textarea { width:100%; background:#0b1016; color:var(--tx); border:1px solid var(--bd); border-radius:7px; padding:8px 10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.84rem; }
   input[type=checkbox], input[type=radio] { width:auto; }
   textarea { min-height:210px; resize:vertical; }
-  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.75rem; font-weight:600; }
+  textarea.dragover { border-color:var(--acc); box-shadow:0 0 0 2px rgba(59,130,246,.35); }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.74rem; font-weight:600; }
   .badge.ok { background:rgba(34,197,94,.16); color:var(--ok); }
   .badge.bad { background:rgba(239,68,68,.16); color:var(--bad); }
   .badge.warn { background:rgba(245,158,11,.18); color:var(--warn); }
   .badge.info { background:rgba(59,130,246,.18); color:#60a5fa; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px; }
-  .peer { background:#0b1016; border:1px solid var(--bd); border-radius:8px; padding:10px; margin-top:8px; font-size:.82rem; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+  .peer { background:#0b1016; border:1px solid var(--bd); border-radius:8px; padding:10px; margin-top:8px; font-size:.82rem; word-break:break-word; }
   .mut { color:var(--mut); font-size:.82rem; }
-  pre { background:#0b1016; border:1px solid var(--bd); border-radius:8px; padding:10px; max-height:280px; overflow:auto; font-size:.78rem; margin:0; }
-  .tabs { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
-  .tab.active { background:var(--acc); border-color:var(--acc); color:#fff; }
-  .hide { display:none; }
-  label.chk { display:flex; gap:8px; align-items:center; cursor:pointer; font-size:.88rem; }
-  .statgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:8px; }
+  pre { background:#0b1016; border:1px solid var(--bd); border-radius:8px; padding:10px; max-height:360px; overflow:auto; font-size:.78rem; margin:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; line-height:1.42; }
+  .tabs { display:flex; gap:7px; margin-bottom:13px; flex-wrap:wrap; }
+  .tab.active { background:var(--acc); border-color:var(--acc); color:#fff; font-weight:600; }
+  .hide { display:none !important; }
+  label.chk { display:flex; gap:8px; align-items:center; cursor:pointer; font-size:.87rem; }
+  .statgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:8px; }
   .statbox { background:#0b1016; border:1px solid var(--bd); border-radius:8px; padding:10px; }
-  .statval { font-size:1.1rem; font-weight:700; margin-top:2px; }
+  .statval { font-size:1.05rem; font-weight:700; margin-top:2px; word-break:break-word; }
+
+  /* Terminal */
+  .term-box { background:#080c10; border:1px solid var(--bd); border-radius:8px; overflow:hidden; }
+  .term-out { height:380px; overflow:auto; padding:10px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.8rem; line-height:1.45; white-space:pre-wrap; word-break:break-word; color:#dbe5f0; cursor:text; }
+  .term-cmd { color:#60a5fa; font-weight:600; }
+  .term-err { color:#f87171; }
+  .term-dim { color:#64748b; }
+  .term-bar { display:flex; align-items:center; gap:8px; padding:8px 10px; border-top:1px solid var(--bd); background:#0d131a; }
+  .term-prompt { color:var(--ok); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.82rem; white-space:nowrap; }
+  .term-bar input { border:none; background:transparent; padding:4px 2px; font-size:.85rem; outline:none; }
+
+  /* Toast */
+  #toast { position:fixed; right:16px; bottom:16px; z-index:99; background:#1e293b; border:1px solid var(--bd); border-radius:8px; padding:10px 14px; font-size:.85rem; box-shadow:0 8px 24px rgba(0,0,0,.45); max-width:360px; opacity:0; pointer-events:none; transition:opacity .18s; }
+  #toast.show { opacity:1; pointer-events:auto; }
+  #toast.bad { border-color:var(--bad); color:#fecaca; }
+  #toast.ok { border-color:var(--ok); color:#bbf7d0; }
+
+  @media (max-width:640px) {
+    .wrap { margin:10px auto; padding:0 10px; }
+    .tabs { gap:5px; }
+    .tab { padding:6px 9px; font-size:.8rem; flex:1 1 auto; text-align:center; }
+    .term-out { height:300px; }
+    header .row button { flex:1 1 auto; }
+  }
 </style>
 </head>
 <body>
@@ -48,25 +73,27 @@
       <h1>AmneziaWG 3.1 — MikroTik <span class="badge info" id="verBadge">v...</span></h1>
       <div class="mut" id="meta">Загрузка...</div>
     </div>
-    <div class="row">
-      <button class="primary" onclick="tunnelAction('restart')">Перезапустить</button>
-      <button onclick="tunnelAction('up')">Поднять</button>
-      <button class="danger" onclick="tunnelAction('down')">Остановить</button>
-      <button onclick="refresh()">Обновить</button>
+    <div class="row" id="hdrBtns">
+      <button class="primary" onclick="tunnelAction('restart', this)">Перезапустить</button>
+      <button onclick="tunnelAction('up', this)">Поднять</button>
+      <button class="danger" onclick="tunnelAction('down', this)">Остановить</button>
+      <button onclick="refresh(true)">Обновить</button>
     </div>
   </header>
 
   <div class="tabs">
-    <button class="tab active" onclick="showTab('status', this)">Статус</button>
-    <button class="tab" onclick="showTab('configs', this)">Конфиги (.conf)</button>
-    <button class="tab" onclick="showTab('keygen', this)">Генератор / QR</button>
-    <button class="tab" onclick="showTab('rules', this)">Правила / Geo</button>
-    <button class="tab" onclick="showTab('settings', this)">Настройки</button>
-    <button class="tab" onclick="showTab('logs', this)">Логи</button>
+    <button class="tab active" data-tab="status" onclick="showTab('status', this)">Статус</button>
+    <button class="tab" data-tab="configs" onclick="showTab('configs', this)">Конфиги (.conf)</button>
+    <button class="tab" data-tab="keygen" onclick="showTab('keygen', this)">Генератор / QR</button>
+    <button class="tab" data-tab="rules" onclick="showTab('rules', this)">Правила / Geo</button>
+    <button class="tab" data-tab="settings" onclick="showTab('settings', this)">Настройки</button>
+    <button class="tab" data-tab="term" onclick="showTab('term', this)">Терминал</button>
+    <button class="tab" data-tab="logs" onclick="showTab('logs', this)">Логи</button>
   </div>
 
   <div id="tab-status" class="tab-pane">
     <div id="ifaces"></div>
+    <div id="netCard" class="card"></div>
     <div id="policyCard" class="card"></div>
   </div>
 
@@ -77,13 +104,16 @@
       <div class="row" style="margin-bottom:10px">
         <select id="cfgSelect" style="max-width:220px" onchange="editingNew=false;loadSelectedConfig()"></select>
         <input id="cfgName" placeholder="имя профиля, напр. nl.conf" style="max-width:200px">
-        <button onclick="newConfig()">+ Новый профиль</button>
+        <button onclick="newConfig()">+ Новый</button>
+        <button onclick="document.getElementById('cfgFile').click()">Загрузить файл</button>
+        <button onclick="downloadConfig()">Скачать</button>
         <button class="danger" onclick="deleteConfig()">Удалить</button>
+        <input id="cfgFile" type="file" accept=".conf,.txt" class="hide" onchange="importConfigFile(this)">
       </div>
-      <textarea id="cfgText" placeholder="[Interface]&#10;PrivateKey = ..."></textarea>
+      <textarea id="cfgText" placeholder="[Interface]&#10;PrivateKey = ...&#10;&#10;(можно перетащить файл .conf прямо сюда)"></textarea>
       <div class="row" style="margin-top:10px">
-        <button class="primary" onclick="saveConfig(true)">Сохранить и сделать активным</button>
-        <button onclick="saveConfig(false)">Только сохранить</button>
+        <button class="primary" onclick="saveConfig(true, this)">Сохранить и сделать активным</button>
+        <button onclick="saveConfig(false, this)">Только сохранить</button>
         <button onclick="showQRForText(document.getElementById('cfgText').value)">QR-код</button>
         <span class="mut" id="cfgMsg"></span>
       </div>
@@ -100,12 +130,12 @@
         <div><label class="mut">Tunnel IP клиента</label><input id="kgCliIP" value="10.8.0.2/24"></div>
         <div><label class="mut">ListenPort сервера</label><input id="kgPort" value="51820"></div>
       </div>
-      <button class="primary" onclick="generatePair()">Сгенерировать пару ключей и AWG 3.1</button>
+      <button class="primary" onclick="generatePair(this)">Сгенерировать пару ключей и AWG 3.1</button>
       <div class="grid" style="margin-top:12px">
         <div>
           <div class="mut" style="margin-bottom:4px">Сервер (server.conf)</div>
           <textarea id="kgSrvOut"></textarea>
-          <button style="margin-top:6px" onclick="applyGeneratedServer()">Сохранить как server.conf и сделать активным</button>
+          <button style="margin-top:6px" onclick="applyGeneratedServer(this)">Сохранить как server.conf и сделать активным</button>
         </div>
         <div>
           <div class="mut" style="margin-bottom:4px">Клиент (для телефона / ПК)</div>
@@ -158,7 +188,7 @@
           <option value="DIRECT">DIRECT</option>
           <option value="DROP">DROP</option>
         </select>
-        <select id="addKind" style="max-width:175px" onchange="updateMatcherPlaceholder()">
+        <select id="addKind" style="max-width:175px" onchange="onKindChange()">
           <option value="domain">Домен (domain:)</option>
           <option value="geosite">GeoSite (geosite:)</option>
           <option value="geoip">GeoIP (geoip:)</option>
@@ -177,14 +207,14 @@
       <div style="margin-bottom:8px">
         <button class="sm" onclick="toggleRawRules()">Показать / скрыть текстовый редактор правил (rules.conf)</button>
       </div>
-      <textarea id="rulesText" class="hide" style="min-height:200px" oninput="syncVisualFromText()" placeholder="DROP,geosite:category-ads-all&#10;DIRECT,geosite:ru&#10;DIRECT,geoip:ru&#10;PROXY,domain:youtube.com"></textarea>
+      <textarea id="rulesText" class="hide" style="min-height:200px" oninput="syncVisualFromText()" placeholder="DROP,geosite:category-ads-all&#10;DIRECT,geosite:category-ru&#10;DIRECT,geoip:ru&#10;PROXY,domain:youtube.com"></textarea>
       <div class="row" style="margin-top:10px">
-        <button class="primary" onclick="saveRules()">Сохранить и применить правила</button>
+        <button class="primary" onclick="saveRules(this)">Сохранить и применить правила</button>
         <span class="mut" id="rulesMsg"></span>
       </div>
 
       <div class="row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bd)">
-        <input id="testRuleInput" placeholder="Проверить домен или IP (напр. youtube.com или 77.88.8.8)" style="max-width:340px">
+        <input id="testRuleInput" placeholder="Проверить домен или IP (напр. youtube.com или 77.88.8.8)" style="max-width:340px" onkeydown="if(event.key==='Enter')testRuleQuery()">
         <button onclick="testRuleQuery()">Тест правила</button>
         <span class="mut" id="testRuleOut"></span>
       </div>
@@ -195,8 +225,8 @@
       <div class="mut" id="rosInfo" style="margin-bottom:10px"></div>
       <textarea id="domText" style="min-height:110px" placeholder="ifconfig.me&#10;youtube.com&#10;ntc.party"></textarea>
       <div class="row" style="margin-top:10px">
-        <button class="primary" onclick="saveDomains()">Сохранить и синхронизировать RouterOS</button>
-        <button onclick="syncROS()">Синхронизировать сейчас</button>
+        <button class="primary" onclick="saveDomains(this)">Сохранить и синхронизировать RouterOS</button>
+        <button onclick="syncROS(this)">Синхронизировать сейчас</button>
         <span class="mut" id="domMsg"></span>
       </div>
     </div>
@@ -241,7 +271,7 @@
     <div class="card">
       <h2>MikroTik RouterOS REST API (можно задать здесь вместо Env)</h2>
       <div class="grid" style="margin-bottom:12px">
-        <div><label class="mut">ROS_URL (напр. http://172.18.0.1)</label><input id="setRosURL" placeholder="http://172.18.0.1"></div>
+        <div><label class="mut" id="setRosURLLbl">ROS_URL</label><input id="setRosURL" placeholder="http://192.168.254.1"></div>
         <div><label class="mut">ROS_USER</label><input id="setRosUser" placeholder="admin"></div>
         <div><label class="mut" id="setRosPassLbl">ROS_PASS</label><input id="setRosPass" type="password" placeholder="оставьте пустым, чтобы не менять"></div>
         <div><label class="mut">ROS_CONTAINER_IP (gateway на MikroTik)</label><input id="setRosGW" placeholder="192.168.253.2"></div>
@@ -255,23 +285,70 @@
         <label class="chk"><input type="checkbox" id="setRosClearPass"> Очистить сохранённый ROS_PASS</label>
       </div>
       <div class="row">
-        <button class="primary" onclick="saveSettings()">Сохранить и применить настройки</button>
+        <button class="primary" onclick="saveSettings(this)">Сохранить и применить настройки</button>
         <span class="mut" id="setMsg"></span>
       </div>
     </div>
   </div>
 
+  <div id="tab-term" class="tab-pane hide">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h2 style="margin:0">Терминал контейнера (sh)</h2>
+        <div class="row">
+          <button class="sm" onclick="runTermPreset('ip -4 addr show; echo \"--- main ---\"; ip route show; echo \"--- table awg ---\"; ip route show table awg; echo \"--- table 210 (top 20) ---\"; ip route show table 210 | head -n 20; echo \"--- ip rule ---\"; ip rule show')">Сеть / маршруты</button>
+          <button class="sm" onclick="runTermPreset('awg show')">awg show</button>
+          <button class="sm" onclick="runTermPreset('GW=$(ip -4 route show default | awk \'{print $3; exit}\'); echo \"Gateway=$GW\"; [ -n \"$GW\" ] && ping -c 3 -W 2 \"$GW\"; echo \"--- ARP ---\"; ip neigh show')">Ping шлюз</button>
+          <button class="sm" onclick="runTermPreset('ping -c 3 -W 2 8.8.8.8')">Ping 8.8.8.8</button>
+          <button class="sm" onclick="runTermPreset('nslookup -timeout=2 google.com 127.0.0.1 || ping -c 1 -W 2 google.com')">DNS тест</button>
+          <button class="sm" onclick="runTermPreset('ss -tlnp; echo \"--- iptables ---\"; iptables-save')">Порты / iptables</button>
+          <button class="sm danger hide" id="btnTermKill" onclick="killTerm()">Стоп (Ctrl+C)</button>
+          <button class="sm" onclick="clearTerm()">Очистить</button>
+        </div>
+      </div>
+      <div class="term-box">
+        <div class="term-out" id="termOut" onclick="document.getElementById('termInput').focus()"></div>
+        <div class="term-bar">
+          <span class="term-prompt" id="termPrompt">root@awg:/etc/amnezia/amneziawg#</span>
+          <input id="termInput" autocomplete="off" spellcheck="false" placeholder="введите команду (напр. ip a, ping -c2 192.168.254.1, awg show)..." onkeydown="handleTermKey(event)">
+          <button class="primary sm" id="btnTermRun" onclick="runTermInput()">Выполнить</button>
+        </div>
+      </div>
+      <div class="mut" style="margin-top:8px">История команд: <code>↑</code> / <code>↓</code> · Прервать: <code>Ctrl+C</code> · Очистить: <code>Ctrl+L</code> · Каталог <code>cd</code> сохраняется.</div>
+    </div>
+  </div>
+
   <div id="tab-logs" class="tab-pane hide">
     <div class="card">
-      <h2>Логи контроллера и awg-quick</h2>
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h2 style="margin:0">Логи контроллера и awg-quick</h2>
+        <div class="row">
+          <input id="logFilter" placeholder="фильтр (напр. error, DNS, dom25)" style="width:220px;padding:5px 8px;font-size:.8rem" oninput="renderLogs(true)">
+          <button class="sm" onclick="copyLogs()">Копировать</button>
+          <button class="sm" onclick="scrollLogsBottom()">Вниз ↓</button>
+        </div>
+      </div>
       <pre id="logsBox"></pre>
     </div>
   </div>
 </div>
+<div id="toast"></div>
 
 <script>
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let editingNew = false;
+let refreshInFlight = false;
+let lastStatus = null;
+let lastGeoData = { geosite_categories: [], geoip_categories: [] };
+const snap = { ifaces: '', net: '', policy: '', profs: '', cfgOpts: '', logs: '', geoHints: '' };
+
+function toast(msg, kind = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + kind;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.className = ''; }, 3600);
+}
 
 function fmtBytes(b) {
   if (b < 1024) return b + ' B';
@@ -279,14 +356,18 @@ function fmtBytes(b) {
   if (b < 1073741824) return (b/1048576).toFixed(2) + ' MiB';
   return (b/1073741824).toFixed(2) + ' GiB';
 }
+
 function showTab(id, btn) {
   document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hide'));
   document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + id).classList.remove('hide');
-  btn.classList.add('active');
+  const tbtn = btn || document.querySelector(`.tab[data-tab="${id}"]`);
+  if (tbtn) tbtn.classList.add('active');
   if (id === 'rules') { loadRules(); loadDomains(); loadSettingsIntoGeo(); }
   if (id === 'settings') loadSettings();
+  if (id === 'term') setTimeout(() => document.getElementById('termInput').focus(), 20);
 }
+
 async function api(url, opts) {
   const r = await fetch(url, opts);
   const ct = r.headers.get('content-type') || '';
@@ -299,72 +380,134 @@ async function api(url, opts) {
   return r;
 }
 
-async function refresh() {
+async function withBusy(btn, fn) {
+  if (btn) btn.disabled = true;
+  try { return await fn(); } finally { if (btn) btn.disabled = false; }
+}
+
+async function refresh(manual = false) {
+  if (refreshInFlight || (!manual && document.hidden)) return;
+  refreshInFlight = true;
   try {
     const st = await api('/api/status');
+    lastStatus = st;
     document.getElementById('verBadge').textContent = 'v' + (st.version || '?');
     const pol = st.policy || {};
     document.getElementById('meta').textContent =
-      `режим: ${(st.default_policy||'proxy').toUpperCase()} · veth: ${st.lan_iface || '—'} · auto-route: ${st.auto_route ? 'on' : 'off'} · killswitch: ${st.kill_switch ? 'on' : 'off'} · правил: ${pol.rules_count||0} · DNS: ${(st.dns_upstreams||[]).join(', ') || 'off'}`;
+      `режим: ${(st.default_policy||'proxy').toUpperCase()} · veth: ${st.lan_iface || '—'} (${st.container_ip || 'no IP'}, gw ${st.gateway || '—'}) · auto-route: ${st.auto_route ? 'on' : 'off'} · правил: ${pol.rules_count||0}`;
+
     const ros = st.ros || {};
     document.getElementById('rosInfo').textContent = ros.enabled
       ? `RouterOS REST API подключён (${ros.url}) · маршрутов: ${ros.routes_synced} · доменов: ${ros.domains_synced} · посл. синк: ${ros.last_sync || '—'} ${ros.last_error ? '· ОШИБКА: ' + ros.last_error : ''}`
       : 'RouterOS REST API не настроен — можете указать ROS_URL, ROS_USER и ROS_PASS на вкладке «Настройки».';
 
-    const ifDiv = document.getElementById('ifaces');
     const ifaces = st.interfaces || [];
-    if (!ifaces.length) {
-      ifDiv.innerHTML = '<div class="card"><span class="badge bad">Туннели не активны</span><p class="mut">Перейдите во вкладку «Конфиги (.conf)» и сохраните ваш awg0.conf.</p></div>';
-    } else {
-      ifDiv.innerHTML = ifaces.map(i => `
-        <div class="card">
-          <div class="row" style="justify-content:space-between">
-            <div><strong>${esc(i.name)}</strong> <span class="badge ok">UP</span> <span class="mut">port ${i.listen_port}</span></div>
-            <div class="mut">Jc=${esc(i.jc)} Jmin=${esc(i.jmin)} Jmax=${esc(i.jmax)} S1=${esc(i.s1)} S2=${esc(i.s2)}</div>
-          </div>
-          <div class="mut" style="margin-top:6px">PublicKey: <code>${esc(i.public_key)}</code></div>
-          ${(i.peers||[]).map(p => `
-            <div class="peer">
-              <div><strong>Peer:</strong> <code>${esc(p.public_key)}</code></div>
-              <div class="mut">Endpoint: ${esc(p.endpoint)} · AllowedIPs: ${esc(p.allowed_ips)}</div>
-              <div>Handshake: ${p.handshake_age_sec >= 0 ? p.handshake_age_sec + 's назад' : 'нет'} · RX ${fmtBytes(p.rx_bytes)} / TX ${fmtBytes(p.tx_bytes)}</div>
-            </div>`).join('')}
-        </div>`).join('');
+    const ifKey = JSON.stringify(ifaces);
+    if (ifKey !== snap.ifaces) {
+      snap.ifaces = ifKey;
+      const ifDiv = document.getElementById('ifaces');
+      ifDiv.innerHTML = !ifaces.length
+        ? '<div class="card"><span class="badge bad">Туннели не активны</span><p class="mut">Перейдите во вкладку «Конфиги (.conf)» и сохраните профиль (или откройте «Терминал» для проверки).</p></div>'
+        : ifaces.map(i => `
+          <div class="card">
+            <div class="row" style="justify-content:space-between">
+              <div><strong>${esc(i.name)}</strong> <span class="badge ok">UP</span> <span class="mut">port ${i.listen_port}</span></div>
+              <div class="mut">Jc=${esc(i.jc)} Jmin=${esc(i.jmin)} Jmax=${esc(i.jmax)} S1=${esc(i.s1)} S2=${esc(i.s2)}</div>
+            </div>
+            <div class="mut" style="margin-top:6px">PublicKey: <code>${esc(i.public_key)}</code></div>
+            ${(i.peers||[]).map(p => `
+              <div class="peer">
+                <div><strong>Peer:</strong> <code>${esc(p.public_key)}</code></div>
+                <div class="mut">Endpoint: ${esc(p.endpoint)} · AllowedIPs: ${esc(p.allowed_ips)}</div>
+                <div>Handshake: ${p.handshake_age_sec >= 0 ? p.handshake_age_sec + 's назад' : '<span style="color:var(--warn)">нет рукопожатия</span>'} · RX ${fmtBytes(p.rx_bytes)} / TX ${fmtBytes(p.tx_bytes)}</div>
+              </div>`).join('')}
+          </div>`).join('');
     }
 
-    document.getElementById('policyCard').innerHTML = `
-      <h2>Политика и статистика маршрутизации</h2>
-      <div class="statgrid">
-        <div class="statbox"><div class="mut">По умолчанию</div><div class="statval">${esc((pol.default_policy||'proxy').toUpperCase())}</div></div>
-        <div class="statbox"><div class="mut">Активных правил</div><div class="statval">${pol.rules_count||0}</div></div>
-        <div class="statbox"><div class="mut">Static CIDR (table 210)</div><div class="statval">${pol.static_routes||0}</div></div>
-        <div class="statbox"><div class="mut">DNS /32 маршрутов</div><div class="statval">${pol.learned_ips||0}</div></div>
-        <div class="statbox"><div class="mut">DNS PROXY / DIRECT / DROP</div><div class="statval">${pol.matched_proxy||0} / ${pol.matched_direct||0} / ${pol.matched_drop||0}</div></div>
-      </div>
-      ${pol.last_apply_error ? `<div class="mut" style="margin-top:8px;color:var(--bad)">Ошибка применения маршрутов: ${esc(pol.last_apply_error)}</div>` : ''}`;
+    const netKey = JSON.stringify([st.lan_iface, st.container_ip, st.gateway, st.dns_upstreams, ros.last_error]);
+    if (netKey !== snap.net) {
+      snap.net = netKey;
+      document.getElementById('netCard').innerHTML = `
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+          <h2 style="margin:0">Сеть контейнера</h2>
+          <button class="sm" onclick="showTab('term')">Открыть терминал</button>
+        </div>
+        <div class="statgrid">
+          <div class="statbox"><div class="mut">veth интерфейс</div><div class="statval">${esc(st.lan_iface||'—')}</div></div>
+          <div class="statbox"><div class="mut">IP контейнера</div><div class="statval">${esc(st.container_ip||'—')}</div></div>
+          <div class="statbox"><div class="mut">Шлюз (main)</div><div class="statval">${esc(st.gateway||'—')}</div></div>
+          <div class="statbox"><div class="mut">Proxy DNS</div><div class="statval">${esc((st.dns_upstreams||[]).join(', ')||'off')}</div></div>
+        </div>
+        ${ros.last_error ? `<div class="mut" style="margin-top:8px;color:var(--warn)">ROS sync: ${esc(ros.last_error)}</div>` : ''}`;
+    }
 
-    const sel = document.getElementById('cfgSelect');
-    const prev = sel.value;
+    const polKey = JSON.stringify(pol);
+    if (polKey !== snap.policy) {
+      snap.policy = polKey;
+      document.getElementById('policyCard').innerHTML = `
+        <h2>Политика и статистика маршрутизации</h2>
+        <div class="statgrid">
+          <div class="statbox"><div class="mut">По умолчанию</div><div class="statval">${esc((pol.default_policy||'proxy').toUpperCase())}</div></div>
+          <div class="statbox"><div class="mut">Активных правил</div><div class="statval">${pol.rules_count||0}</div></div>
+          <div class="statbox"><div class="mut">Static CIDR (table 210)</div><div class="statval">${pol.static_routes||0}</div></div>
+          <div class="statbox"><div class="mut">DNS /32 маршрутов</div><div class="statval">${pol.learned_ips||0}</div></div>
+          <div class="statbox"><div class="mut">DNS PROXY / DIRECT / DROP</div><div class="statval">${pol.matched_proxy||0} / ${pol.matched_direct||0} / ${pol.matched_drop||0}</div></div>
+        </div>
+        ${pol.last_apply_error ? `<div class="mut" style="margin-top:8px;color:var(--bad)">Ошибка применения маршрутов: ${esc(pol.last_apply_error)}</div>` : ''}`;
+    }
+
     const cfgs = st.configs || [];
-    sel.innerHTML = cfgs.map(c => `<option value="${esc(c.name)}">${esc(c.name)}${c.selected ? ' ★' : ''}${c.active ? ' (UP)' : ''}</option>`).join('');
-    if (prev && cfgs.some(c => c.name === prev)) sel.value = prev;
-    if (!editingNew && sel.value && !document.getElementById('cfgText').value) loadSelectedConfig();
-    document.getElementById('profList').innerHTML = cfgs.length ? cfgs.map(c => `
-      <div class="row" style="padding:6px 0;border-bottom:1px solid var(--bd)">
-        <label style="display:flex;gap:8px;align-items:center;cursor:pointer;flex:1">
-          <input type="radio" name="prof" style="width:auto" ${c.selected ? 'checked' : ''} onchange="activateProfile('${esc(c.name)}')">
-          <strong>${esc(c.name)}</strong>
-          ${c.active ? '<span class="badge ok">UP</span>' : ''}
-          <span class="mut">${esc(c.address || '')}</span>
-        </label>
-      </div>`).join('') : '<span class="mut">Профилей нет — нажмите «+ Новый профиль».</span>';
+    const cfgOptsHTML = cfgs.map(c => `<option value="${esc(c.name)}">${esc(c.name)}${c.selected ? ' ★' : ''}${c.active ? ' (UP)' : ''}</option>`).join('');
+    if (cfgOptsHTML !== snap.cfgOpts) {
+      snap.cfgOpts = cfgOptsHTML;
+      const sel = document.getElementById('cfgSelect');
+      const prev = sel.value;
+      sel.innerHTML = cfgOptsHTML;
+      if (prev && cfgs.some(c => c.name === prev)) sel.value = prev;
+      if (!editingNew && sel.value && !document.getElementById('cfgText').value) loadSelectedConfig();
+    }
 
-    document.getElementById('logsBox').textContent = (st.logs || []).join('\n');
+    const profKey = JSON.stringify(cfgs.map(c => [c.name, c.selected, c.active, c.address]));
+    if (profKey !== snap.profs) {
+      snap.profs = profKey;
+      document.getElementById('profList').innerHTML = cfgs.length ? cfgs.map(c => `
+        <div class="row" style="padding:6px 0;border-bottom:1px solid var(--bd)">
+          <label style="display:flex;gap:8px;align-items:center;cursor:pointer;flex:1">
+            <input type="radio" name="prof" style="width:auto" ${c.selected ? 'checked' : ''} onchange="activateProfile('${esc(c.name)}')">
+            <strong>${esc(c.name)}</strong>
+            ${c.active ? '<span class="badge ok">UP</span>' : ''}
+            <span class="mut">${esc(c.address || '')}</span>
+          </label>
+        </div>`).join('') : '<span class="mut">Профилей нет — нажмите «+ Новый» или «Загрузить файл».</span>';
+    }
+
+    const logsRaw = (st.logs || []).join('\n');
+    if (logsRaw !== snap.logs) {
+      snap.logs = logsRaw;
+      renderLogs(false);
+    }
   } catch (e) {
     document.getElementById('meta').textContent = 'Ошибка: ' + e.message;
+  } finally {
+    refreshInFlight = false;
   }
 }
 
+function renderLogs(forceScroll) {
+  const box = document.getElementById('logsBox');
+  const q = (document.getElementById('logFilter').value || '').trim().toLowerCase();
+  const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 36;
+  const lines = (snap.logs || '').split('\n');
+  box.textContent = q ? lines.filter(l => l.toLowerCase().includes(q)).join('\n') : snap.logs;
+  if (forceScroll || nearBottom) box.scrollTop = box.scrollHeight;
+}
+function scrollLogsBottom() { const b = document.getElementById('logsBox'); b.scrollTop = b.scrollHeight; }
+async function copyLogs() {
+  try { await navigator.clipboard.writeText(document.getElementById('logsBox').textContent); toast('Логи скопированы'); }
+  catch (e) { toast('Не удалось скопировать: ' + e.message, 'bad'); }
+}
+
+// --- Configs ---
 async function loadSelectedConfig() {
   const name = document.getElementById('cfgSelect').value;
   if (!name) return;
@@ -382,6 +525,41 @@ function newConfig() {
   document.getElementById('cfgText').value = '';
   document.getElementById('qrBox').innerHTML = '';
 }
+function importConfigFile(inp) {
+  const f = inp.files && inp.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    editingNew = true;
+    const cleanName = f.name.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_{2,}/g, '_').slice(0, 15).replace(/^_+|_+$/g, '') || 'awg0';
+    document.getElementById('cfgName').value = cleanName.endsWith('.conf') ? cleanName : (cleanName + '.conf');
+    document.getElementById('cfgText').value = String(r.result || '');
+    document.getElementById('cfgMsg').textContent = 'Файл загружен: ' + f.name;
+  };
+  r.readAsText(f);
+  inp.value = '';
+}
+function downloadConfig() {
+  const name = document.getElementById('cfgName').value.trim() || 'awg0.conf';
+  const text = document.getElementById('cfgText').value;
+  if (!text.trim()) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type:'text/plain'}));
+  a.download = name.endsWith('.conf') ? name : name + '.conf';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+(function initDragDrop() {
+  const ta = document.getElementById('cfgText');
+  ta.addEventListener('dragover', e => { e.preventDefault(); ta.classList.add('dragover'); });
+  ta.addEventListener('dragleave', () => ta.classList.remove('dragover'));
+  ta.addEventListener('drop', e => {
+    e.preventDefault(); ta.classList.remove('dragover');
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) importConfigFile({ files: [f], value: '' });
+  });
+})();
+
 async function activateProfile(name) {
   editingNew = false;
   const msg = document.getElementById('cfgMsg');
@@ -389,65 +567,89 @@ async function activateProfile(name) {
   try {
     await api('/api/configs/' + encodeURIComponent(name) + '/activate', {method:'POST'});
     msg.textContent = 'Активен: ' + name;
-  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; }
-  await refresh();
+    toast('Профиль ' + name + ' включён');
+  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+  await refresh(true);
 }
-async function saveConfig(apply) {
-  const name = document.getElementById('cfgName').value.trim();
+async function saveConfig(apply, btn) {
+  let name = document.getElementById('cfgName').value.trim();
   if (!name) { document.getElementById('cfgMsg').textContent = 'Укажите имя профиля (напр. nl.conf)'; return; }
+  if (!name.endsWith('.conf')) name += '.conf';
+  document.getElementById('cfgName').value = name;
   const content = document.getElementById('cfgText').value;
   const msg = document.getElementById('cfgMsg');
   msg.textContent = 'Сохранение...';
-  try {
-    await api('/api/configs/' + encodeURIComponent(name), {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({content, apply})
-    });
-    editingNew = false;
-    msg.textContent = apply ? 'Сохранено и применено' : 'Сохранено';
-    await refresh();
-  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; }
+  await withBusy(btn, async () => {
+    try {
+      await api('/api/configs/' + encodeURIComponent(name), {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({content, apply})
+      });
+      editingNew = false;
+      msg.textContent = apply ? 'Сохранено и применено' : 'Сохранено';
+      toast(apply ? (name + ' применён') : (name + ' сохранён'));
+      await refresh(true);
+    } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+  });
 }
 async function deleteConfig() {
   const name = document.getElementById('cfgName').value.trim();
   if (!name || !confirm('Удалить ' + name + '?')) return;
-  await api('/api/configs/' + encodeURIComponent(name), {method:'DELETE'});
-  newConfig();
-  await refresh();
+  try {
+    await api('/api/configs/' + encodeURIComponent(name), {method:'DELETE'});
+    newConfig();
+    toast('Удалён: ' + name);
+    await refresh(true);
+  } catch (e) { toast(e.message, 'bad'); }
 }
-async function tunnelAction(act) {
-  await api('/api/tunnel/' + act, {method:'POST'});
-  await refresh();
+async function tunnelAction(act, btn) {
+  await withBusy(btn, async () => {
+    try {
+      await api('/api/tunnel/' + act, {method:'POST'});
+      toast('Команда ' + act + ' выполнена');
+    } catch (e) { toast(e.message, 'bad'); }
+    await refresh(true);
+  });
 }
 async function showQRForText(text, target='qrBox') {
   if (!text.trim()) return;
   const r = await api('/api/qr', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text})});
   const blob = await r.blob();
+  const box = document.getElementById(target);
+  const oldImg = box.querySelector('img');
+  if (oldImg && oldImg.src.startsWith('blob:')) URL.revokeObjectURL(oldImg.src);
   const url = URL.createObjectURL(blob);
-  document.getElementById(target).innerHTML = `<img src="${url}" width="220" height="220" style="background:#fff;padding:8px;border-radius:8px">`;
+  box.innerHTML = `<img src="${url}" width="220" height="220" style="background:#fff;padding:8px;border-radius:8px">`;
 }
-async function generatePair() {
-  const k = await api('/api/keygen', {method:'POST'});
-  const a = k.awg;
-  const port = document.getElementById('kgPort').value.trim() || '51820';
-  const ep = document.getElementById('kgEndpoint').value.trim();
-  const srvIP = document.getElementById('kgSrvIP').value.trim();
-  const cliIP = document.getElementById('kgCliIP').value.trim();
-  const cliHost = cliIP.split('/')[0] + '/32';
-  const awgBlock = `Jc = ${a.jc}\nJmin = ${a.jmin}\nJmax = ${a.jmax}\nS1 = ${a.s1}\nS2 = ${a.s2}\nH1 = ${a.h1}\nH2 = ${a.h2}\nH3 = ${a.h3}\nH4 = ${a.h4}`;
-  document.getElementById('kgSrvOut').value = `[Interface]\nAddress = ${srvIP}\nListenPort = ${port}\nPrivateKey = ${k.server_private}\n${awgBlock}\n\n[Peer]\nPublicKey = ${k.client_public}\nPresharedKey = ${k.preshared_key}\nAllowedIPs = ${cliHost}\n`;
-  document.getElementById('kgCliOut').value = `[Interface]\nPrivateKey = ${k.client_private}\nAddress = ${cliIP}\nDNS = 1.1.1.1\nMTU = 1420\n${awgBlock}\n\n[Peer]\nPublicKey = ${k.server_public}\nPresharedKey = ${k.preshared_key}\nAllowedIPs = 0.0.0.0/0\nEndpoint = ${ep}\nPersistentKeepalive = 25\n`;
+async function generatePair(btn) {
+  await withBusy(btn, async () => {
+    const k = await api('/api/keygen', {method:'POST'});
+    const a = k.awg;
+    const port = document.getElementById('kgPort').value.trim() || '51820';
+    const ep = document.getElementById('kgEndpoint').value.trim();
+    const srvIP = document.getElementById('kgSrvIP').value.trim();
+    const cliIP = document.getElementById('kgCliIP').value.trim();
+    const cliHost = cliIP.split('/')[0] + '/32';
+    const awgBlock = `Jc = ${a.jc}\nJmin = ${a.jmin}\nJmax = ${a.jmax}\nS1 = ${a.s1}\nS2 = ${a.s2}\nH1 = ${a.h1}\nH2 = ${a.h2}\nH3 = ${a.h3}\nH4 = ${a.h4}`;
+    document.getElementById('kgSrvOut').value = `[Interface]\nAddress = ${srvIP}\nListenPort = ${port}\nPrivateKey = ${k.server_private}\n${awgBlock}\n\n[Peer]\nPublicKey = ${k.client_public}\nPresharedKey = ${k.preshared_key}\nAllowedIPs = ${cliHost}\n`;
+    document.getElementById('kgCliOut').value = `[Interface]\nPrivateKey = ${k.client_private}\nAddress = ${cliIP}\nDNS = 1.1.1.1\nMTU = 1420\n${awgBlock}\n\n[Peer]\nPublicKey = ${k.server_public}\nPresharedKey = ${k.preshared_key}\nAllowedIPs = 0.0.0.0/0\nEndpoint = ${ep}\nPersistentKeepalive = 25\n`;
+  });
 }
-async function applyGeneratedServer() {
+async function applyGeneratedServer(btn) {
   const content = document.getElementById('kgSrvOut').value;
   if (!content.trim()) return;
-  await api('/api/configs/server.conf', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content, apply:true})});
-  await refresh();
-  alert('server.conf сохранён и сделан активным');
+  await withBusy(btn, async () => {
+    try {
+      await api('/api/configs/server.conf', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content, apply:true})});
+      toast('server.conf сохранён и сделан активным');
+      await refresh(true);
+    } catch (e) { toast(e.message, 'bad'); }
+  });
 }
 
 // --- Rules & Geo ---
 function renderGeoStatus(geo) {
+  lastGeoData = geo || { geosite_categories: [], geoip_categories: [] };
   const sc = (geo.geosite_categories||[]).length;
   const ic = (geo.geoip_categories||[]).length;
   document.getElementById('geoStatusBox').innerHTML = `
@@ -456,32 +658,40 @@ function renderGeoStatus(geo) {
       <span class="badge ${geo.geoip_loaded ? 'ok' : 'warn'}">GeoIP: ${geo.geoip_loaded ? ic + ' стран/сетей (' + fmtBytes(geo.geoip_size||0) + ')' : 'не загружен'}</span>
       <span class="mut">Обновлён: ${esc(geo.geosite_updated || geo.geoip_updated || 'никогда')}</span>
     </div>
-    <div class="mut" style="margin-top:6px">Для экономии RAM на MikroTik загружаются только категории, указанные в ваших правилах (например, <code>geosite:category-ru</code>, <code>geosite:tld-ru</code>, <code>geoip:ru</code>, <code>geosite:category-ads-all</code>).</div>
+    <div class="mut" style="margin-top:6px">Для экономии RAM загружаются только категории, указанные в правилах (например, <code>geosite:category-ru</code>, <code>geosite:tld-ru</code>, <code>geoip:ru</code>, <code>geosite:category-ads-all</code>).</div>
     ${geo.last_error ? `<div style="color:var(--bad);margin-top:6px">Ошибка Geo: ${esc(geo.last_error)}</div>` : ''}`;
-
-  const dl = document.getElementById('geoHints');
-  const hints = [];
-  (geo.geosite_categories||[]).forEach(c => hints.push(`<option value="geosite:${esc(c)}">`));
-  (geo.geoip_categories||[]).forEach(c => hints.push(`<option value="geoip:${esc(c)}">`));
-  dl.innerHTML = hints.join('');
+  rebuildGeoHintsIfNeeded();
 }
 
-function updateMatcherPlaceholder() {
+function rebuildGeoHintsIfNeeded() {
+  const kind = document.getElementById('addKind').value;
+  const dl = document.getElementById('geoHints');
+  if (kind !== 'geosite' && kind !== 'geoip') {
+    if (snap.geoHints !== '') { dl.innerHTML = ''; snap.geoHints = ''; }
+    return;
+  }
+  const cats = kind === 'geosite' ? (lastGeoData.geosite_categories || []) : (lastGeoData.geoip_categories || []);
+  const key = kind + ':' + cats.length;
+  if (key === snap.geoHints) return;
+  snap.geoHints = key;
+  dl.innerHTML = cats.map(c => `<option value="${esc(kind + ':' + c)}">`).join('');
+}
+
+function onKindChange() {
   const k = document.getElementById('addKind').value;
   const map = {
     domain: 'напр. youtube.com',
-    geosite: 'напр. ru, youtube, category-ads-all',
+    geosite: 'напр. category-ru, youtube, category-ads-all',
     geoip: 'напр. ru, private, telegram, cloudflare',
     cidr: 'напр. 10.0.0.0/8 или 1.1.1.1',
     full: 'напр. exact.example.com',
     keyword: 'напр. tracker'
   };
   document.getElementById('addMatcher').placeholder = map[k] || '';
+  rebuildGeoHintsIfNeeded();
 }
 
-function toggleRawRules() {
-  document.getElementById('rulesText').classList.toggle('hide');
-}
+function toggleRawRules() { document.getElementById('rulesText').classList.toggle('hide'); }
 
 function parseRulesClient(raw) {
   const out = [];
@@ -551,9 +761,7 @@ async function loadRules() {
     const d = await api('/api/rules');
     document.getElementById('rulesText').value = d.raw || '';
     renderRulesVisual();
-    if (d.stats && d.stats.default_policy) {
-      document.getElementById('defPolSelect').value = d.stats.default_policy;
-    }
+    if (d.stats && d.stats.default_policy) document.getElementById('defPolSelect').value = d.stats.default_policy;
     if (d.geo) renderGeoStatus(d.geo);
   } catch (e) {
     document.getElementById('rulesMsg').textContent = 'Ошибка загрузки: ' + e.message;
@@ -591,9 +799,7 @@ function addRuleFromBar() {
   const kind = document.getElementById('addKind').value;
   let m = document.getElementById('addMatcher').value.trim();
   if (!m) return;
-  if (!/^(geosite|geoip|domain|domain-suffix|suffix|full|keyword|domain-keyword|cidr|ip-cidr):/i.test(m)) {
-    m = kind + ':' + m;
-  }
+  if (!/^(geosite|geoip|domain|domain-suffix|suffix|full|keyword|domain-keyword|cidr|ip-cidr):/i.test(m)) m = kind + ':' + m;
   const cmt = document.getElementById('addComment').value.trim().replace(/,/g, ' ');
   addRuleLine(cmt ? `${act},${m},${cmt}` : `${act},${m}`);
   document.getElementById('addMatcher').value = '';
@@ -601,30 +807,33 @@ function addRuleFromBar() {
   syncVisualFromText();
 }
 
-async function saveRules() {
+async function saveRules(btn) {
   const msg = document.getElementById('rulesMsg');
   msg.textContent = 'Применение правил...';
-  try {
-    const r = await api('/api/rules', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        raw: document.getElementById('rulesText').value,
-        default_policy: document.getElementById('defPolSelect').value
-      })
-    });
-    if (r.geo) renderGeoStatus(r.geo);
-    msg.textContent = r.apply_error
-      ? ('Сохранено, но ошибка применения: ' + r.apply_error)
-      : `Применено правил: ${(r.rules||[]).length} · static CIDR: ${(r.stats||{}).static_routes||0}`;
-    await refresh();
-  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; }
+  await withBusy(btn, async () => {
+    try {
+      const r = await api('/api/rules', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          raw: document.getElementById('rulesText').value,
+          default_policy: document.getElementById('defPolSelect').value
+        })
+      });
+      if (r.geo) renderGeoStatus(r.geo);
+      msg.textContent = r.apply_error
+        ? ('Сохранено, но ошибка применения: ' + r.apply_error)
+        : `Применено правил: ${(r.rules||[]).length} · static CIDR: ${(r.stats||{}).static_routes||0}`;
+      toast(r.apply_error ? r.apply_error : 'Правила применены', r.apply_error ? 'bad' : 'ok');
+      await refresh(true);
+    } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+  });
 }
 
 async function updateGeoDB() {
   const btn = document.getElementById('btnGeoUpd');
   const msg = document.getElementById('geoMsg');
   btn.disabled = true;
-  msg.textContent = 'Скачивание GeoSite (~11 MB) и GeoIP (~16 MB)... (может занять 15-45с)';
+  msg.textContent = 'Скачивание GeoSite (~11 MB) и GeoIP (~16 MB)... (15–45 сек)';
   try {
     const r = await api('/api/geo/update', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -634,10 +843,12 @@ async function updateGeoDB() {
       })
     });
     if (r.geo) renderGeoStatus(r.geo);
-    msg.textContent = r.ok ? 'Geo-базы успешно загружены и применены' : ('Ошибка: ' + (r.error || 'не удалось'));
-    await refresh();
+    msg.textContent = r.ok ? 'Geo-базы загружены и применены' : ('Ошибка: ' + (r.error || 'не удалось'));
+    toast(msg.textContent, r.ok ? 'ok' : 'bad');
+    await refresh(true);
   } catch (e) {
     msg.textContent = 'Ошибка: ' + e.message;
+    toast(e.message, 'bad');
   } finally {
     btn.disabled = false;
   }
@@ -650,9 +861,7 @@ async function testRuleQuery() {
   try {
     const r = await api('/api/rules/test?q=' + encodeURIComponent(q));
     out.innerHTML = `<strong>${esc(r.action)}</strong> <span class="mut">(${esc(r.kind)}, правило: ${esc(r.matched_by)})</span>`;
-  } catch (e) {
-    out.textContent = 'Ошибка: ' + e.message;
-  }
+  } catch (e) { out.textContent = 'Ошибка: ' + e.message; }
 }
 
 // --- Settings ---
@@ -670,6 +879,9 @@ async function loadSettings() {
     document.getElementById('setGeoSiteURL').value = s.geosite_url || '';
     document.getElementById('setGeoIPURL').value = s.geoip_url || '';
     document.getElementById('setRosURL').value = s.ros_url || '';
+    const gwHint = (lastStatus && lastStatus.gateway) ? `ROS_URL (шлюз контейнера: http://${lastStatus.gateway})` : 'ROS_URL';
+    document.getElementById('setRosURLLbl').textContent = gwHint;
+    if (lastStatus && lastStatus.gateway) document.getElementById('setRosURL').placeholder = 'http://' + lastStatus.gateway;
     document.getElementById('setRosUser').value = s.ros_user || '';
     document.getElementById('setRosPass').value = '';
     document.getElementById('setRosPassLbl').textContent = s.ros_pass_set ? 'ROS_PASS (сейчас задан)' : 'ROS_PASS (не задан)';
@@ -680,45 +892,46 @@ async function loadSettings() {
     document.getElementById('setRosSyncRoutes').checked = !!s.ros_sync_routes;
     document.getElementById('setRosSyncDomains').checked = !!s.ros_sync_domains;
     document.getElementById('setRosClearPass').checked = false;
-  } catch (e) {
-    document.getElementById('setMsg').textContent = 'Ошибка загрузки: ' + e.message;
-  }
+  } catch (e) { document.getElementById('setMsg').textContent = 'Ошибка загрузки: ' + e.message; }
 }
 
-async function saveSettings() {
+async function saveSettings(btn) {
   const msg = document.getElementById('setMsg');
   msg.textContent = 'Сохранение...';
-  try {
-    const payload = {
-      default_policy: document.getElementById('setDefPol').value,
-      proxy_dns: document.getElementById('setProxyDNS').value.trim(),
-      direct_dns: document.getElementById('setDirectDNS').value.trim(),
-      geo_auto_update_hours: parseInt(document.getElementById('setGeoHours').value || '0', 10) || 0,
-      auto_route: document.getElementById('setAutoRoute').checked,
-      kill_switch: document.getElementById('setKillSwitch').checked,
-      multi_tunnel: document.getElementById('setMultiTunnel').checked,
-      dns_bind_tunnel: document.getElementById('setDNSBind').checked,
-      geosite_url: document.getElementById('setGeoSiteURL').value.trim(),
-      geoip_url: document.getElementById('setGeoIPURL').value.trim(),
-      ros_url: document.getElementById('setRosURL').value.trim(),
-      ros_user: document.getElementById('setRosUser').value.trim(),
-      ros_pass: document.getElementById('setRosPass').value,
-      clear_ros_pass: document.getElementById('setRosClearPass').checked,
-      ros_container_ip: document.getElementById('setRosGW').value.trim(),
-      ros_forward_dns: document.getElementById('setRosFwd').value.trim(),
-      ros_address_list: document.getElementById('setRosAL').value.trim(),
-      ros_tls_insecure: document.getElementById('setRosTLS').checked,
-      ros_sync_routes: document.getElementById('setRosSyncRoutes').checked,
-      ros_sync_domains: document.getElementById('setRosSyncDomains').checked
-    };
-    const r = await api('/api/settings', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
-    msg.textContent = r.apply_error ? ('Сохранено с ошибкой: ' + r.apply_error) : 'Настройки сохранены и применены';
-    await loadSettings();
-    await refresh();
-  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; }
+  await withBusy(btn, async () => {
+    try {
+      const payload = {
+        default_policy: document.getElementById('setDefPol').value,
+        proxy_dns: document.getElementById('setProxyDNS').value.trim(),
+        direct_dns: document.getElementById('setDirectDNS').value.trim(),
+        geo_auto_update_hours: parseInt(document.getElementById('setGeoHours').value || '0', 10) || 0,
+        auto_route: document.getElementById('setAutoRoute').checked,
+        kill_switch: document.getElementById('setKillSwitch').checked,
+        multi_tunnel: document.getElementById('setMultiTunnel').checked,
+        dns_bind_tunnel: document.getElementById('setDNSBind').checked,
+        geosite_url: document.getElementById('setGeoSiteURL').value.trim(),
+        geoip_url: document.getElementById('setGeoIPURL').value.trim(),
+        ros_url: document.getElementById('setRosURL').value.trim(),
+        ros_user: document.getElementById('setRosUser').value.trim(),
+        ros_pass: document.getElementById('setRosPass').value,
+        clear_ros_pass: document.getElementById('setRosClearPass').checked,
+        ros_container_ip: document.getElementById('setRosGW').value.trim(),
+        ros_forward_dns: document.getElementById('setRosFwd').value.trim(),
+        ros_address_list: document.getElementById('setRosAL').value.trim(),
+        ros_tls_insecure: document.getElementById('setRosTLS').checked,
+        ros_sync_routes: document.getElementById('setRosSyncRoutes').checked,
+        ros_sync_domains: document.getElementById('setRosSyncDomains').checked
+      };
+      const r = await api('/api/settings', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      msg.textContent = r.apply_error ? ('Сохранено с ошибкой: ' + r.apply_error) : 'Настройки сохранены и применены';
+      toast(msg.textContent, r.apply_error ? 'bad' : 'ok');
+      await loadSettings();
+      await refresh(true);
+    } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+  });
 }
 
 // --- RouterOS legacy domains ---
@@ -726,26 +939,156 @@ async function loadDomains() {
   const d = await api('/api/domains');
   document.getElementById('domText').value = (d.domains || []).join('\n');
 }
-async function saveDomains() {
+async function saveDomains(btn) {
   const msg = document.getElementById('domMsg');
   msg.textContent = 'Сохранение...';
-  try {
-    const r = await api('/api/domains', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({domains:document.getElementById('domText').value})});
-    msg.textContent = r.sync_error ? ('Сохранено, но sync ошибка: ' + r.sync_error) : 'Сохранено';
-    await refresh();
-  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; }
+  await withBusy(btn, async () => {
+    try {
+      const r = await api('/api/domains', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({domains:document.getElementById('domText').value})});
+      msg.textContent = r.sync_error ? ('Сохранено, но sync ошибка: ' + r.sync_error) : 'Сохранено';
+      toast(msg.textContent, r.sync_error ? 'bad' : 'ok');
+      await refresh(true);
+    } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+  });
 }
-async function syncROS() {
+async function syncROS(btn) {
   const msg = document.getElementById('domMsg');
-  try {
-    await api('/api/ros/sync', {method:'POST'});
-    msg.textContent = 'Синхронизировано';
-    await refresh();
-  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; }
+  await withBusy(btn, async () => {
+    try {
+      await api('/api/ros/sync', {method:'POST'});
+      msg.textContent = 'Синхронизировано';
+      toast('RouterOS синхронизирован');
+      await refresh(true);
+    } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+  });
 }
 
-refresh();
-setInterval(refresh, 10000);
+// --- Web Terminal ---
+const termState = {
+  cwd: '/etc/amnezia/amneziawg',
+  history: [],
+  histIdx: -1,
+  running: false,
+  execID: ''
+};
+
+function termAppend(text, cls = '') {
+  const out = document.getElementById('termOut');
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = text;
+  out.appendChild(span);
+  if (out.childNodes.length > 600) out.removeChild(out.firstChild);
+  out.scrollTop = out.scrollHeight;
+}
+function clearTerm() { document.getElementById('termOut').innerHTML = ''; }
+function updateTermPrompt() { document.getElementById('termPrompt').textContent = 'root@awg:' + termState.cwd + '#'; }
+function setTermRunning(on) {
+  termState.running = on;
+  document.getElementById('btnTermRun').disabled = on;
+  document.getElementById('btnTermKill').classList.toggle('hide', !on);
+}
+
+async function execTerm(cmd) {
+  const c = (cmd || '').trim();
+  if (!c) return;
+  if (termState.running) { toast('Дождитесь завершения или нажмите Стоп (Ctrl+C)', 'bad'); return; }
+  if (termState.history[termState.history.length - 1] !== c) termState.history.push(c);
+  if (termState.history.length > 100) termState.history.shift();
+  termState.histIdx = termState.history.length;
+
+  termAppend(`root@awg:${termState.cwd}# ${c}\n`, 'term-cmd');
+  setTermRunning(true);
+  termState.execID = '';
+
+  try {
+    const resp = await fetch('/api/term/exec', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({command: c, cwd: termState.cwd})
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        try {
+          const ev = JSON.parse(line);
+          if (ev.type === 'start') {
+            termState.execID = ev.exec_id || '';
+            if (ev.cwd) { termState.cwd = ev.cwd; updateTermPrompt(); }
+          } else if (ev.type === 'data' && ev.data) {
+            termAppend(ev.data);
+          } else if (ev.type === 'exit') {
+            if (ev.cwd) { termState.cwd = ev.cwd; updateTermPrompt(); }
+            if (ev.exit_code && ev.exit_code !== 0) {
+              termAppend(`[exit ${ev.exit_code}${ev.error ? ': ' + ev.error : ''}]\n`, 'term-err');
+            }
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (e) {
+    termAppend('Ошибка: ' + e.message + '\n', 'term-err');
+  } finally {
+    termState.execID = '';
+    setTermRunning(false);
+    document.getElementById('termInput').focus();
+  }
+}
+
+function runTermInput() {
+  const inp = document.getElementById('termInput');
+  const cmd = inp.value;
+  inp.value = '';
+  execTerm(cmd);
+}
+function runTermPreset(cmd) { execTerm(cmd); }
+async function killTerm() {
+  if (!termState.execID) return;
+  try { await api('/api/term/kill', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({exec_id:termState.execID})}); }
+  catch (_) {}
+}
+function handleTermKey(e) {
+  const inp = e.target;
+  if (e.key === 'Enter') { e.preventDefault(); runTermInput(); return; }
+  if (e.ctrlKey && (e.key === 'c' || e.key === 'C' || e.key === 'с' || e.key === 'С')) {
+    if (termState.running) { e.preventDefault(); killTerm(); }
+    return;
+  }
+  if (e.ctrlKey && (e.key === 'l' || e.key === 'L' || e.key === 'д' || e.key === 'Д')) {
+    e.preventDefault(); clearTerm(); return;
+  }
+  if (e.key === 'ArrowUp') {
+    if (termState.histIdx > 0) {
+      termState.histIdx--;
+      inp.value = termState.history[termState.histIdx] || '';
+      e.preventDefault();
+    }
+  } else if (e.key === 'ArrowDown') {
+    if (termState.histIdx < termState.history.length - 1) {
+      termState.histIdx++;
+      inp.value = termState.history[termState.histIdx] || '';
+    } else {
+      termState.histIdx = termState.history.length;
+      inp.value = '';
+    }
+    e.preventDefault();
+  }
+}
+
+termAppend('Web Terminal (AmneziaWG 3.1 container). Выберите кнопку сверху или введите команду.\n', 'term-dim');
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(true); });
+refresh(true);
+setInterval(() => refresh(false), 10000);
 </script>
 </body>
 </html>
