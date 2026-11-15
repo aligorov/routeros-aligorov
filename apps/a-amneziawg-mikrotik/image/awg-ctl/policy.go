@@ -8,9 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -78,6 +80,19 @@ type learnedEntry struct {
 	Target    string // resolved route spec e.g. "dev:awg0" or "via:"+gw
 }
 
+const maxRecentDNSEntries = 1024
+
+type recentDNSEntry struct {
+	IPs       []netip.Addr
+	UpdatedAt time.Time
+}
+
+type BackfillDomainIPs struct {
+	Domain string
+	Rule   string
+	IPs    []netip.Addr
+}
+
 type PolicyEngine struct {
 	rulesPath string
 	settings  *SettingsStore
@@ -90,6 +105,8 @@ type PolicyEngine struct {
 	rules        []PolicyRule
 	learned      map[netip.Addr]learnedEntry
 	learnedOrder []netip.Addr
+	recentDNS    map[string]recentDNSEntry
+	recentOrder  []string
 	lastGateway  string
 	lastTunIface string
 	staticCount  int
@@ -128,6 +145,7 @@ func NewPolicyEngine(cfgDir string, settings *SettingsStore, geo *GeoStore, mgr 
 		mgr:       mgr,
 		logger:    logger,
 		learned:   make(map[netip.Addr]learnedEntry),
+		recentDNS: make(map[string]recentDNSEntry),
 	}
 	pe.detectRouteFn = defaultDetectRoute
 	pe.runBatchFn = runIPBatch
@@ -971,6 +989,190 @@ func (p *PolicyEngine) RevalidateDynamicHostIP(domain string, addr netip.Addr, e
 		return false, ""
 	}
 	return true, matchedBy
+}
+
+// RecordRecentDNS caches recent DNS IPv4 resolutions regardless of action so newly added
+// PROXY rules can immediately backfill RouterOS address-list without waiting for client TTL expiry.
+func (p *PolicyEngine) RecordRecentDNS(domain string, ips []netip.Addr) {
+	if p == nil {
+		return
+	}
+	host := normalizeDomain(domain)
+	if host == "" || len(ips) == 0 {
+		return
+	}
+	seen := make(map[netip.Addr]struct{}, len(ips))
+	kept := make([]netip.Addr, 0, len(ips))
+	for _, a := range ips {
+		if !isSyncableIPv4Addr(a) {
+			continue
+		}
+		if _, dup := seen[a]; dup {
+			continue
+		}
+		seen[a] = struct{}{}
+		kept = append(kept, a)
+	}
+	if len(kept) == 0 {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.recentDNS == nil {
+		p.recentDNS = make(map[string]recentDNSEntry)
+	}
+	if _, exists := p.recentDNS[host]; !exists {
+		if len(p.recentOrder) >= maxRecentDNSEntries {
+			evict := p.recentOrder[0]
+			p.recentOrder = p.recentOrder[1:]
+			delete(p.recentDNS, evict)
+		}
+		p.recentOrder = append(p.recentOrder, host)
+	}
+	p.recentDNS[host] = recentDNSEntry{
+		IPs:       kept,
+		UpdatedAt: time.Now(),
+	}
+}
+
+// ReevaluateRecentDNSForRouterOS re-evaluates recently resolved DNS answers against current
+// rules and returns those that now qualify for dynamic RouterOS PROXY injection.
+func (p *PolicyEngine) ReevaluateRecentDNSForRouterOS(maxAge time.Duration, exclude ...netip.Addr) []BackfillDomainIPs {
+	if p == nil {
+		return nil
+	}
+	if maxAge <= 0 {
+		maxAge = 2 * time.Hour
+	}
+	cutoff := time.Now().Add(-maxAge)
+
+	type snapItem struct {
+		domain string
+		ips    []netip.Addr
+	}
+	p.mu.RLock()
+	items := make([]snapItem, 0, len(p.recentDNS))
+	for dom, ent := range p.recentDNS {
+		if ent.UpdatedAt.Before(cutoff) || len(ent.IPs) == 0 {
+			continue
+		}
+		ipsCopy := make([]netip.Addr, len(ent.IPs))
+		copy(ipsCopy, ent.IPs)
+		items = append(items, snapItem{domain: dom, ips: ipsCopy})
+	}
+	p.mu.RUnlock()
+
+	sort.Slice(items, func(i, j int) bool { return items[i].domain < items[j].domain })
+
+	var out []BackfillDomainIPs
+	for _, it := range items {
+		ok, matchedBy, kept := p.EvaluateForRouterOS(it.domain, it.ips, exclude...)
+		if !ok || len(kept) == 0 {
+			continue
+		}
+		p.RecordResolvedIPsForTarget(it.domain, ActionProxy, matchedBy, "", kept)
+		out = append(out, BackfillDomainIPs{
+			Domain: it.domain,
+			Rule:   matchedBy,
+			IPs:    kept,
+		})
+	}
+	return out
+}
+
+// RouterOSSeedDomains collects a bounded set of explicit PROXY domains and representative
+// domains from PROXY geosite categories for proactive DNS seeding after rule changes.
+func (p *PolicyEngine) RouterOSSeedDomains(maxTotal int) []string {
+	if p == nil {
+		return nil
+	}
+	if maxTotal <= 0 {
+		maxTotal = 40
+	}
+
+	p.mu.RLock()
+	rules := make([]PolicyRule, len(p.rules))
+	copy(rules, p.rules)
+	p.mu.RUnlock()
+
+	seen := make(map[string]struct{}, maxTotal)
+	out := make([]string, 0, maxTotal)
+	tryAdd := func(raw string) bool {
+		if len(out) >= maxTotal {
+			return false
+		}
+		dom := normalizeDomain(raw)
+		if dom == "" || !strings.Contains(dom, ".") {
+			return false
+		}
+		if _, err := netip.ParseAddr(dom); err == nil {
+			return false
+		}
+		if _, dup := seen[dom]; dup {
+			return false
+		}
+		act, by, _ := p.MatchDomainTarget(dom)
+		if act != ActionProxy || by == "default" {
+			return false
+		}
+		seen[dom] = struct{}{}
+		out = append(out, dom)
+		return true
+	}
+
+	var geoCats []string
+	seenCats := map[string]bool{}
+	for _, r := range rules {
+		if r.Action != ActionProxy {
+			continue
+		}
+		switch r.Kind {
+		case RuleFull, RuleDomain:
+			tryAdd(r.Value)
+		case RuleGeoSite:
+			cat := strings.ToLower(strings.TrimSpace(r.Value))
+			if cat != "" && !seenCats[cat] {
+				seenCats[cat] = true
+				geoCats = append(geoCats, cat)
+			}
+		}
+	}
+
+	if p.geo == nil || len(geoCats) == 0 || len(out) >= maxTotal {
+		return out
+	}
+
+	perCatLimit := (maxTotal - len(out) + len(geoCats) - 1) / len(geoCats)
+	if perCatLimit < 4 {
+		perCatLimit = 4
+	}
+	if perCatLimit > 12 {
+		perCatLimit = 12
+	}
+
+	catSamples := make([][]string, len(geoCats))
+	for i, cat := range geoCats {
+		catSamples[i] = p.geo.SiteSeedDomains(cat, perCatLimit)
+	}
+
+	// Round-robin across categories so newly appended geosite rules also get seeded.
+	for round := 0; len(out) < maxTotal; round++ {
+		progressed := false
+		for i := range catSamples {
+			if round < len(catSamples[i]) {
+				progressed = true
+				tryAdd(catSamples[i][round])
+				if len(out) >= maxTotal {
+					return out
+				}
+			}
+		}
+		if !progressed {
+			break
+		}
+	}
+	return out
 }
 
 func (p *PolicyEngine) activeTunnelIface() string {

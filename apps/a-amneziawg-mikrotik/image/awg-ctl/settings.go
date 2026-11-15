@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,7 +11,7 @@ import (
 	"time"
 )
 
-const AppVersion = "1.5.0"
+const AppVersion = "1.5.1"
 
 const (
 	ROSModeGateway     = "gateway"
@@ -48,7 +47,8 @@ type AppSettings struct {
 	FailoverHandshakeSec    int    `json:"failover_handshake_sec"`     // default 35 (initial no-handshake grace)
 	FailoverHandshakeMaxAge int    `json:"failover_handshake_max_age"` // default 190 (stale handshake max age)
 	FailoverCooldownSec     int    `json:"failover_cooldown_sec"`      // default 180
-	FailoverProbeTarget     string `json:"failover_probe_target"`      // default "1.1.1.1:443"
+	FailoverProbeMethod     string `json:"failover_probe_method"`      // "tcp" | "ping" | "any" | "both"
+	FailoverProbeTarget     string `json:"failover_probe_target"`      // default "1.1.1.1:443" (or host for ping)
 	FailoverFailback        bool   `json:"failover_failback"`          // auto-return to Priority #1
 
 	TGEnabled         bool   `json:"tg_enabled"`
@@ -121,6 +121,8 @@ func defaultSettingsFromEnv() AppSettings {
 	if foTrig != "handshake" && foTrig != "probe" {
 		foTrig = "hybrid"
 	}
+	foProbeRaw := envOr("AWG_FAILOVER_PROBE", "1.1.1.1:443")
+	foProbeMethod := normalizeProbeMethod(envOr("AWG_FAILOVER_PROBE_METHOD", ProbeMethodTCP), foProbeRaw)
 	tgThread, _ := strconv.Atoi(envOr("TG_THREAD_ID", "0"))
 	tgAlertThread, _ := strconv.Atoi(envOr("TG_ALERT_THREAD_ID", "0"))
 	tgToken := strings.TrimSpace(os.Getenv("TG_BOT_TOKEN"))
@@ -150,7 +152,8 @@ func defaultSettingsFromEnv() AppSettings {
 		FailoverHandshakeSec:    35,
 		FailoverHandshakeMaxAge: 190,
 		FailoverCooldownSec:     180,
-		FailoverProbeTarget:     envOr("AWG_FAILOVER_PROBE", "1.1.1.1:443"),
+		FailoverProbeMethod:     foProbeMethod,
+		FailoverProbeTarget:     foProbeRaw,
 		FailoverFailback:        envOr("AWG_FAILOVER_FAILBACK", "off") == "on",
 
 		TGEnabled:         tgEnabled,
@@ -300,11 +303,22 @@ func normalizeSettings(s, fallback AppSettings) AppSettings {
 	s.FailoverHandshakeSec = clampInt(s.FailoverHandshakeSec, 10, 300, 35)
 	s.FailoverHandshakeMaxAge = clampInt(s.FailoverHandshakeMaxAge, 60, 600, 190)
 	s.FailoverCooldownSec = clampInt(s.FailoverCooldownSec, 30, 3600, 180)
-	s.FailoverProbeTarget = strings.TrimSpace(s.FailoverProbeTarget)
-	if s.FailoverProbeTarget == "" {
-		s.FailoverProbeTarget = "1.1.1.1:443"
-	} else if _, _, err := net.SplitHostPort(s.FailoverProbeTarget); err != nil {
-		s.FailoverProbeTarget = net.JoinHostPort(s.FailoverProbeTarget, "443")
+	s.FailoverProbeMethod = normalizeProbeMethod(s.FailoverProbeMethod, s.FailoverProbeTarget)
+	rawProbeTarget := strings.TrimSpace(s.FailoverProbeTarget)
+	if rawProbeTarget == "" {
+		if s.FailoverProbeMethod == ProbeMethodPing {
+			s.FailoverProbeTarget = "1.1.1.1"
+		} else {
+			s.FailoverProbeTarget = "1.1.1.1:443"
+		}
+	} else if s.FailoverProbeMethod == ProbeMethodPing {
+		if h := extractProbeHost(rawProbeTarget); h != "" {
+			s.FailoverProbeTarget = h
+		} else {
+			s.FailoverProbeTarget = "1.1.1.1"
+		}
+	} else {
+		s.FailoverProbeTarget = normalizeTCPProbeTarget(rawProbeTarget)
 	}
 
 	s.TGBotToken = strings.TrimSpace(s.TGBotToken)

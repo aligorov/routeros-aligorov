@@ -885,3 +885,174 @@ func TestROSProvisionAddressListAndBGP(t *testing.T) {
 func writeTestFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o600)
 }
+
+func TestROSBackfillRecentDNSSeedResolveAndIPDNSWarning(t *testing.T) {
+	dir := t.TempDir()
+	logger := NewRingLogger(100)
+	st, err := NewSettingsStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	addrRows := []map[string]any{}
+	nextID := 1
+
+	rosSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/rest/system/resource":
+			_ = json.NewEncoder(w).Encode(map[string]any{"board-name": "RB5009UG+S+", "version": "7.25.1"})
+		case r.Method == http.MethodGet && r.URL.Path == "/rest/system/identity":
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": "coredom25"})
+		case r.Method == http.MethodGet && r.URL.Path == "/rest/routing/table":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{".id": "*1", "name": "awg-bypass"}})
+		case r.Method == http.MethodGet && r.URL.Path == "/rest/ip/route":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{".id": "*1", "dst-address": "0.0.0.0/0", "gateway": "172.18.0.99", "routing-table": "awg-bypass"}})
+		case r.Method == http.MethodGet && r.URL.Path == "/rest/interface/list/member":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{".id": "*1", "list": "LAN", "interface": "bridge"}})
+		case r.Method == http.MethodGet && r.URL.Path == "/rest/ip/firewall/filter":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{".id": "*1", "action": "fasttrack-connection", "connection-mark": "no-mark"}})
+		case r.Method == http.MethodGet && r.URL.Path == "/rest/ip/firewall/mangle":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{".id": "*1", "chain": "prerouting", "action": "accept", "src-address": "172.18.0.99", "comment": "AWG_Accept_Container"},
+				{".id": "*2", "chain": "prerouting", "action": "mark-routing", "connection-mark": "awg-bypass", "new-routing-mark": "awg-bypass", "comment": "AWG_Route_Conn"},
+				{".id": "*3", "chain": "prerouting", "action": "mark-connection", "dst-address-list": "zapresenka", "new-connection-mark": "awg-bypass", "comment": "AWG_Mark_AddressList"},
+				{".id": "*4", "chain": "prerouting", "action": "mark-routing", "connection-mark": "awg-bypass", "new-routing-mark": "awg-bypass", "comment": "AWG_Route_New"},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/rest/ip/dns":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"servers":               "192.168.1.1",
+				"allow-remote-requests": "true",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/rest/ip/firewall/address-list":
+			mu.Lock()
+			cp := make([]map[string]any, len(addrRows))
+			copy(cp, addrRows)
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(cp)
+		case r.Method == http.MethodPut && r.URL.Path == "/rest/ip/firewall/address-list":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			mu.Lock()
+			body[".id"] = "*" + strconv.Itoa(nextID)
+			nextID++
+			addrRows = append(addrRows, body)
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(body)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer rosSrv.Close()
+
+	_, err = st.Update(SettingsUpdate{AppSettings: AppSettings{
+		DefaultPolicy:      "direct",
+		ROSURL:             rosSrv.URL,
+		ROSUser:            "admin",
+		ROSMode:            ROSModeAddressList,
+		ROSContainerIP:     "172.18.0.99",
+		ROSRouteTable:      "awg-bypass",
+		ROSAddressList:     "zapresenka",
+		ROSDynamicTimeout:  "12:00:00",
+		ROSSyncPolicyCIDRs: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dom := func(kind uint64, val string) []byte {
+		var b []byte
+		b = append(b, pbTagVarint(1, kind)...)
+		b = append(b, pbTagBytes(2, []byte(val))...)
+		return b
+	}
+	psSite := append(pbTagBytes(1, []byte("PLAYSTATION")), pbTagBytes(2, dom(2, "playstation.com"))...)
+	psSite = append(psSite, pbTagBytes(2, dom(2, "sonyentertainmentnetwork.com"))...)
+	psSite = append(psSite, pbTagBytes(2, dom(3, "store.playstation.com"))...)
+	geoDir := filepath.Join(dir, "geo")
+	if err := os.MkdirAll(geoDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeTestFile(filepath.Join(geoDir, "geosite.dat"), string(pbTagBytes(1, psSite))); err != nil {
+		t.Fatal(err)
+	}
+
+	geo := NewGeoStore(dir, logger)
+
+	pol := NewPolicyEngine(dir, st, geo, nil, logger)
+	// Client queried playstation.com earlier when DefaultPolicy was "direct" (no playstation rule yet)
+	pol.RecordRecentDNS("playstation.com", []netip.Addr{netip.MustParseAddr("23.50.10.20")})
+
+	ros := NewROSClient(dir, logger)
+	defer ros.Close()
+	ros.SetPolicy(pol)
+	ros.Configure(st.Get())
+	ros.resolveSeedFn = func(_ context.Context, domain string) []netip.Addr {
+		switch domain {
+		case "store.playstation.com":
+			return []netip.Addr{netip.MustParseAddr("198.51.100.77")}
+		case "sonyentertainmentnetwork.com":
+			return []netip.Addr{netip.MustParseAddr("198.51.100.88")}
+		default:
+			return nil
+		}
+	}
+
+	// Save PROXY,geosite:playstation via WebServer handler and confirm immediate synchronous ROS backfill + seed push
+	ws := &WebServer{
+		settings: st,
+		policy:   pol,
+		geo:      geo,
+		ros:      ros,
+		logger:   logger,
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/rules", strings.NewReader(`{"raw":"PROXY,geosite:playstation\n","default_policy":"direct"}`))
+	rec := httptest.NewRecorder()
+	ws.handleSaveRules(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/rules status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var saveResp struct {
+		OK  bool          `json:"ok"`
+		ROS ROSSyncStatus `json:"ros"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &saveResp); err != nil {
+		t.Fatal(err)
+	}
+	if !saveResp.OK || saveResp.ROS.DynSynced < 3 {
+		t.Fatalf("expected immediate ROS dynamic backfill+seed >=3, got %+v", saveResp)
+	}
+
+	mu.Lock()
+	byAddr := map[string]string{}
+	for _, r := range addrRows {
+		byAddr[strField(r, "address")] = strField(r, "comment")
+	}
+	mu.Unlock()
+	if !strings.Contains(byAddr["23.50.10.20"], "playstation.com") {
+		t.Fatalf("expected recentDNS backfill for playstation.com (23.50.10.20), got %+v", byAddr)
+	}
+	if !strings.Contains(byAddr["198.51.100.77"], "store.playstation.com") || !strings.Contains(byAddr["198.51.100.88"], "sonyentertainmentnetwork.com") {
+		t.Fatalf("expected proactive seed entries in address-list, got %+v", byAddr)
+	}
+
+	// InspectSchema must warn when RouterOS /ip/dns does not point to container IP (172.18.0.99)
+	rep := ros.InspectSchema(st.Get())
+	if !rep.OK {
+		t.Fatalf("expected schema OK with mangle/route present, got checks=%+v", rep.Checks)
+	}
+	foundDNSWarn := false
+	for _, w := range rep.Warnings {
+		if strings.Contains(w, "/ip/dns") && strings.Contains(w, "172.18.0.99") {
+			foundDNSWarn = true
+			break
+		}
+	}
+	if !foundDNSWarn {
+		t.Fatalf("expected /ip/dns container warning in schema report.Warnings, got %+v", rep.Warnings)
+	}
+}

@@ -133,6 +133,27 @@
   <div id="tab-status" class="tab-pane">
     <div id="ifaces"></div>
     <div id="failoverCard" class="card"></div>
+    <div id="pingHostCard" class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <div class="row" style="gap:8px">
+          <h2 style="margin:0">Проверка Ping хоста (HEALTHY)</h2>
+          <span id="pingHealthyCur" class="badge dim">HEALTHY: —</span>
+        </div>
+        <span class="mut">ICMP / TCP через каждый активный туннель и Direct (veth)</span>
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input id="pingHostInput" placeholder="IP или домен, напр. 1.1.1.1 или gemini.google.com" style="flex:1;min-width:220px" onkeydown="if(event.key==='Enter')runFailoverPing()">
+        <select id="pingHostMethod" onchange="this.dataset.userChanged='1'" style="width:auto;min-width:175px">
+          <option value="ping">ICMP Ping</option>
+          <option value="tcp">TCP connect (:443)</option>
+          <option value="any">ICMP или TCP (any)</option>
+          <option value="both">ICMP + TCP (both)</option>
+        </select>
+        <button id="btnFoPing" class="primary" onclick="runFailoverPing(this)">Проверить (Ping)</button>
+        <button id="btnFoSetHealthy" class="sm" onclick="applyPingAsHealthy(this)">Назначить для HEALTHY</button>
+      </div>
+      <div id="pingHostOut" style="margin-top:8px"></div>
+    </div>
     <div id="netCard" class="card"></div>
     <div id="policyCard" class="card"></div>
   </div>
@@ -371,12 +392,21 @@
         <div>
           <label class="mut">Критерий проверки здоровья</label>
           <select id="setFoTrigger">
-            <option value="hybrid">Hybrid (Handshake + TCP-probe — рекомендуется)</option>
+            <option value="hybrid">Hybrid (Handshake + Probe — рекомендуется)</option>
             <option value="handshake">Handshake (нет / устарел / TX без RX)</option>
-            <option value="probe">Только TCP-probe через интерфейс туннеля</option>
+            <option value="probe">Только Probe (TCP / ICMP Ping) через туннель</option>
           </select>
         </div>
-        <div><label class="mut">TCP-probe адрес</label><input id="setFoProbe" placeholder="1.1.1.1:443"></div>
+        <div>
+          <label class="mut">Метод Probe (HEALTHY)</label>
+          <select id="setFoProbeMethod" onchange="onFoProbeMethodChange()">
+            <option value="tcp">TCP connect (:443)</option>
+            <option value="ping">ICMP Ping (без порта)</option>
+            <option value="any">ICMP Ping или TCP (any — любой ОК)</option>
+            <option value="both">ICMP Ping + TCP (both — оба ОК)</option>
+          </select>
+        </div>
+        <div><label id="setFoProbeLbl" class="mut">Хост / адрес Probe (HEALTHY)</label><input id="setFoProbe" placeholder="1.1.1.1:443"></div>
         <div><label class="mut">Интервал проверки (сек)</label><input id="setFoInterval" type="number" min="5" max="300" value="15"></div>
         <div><label class="mut">Ошибок подряд до переключения</label><input id="setFoThresh" type="number" min="1" max="20" value="3"></div>
         <div><label class="mut">Таймаут первого handshake (сек)</label><input id="setFoHSWait" type="number" min="10" max="300" value="35"></div>
@@ -600,6 +630,19 @@ function stateBadge(h) {
   return `<span class="badge ${cls}">${esc(lbl)}</span>`;
 }
 
+function fmtProbeCell(h) {
+  if (!h) return '—';
+  const parts = [];
+  if (h.ping_ok === true) parts.push(`<span style="color:var(--ok)">ICMP ${h.ping_rtt_ms||0}ms</span>`);
+  else if (h.ping_ok === false) parts.push('<span style="color:var(--bad)">ICMP fail</span>');
+  if (h.tcp_ok === true) parts.push(`<span style="color:var(--ok)">TCP ${h.tcp_rtt_ms||0}ms</span>`);
+  else if (h.tcp_ok === false) parts.push('<span style="color:var(--bad)">TCP fail</span>');
+  if (parts.length) return parts.join(' · ');
+  if (h.probe_ok === true) return `<span style="color:var(--ok)">${h.probe_rtt_ms||0}ms</span>`;
+  if (h.probe_ok === false) return '<span style="color:var(--bad)">fail</span>';
+  return '—';
+}
+
 async function refresh(manual = false) {
   if (refreshInFlight || (!manual && document.hidden)) return;
   refreshInFlight = true;
@@ -710,6 +753,15 @@ async function refresh(manual = false) {
     }
 
     // 2. Failover & Multi-tunnel card
+    const pingCurEl = document.getElementById('pingHealthyCur');
+    if (pingCurEl) {
+      const m = (fo.probe_method || 'tcp').toUpperCase();
+      pingCurEl.textContent = `HEALTHY: ${m} · ${fo.probe_target || '1.1.1.1:443'}`;
+    }
+    const pingMethodEl = document.getElementById('pingHostMethod');
+    if (pingMethodEl && !pingMethodEl.dataset.userChanged && fo.probe_method) {
+      pingMethodEl.value = fo.probe_method;
+    }
     const foKey = JSON.stringify([fo, st.multi_tunnel, cfgs.length]);
     if (foKey !== snap.failover) {
       snap.failover = foKey;
@@ -720,7 +772,7 @@ async function refresh(manual = false) {
           <td><strong>${esc(h.name)}</strong> ${h.primary ? '<span class="badge info">PRIMARY</span>' : ''}</td>
           <td>${stateBadge(h)}</td>
           <td class="mut">${h.handshake_age_sec >= 0 ? h.handshake_age_sec + 's' : 'нет'}</td>
-          <td class="mut">${h.probe_ok === true ? h.probe_rtt_ms + 'ms' : (h.probe_ok === false ? '<span style="color:var(--bad)">fail</span>' : '—')}</td>
+          <td class="mut">${fmtProbeCell(h)}</td>
           <td class="mut">${esc(h.reason || '—')}</td>
         </tr>`).join('');
       document.getElementById('failoverCard').innerHTML = `
@@ -728,6 +780,7 @@ async function refresh(manual = false) {
           <div class="row" style="gap:8px">
             <h2 style="margin:0">Multi-Tunnel & Failover</h2>
             <span class="badge ${fo.mode !== 'off' ? 'info' : 'dim'}">${esc(modeLbl)}</span>
+            <span class="badge dim">${esc((fo.probe_method||'tcp').toUpperCase())} → ${esc(fo.probe_target||'1.1.1.1:443')}</span>
             ${fo.mode !== 'off' ? `<span class="badge dim">${esc(fo.trigger)} · ${fo.interval_sec}s</span>` : ''}
             ${fo.switches_total ? `<span class="mut">переключений: ${fo.switches_total}</span>` : ''}
           </div>
@@ -868,6 +921,68 @@ async function failoverAction(act, btn) {
       const r = await api('/api/failover/' + act, {method:'POST'});
       toast(act === 'check' ? 'Проверка туннелей завершена' : 'Туннель переключён');
       if (r.last_switch_reason) document.getElementById('cfgMsg').textContent = r.last_switch_reason;
+      await refresh(true);
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+async function runFailoverPing(btn) {
+  const host = (document.getElementById('pingHostInput').value || '').trim() || (lastStatus?.failover?.probe_target || '1.1.1.1');
+  const method = document.getElementById('pingHostMethod').value || 'ping';
+  const out = document.getElementById('pingHostOut');
+  out.innerHTML = `<div class="mut">Проверка ${esc(host)} (${esc(method.toUpperCase())}) через все туннели...</div>`;
+  await withBusy(btn || document.getElementById('btnFoPing'), async () => {
+    try {
+      const r = await api('/api/failover/ping', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ host, method })
+      });
+      const res = r.results || [];
+      if (!res.length) {
+        out.innerHTML = '<div class="mut">Нет активных профилей или интерфейсов для проверки.</div>';
+        return;
+      }
+      const rows = res.map(x => {
+        const badges = [];
+        if (x.primary) badges.push('<span class="badge info">PRIMARY</span>');
+        if (x.direct) badges.push('<span class="badge dim">DIRECT</span>');
+        const stBadge = x.ok
+          ? `<span class="badge ok">OK · ${x.rtt_ms||0}ms</span>`
+          : '<span class="badge bad">FAIL</span>';
+        return `<tr>
+          <td><strong>${esc(x.name)}</strong> <span class="mut">(${esc(x.interface)})</span> ${badges.join(' ')}</td>
+          <td>${stBadge}</td>
+          <td class="mut">${fmtProbeCell(x)}</td>
+          <td class="mut">${esc(x.error || '—')}</td>
+        </tr>`;
+      }).join('');
+      out.innerHTML = `<table class="tbl"><thead><tr><th>Интерфейс / Профиль</th><th>Результат</th><th>Задержка (RTT)</th><th>Ошибка</th></tr></thead><tbody>${rows}</tbody></table>`;
+    } catch (e) {
+      out.innerHTML = `<div style="color:var(--bad)">Ошибка: ${esc(e.message)}</div>`;
+      toast(e.message, 'bad');
+    }
+  });
+}
+
+async function applyPingAsHealthy(btn) {
+  const hostInput = (document.getElementById('pingHostInput').value || '').trim();
+  const method = document.getElementById('pingHostMethod').value || 'ping';
+  const host = hostInput || (lastStatus?.failover?.probe_target || '1.1.1.1');
+  await withBusy(btn, async () => {
+    try {
+      const cur = await api('/api/settings');
+      const next = { ...cur, failover_probe_target: host, failover_probe_method: method };
+      await api('/api/settings', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(next)
+      });
+      await api('/api/failover/check', { method: 'POST' });
+      if (document.getElementById('setFoProbeMethod')) {
+        document.getElementById('setFoProbeMethod').value = method;
+        document.getElementById('setFoProbe').value = host;
+        onFoProbeMethodChange();
+      }
+      toast(`HEALTHY probe обновлён: ${method.toUpperCase()} → ${host}`);
       await refresh(true);
     } catch (e) { toast(e.message, 'bad'); }
   });
@@ -1230,9 +1345,22 @@ async function saveRules(btn) {
         })
       });
       if (r.geo) renderGeoStatus(r.geo);
-      msg.textContent = r.apply_error
-        ? ('Ошибка применения: ' + r.apply_error)
-        : `Применено: ${(r.rules||[]).length} правил · CIDR: ${(r.stats||{}).static_routes||0}`;
+      if (r.apply_error) {
+        msg.textContent = 'Ошибка применения: ' + r.apply_error;
+      } else {
+        let info = `Применено: ${(r.rules||[]).length} правил · статика CIDR: ${(r.stats||{}).static_routes||0}`;
+        const ros = r.ros;
+        if (ros && (ros.enabled || ros.mode === 'bgp')) {
+          if (ros.last_error) {
+            info += ` · ROS ошибка: ${ros.last_error}`;
+          } else if (ros.mode === 'bgp') {
+            info += ` · BGP маршрутов: ${ros.bgp_routes||0} (статика ${ros.static_cidrs_synced||0}, DNS /32: ${ros.dynamic_ips_synced||0})`;
+          } else if (ros.mode === 'address_list') {
+            info += ` · ROS ${ros.address_list||'list'}: статика ${ros.static_cidrs_synced||0}, DNS /32: ${ros.dynamic_ips_synced||0}`;
+          }
+        }
+        msg.textContent = info;
+      }
       toast(r.apply_error || 'Правила применены', r.apply_error ? 'bad' : 'ok');
       await refresh(true);
     } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
@@ -1277,6 +1405,13 @@ function onFoModeChange() {
   if (m === 'standby') document.getElementById('setMultiTunnel').checked = true;
   if (m === 'switch') document.getElementById('setMultiTunnel').checked = false;
 }
+function onFoProbeMethodChange() {
+  const pm = document.getElementById('setFoProbeMethod')?.value || 'tcp';
+  const lbl = document.getElementById('setFoProbeLbl');
+  const inp = document.getElementById('setFoProbe');
+  if (lbl) lbl.textContent = pm === 'ping' ? 'Хост / IP для ICMP Ping (HEALTHY)' : 'Хост / адрес Probe (HEALTHY)';
+  if (inp) inp.placeholder = pm === 'ping' ? '1.1.1.1 или example.com' : '1.1.1.1:443';
+}
 function onMultiToggle() {
   const multi = document.getElementById('setMultiTunnel').checked;
   const fm = document.getElementById('setFoMode');
@@ -1302,7 +1437,9 @@ async function loadSettings() {
 
     document.getElementById('setFoMode').value = s.failover_mode || 'off';
     document.getElementById('setFoTrigger').value = s.failover_trigger || 'hybrid';
+    document.getElementById('setFoProbeMethod').value = s.failover_probe_method || 'tcp';
     document.getElementById('setFoProbe').value = s.failover_probe_target || '1.1.1.1:443';
+    onFoProbeMethodChange();
     document.getElementById('setFoInterval').value = s.failover_interval_sec || 15;
     document.getElementById('setFoThresh').value = s.failover_threshold || 3;
     document.getElementById('setFoHSWait').value = s.failover_handshake_sec || 35;
@@ -1380,6 +1517,7 @@ async function saveSettings(btn) {
 
         failover_mode: document.getElementById('setFoMode').value,
         failover_trigger: document.getElementById('setFoTrigger').value,
+        failover_probe_method: document.getElementById('setFoProbeMethod').value,
         failover_probe_target: document.getElementById('setFoProbe').value.trim(),
         failover_interval_sec: parseInt(document.getElementById('setFoInterval').value || '15', 10) || 15,
         failover_threshold: parseInt(document.getElementById('setFoThresh').value || '3', 10) || 3,

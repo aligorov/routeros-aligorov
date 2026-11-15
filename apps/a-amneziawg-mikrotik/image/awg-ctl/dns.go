@@ -278,6 +278,7 @@ func (d *DNSForwarder) handleDNSQuery(query []byte, proto string) ([]byte, error
 
 	if policy != nil && qname != "" && (action == ActionDirect || action == ActionProxy) {
 		if ips := extractDNSAnswerIPv4s(resp); len(ips) > 0 {
+			policy.RecordRecentDNS(qname, ips)
 			policy.RecordResolvedIPsForTarget(qname, action, matchedBy, targetTun, ips)
 			if ros != nil && action == ActionProxy && matchedBy != "default" {
 				ros.PushDynamicFromDNS(qname, ips)
@@ -619,4 +620,62 @@ func extractDNSAnswerIPv4s(resp []byte) []netip.Addr {
 		off += rdLen
 	}
 	return out
+}
+
+// ResolveSeedIPv4 resolves an A record through the configured proxy DNS upstreams for
+// proactive rule seeding when new PROXY rules are saved.
+func (d *DNSForwarder) ResolveSeedIPv4(ctx context.Context, domain string) []netip.Addr {
+	if d == nil {
+		return nil
+	}
+	host := normalizeDomain(domain)
+	if host == "" || !strings.Contains(host, ".") {
+		return nil
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return nil
+	}
+	q := buildBootstrapAQuery(host)
+	if len(q) == 0 {
+		return nil
+	}
+	ups := d.getProxyUpstreams()
+	if len(ups) == 0 {
+		return nil
+	}
+
+	type dnsRes struct {
+		ips []netip.Addr
+	}
+	ch := make(chan dnsRes, 1)
+	go func() {
+		resp, err := exchangeUpstream(q, ups, ProxyDNSFwmark, "udp")
+		if err != nil {
+			ch <- dnsRes{}
+			return
+		}
+		ch <- dnsRes{ips: extractDNSAnswerIPv4s(resp)}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil
+	case res := <-ch:
+		if len(res.ips) == 0 {
+			return nil
+		}
+		seen := make(map[netip.Addr]struct{}, len(res.ips))
+		out := make([]netip.Addr, 0, len(res.ips))
+		for _, a := range res.ips {
+			if !isSyncableIPv4Addr(a) {
+				continue
+			}
+			if _, dup := seen[a]; dup {
+				continue
+			}
+			seen[a] = struct{}{}
+			out = append(out, a)
+		}
+		return out
+	}
 }

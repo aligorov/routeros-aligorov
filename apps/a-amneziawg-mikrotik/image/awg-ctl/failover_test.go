@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -276,6 +279,254 @@ func TestDoHUpstreamNormalizationAndExchange(t *testing.T) {
 	}
 	if gotCT != "application/dns-message" || gotPath != "/dns-query" || len(resp) < 12 {
 		t.Fatalf("unexpected DoH request/response: ct=%q path=%q len=%d", gotCT, gotPath, len(resp))
+	}
+}
+
+func TestICMPPacketHelpersAndMethodNormalization(t *testing.T) {
+	if m := normalizeProbeMethod("", "1.1.1.1:443"); m != ProbeMethodTCP {
+		t.Fatalf("empty method should default to tcp, got %q", m)
+	}
+	if m := normalizeProbeMethod("both", "1.1.1.1"); m != ProbeMethodBoth {
+		t.Fatalf("expected both, got %q", m)
+	}
+	if m := normalizeProbeMethod("", "ping://8.8.8.8"); m != ProbeMethodPing {
+		t.Fatalf("ping:// scheme should select ping, got %q", m)
+	}
+	if h := extractProbeHost("ping://1.1.1.1:443/health"); h != "1.1.1.1" {
+		t.Fatalf("extractProbeHost unexpected: %q", h)
+	}
+	if hp := normalizeTCPProbeTarget("1.1.1.1"); hp != "1.1.1.1:443" {
+		t.Fatalf("normalizeTCPProbeTarget unexpected: %q", hp)
+	}
+	if hp := normalizeTCPProbeTarget("https://one.one.one.one/dns-query"); hp != "one.one.one.one:443" {
+		t.Fatalf("normalizeTCPProbeTarget url unexpected: %q", hp)
+	}
+
+	nonce := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+	extra := []byte("awg-test")
+	req := buildICMPEchoRequest(0x4157, 7, nonce, extra)
+	if icmpChecksum(req) != 0 {
+		t.Fatalf("ICMP request checksum invalid: %d", icmpChecksum(req))
+	}
+
+	// Simulate Echo Reply with raw IPv4 header
+	replyICMP := make([]byte, len(req))
+	copy(replyICMP, req)
+	replyICMP[0] = 0 // Echo Reply
+	binary.BigEndian.PutUint16(replyICMP[2:4], 0)
+	binary.BigEndian.PutUint16(replyICMP[2:4], icmpChecksum(replyICMP))
+
+	ipHdr := make([]byte, 20)
+	ipHdr[0] = 0x45 // v4, IHL=5
+	ipHdr[9] = 1    // ICMP
+	dst := [4]byte{1, 1, 1, 1}
+	copy(ipHdr[12:16], dst[:])
+	rawPkt := append(ipHdr, replyICMP...)
+
+	matched, err := parseICMPReplyPacket(rawPkt, true, dst, dst, 0x4157, 7, nonce, false)
+	if err != nil || !matched {
+		t.Fatalf("raw Echo Reply should match, got matched=%v err=%v", matched, err)
+	}
+
+	// Simulate SOCK_DGRAM stripped Echo Reply where kernel rewrote ID
+	dgramReply := make([]byte, len(replyICMP))
+	copy(dgramReply, replyICMP)
+	binary.BigEndian.PutUint16(dgramReply[4:6], 0x9999) // kernel-assigned ID
+	matched, err = parseICMPReplyPacket(dgramReply, false, dst, dst, 0x4157, 7, nonce, true)
+	if err != nil || !matched {
+		t.Fatalf("dgram Echo Reply with kernel ID should match, got matched=%v err=%v", matched, err)
+	}
+	// Wrong nonce must be ignored
+	badNonce := []byte{9, 9, 9, 9, 9, 9, 9, 9}
+	matched, err = parseICMPReplyPacket(dgramReply, false, dst, dst, 0x4157, 7, badNonce, true)
+	if err != nil || matched {
+		t.Fatalf("mismatched nonce must be ignored, got matched=%v err=%v", matched, err)
+	}
+
+	// Simulate ICMP Type 3 Code 1 (Host Unreachable) wrapping inner IPv4+ICMP request
+	innerIP := make([]byte, 20)
+	innerIP[0] = 0x45
+	innerIP[9] = 1
+	copy(innerIP[16:20], dst[:])
+	innerTrunc := append(innerIP, req[:8]...)
+	unreach := make([]byte, 8+len(innerTrunc))
+	unreach[0] = 3 // Destination Unreachable
+	unreach[1] = 1 // Host Unreachable
+	copy(unreach[8:], innerTrunc)
+	gw := [4]byte{10, 0, 0, 1}
+	matched, err = parseICMPReplyPacket(unreach, false, gw, dst, 0x4157, 7, nonce, false)
+	if matched || err == nil || !strings.Contains(err.Error(), "10.0.0.1") {
+		t.Fatalf("expected host unreachable error mentioning 10.0.0.1, got matched=%v err=%v", matched, err)
+	}
+}
+
+func TestFailoverPingAnyAndBothModesAndPingHost(t *testing.T) {
+	dir := t.TempDir()
+	logger := NewRingLogger(50)
+	st, err := NewSettingsStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = st.Update(SettingsUpdate{AppSettings: AppSettings{
+		MultiTunnel:             true,
+		FailoverMode:            "standby",
+		FailoverTrigger:         "probe",
+		FailoverProbeMethod:     "ping",
+		FailoverProbeTarget:     "1.1.1.1:443",
+		FailoverThreshold:       1,
+		FailoverIntervalSec:     15,
+		FailoverHandshakeSec:    35,
+		FailoverHandshakeMaxAge: 190,
+		FailoverCooldownSec:     60,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fo := NewFailoverMonitor(nil, st, nil, logger)
+	defer fo.Stop()
+
+	cfgs := []ConfigMeta{
+		{Name: "dom25.conf", Interface: "awg0", Primary: true, Enabled: true, Priority: 1},
+		{Name: "nld.conf", Interface: "awg1", Enabled: true, Priority: 2},
+	}
+	ifaces := []InterfaceStatus{
+		{Name: "awg0", Peers: []PeerStatus{{PublicKey: "p0", HandshakeAgeSec: 5, RxBytes: 100, TxBytes: 100}}},
+		{Name: "awg1", Peers: []PeerStatus{{PublicKey: "p1", HandshakeAgeSec: 8, RxBytes: 100, TxBytes: 100}}},
+	}
+	fo.configsFn = func() ([]ConfigMeta, error) { return cfgs, nil }
+	fo.ifacesFn = func() ([]InterfaceStatus, error) { return ifaces, nil }
+	fo.startedAtFn = func(string) time.Time { return time.Now().Add(-2 * time.Minute) }
+	fo.markFn = func(iface string) int {
+		if iface == "awg0" {
+			return 0x201
+		}
+		return 0x202
+	}
+	fo.directIface = "veth0"
+
+	var switchTo string
+	fo.switchFn = func(target string, standbyFast bool) error {
+		switchTo = target
+		cfgs[0].Primary = (target == "dom25.conf")
+		cfgs[1].Primary = (target == "nld.conf")
+		return nil
+	}
+
+	var probeMu sync.Mutex
+	pingDown := map[string]bool{"awg0": true}
+	tcpDown := map[string]bool{}
+	var seenPingTargets []string
+	setDown := func(p map[string]bool, t map[string]bool) {
+		probeMu.Lock()
+		pingDown = p
+		tcpDown = t
+		probeMu.Unlock()
+	}
+	fo.pingFn = func(ctx context.Context, iface string, mark int, target string) (int64, error) {
+		probeMu.Lock()
+		seenPingTargets = append(seenPingTargets, iface+":"+target)
+		down := pingDown[iface]
+		probeMu.Unlock()
+		if down {
+			return 0, fmt.Errorf("ping fail on %s", iface)
+		}
+		return 24, nil
+	}
+	fo.probeFn = func(ctx context.Context, iface string, mark int, target string) (int64, error) {
+		probeMu.Lock()
+		down := tcpDown[iface]
+		probeMu.Unlock()
+		if down {
+			return 0, fmt.Errorf("tcp fail on %s", iface)
+		}
+		return 41, nil
+	}
+
+	// 1. FailoverProbeMethod="ping": awg0 ping fails -> switches to nld.conf and passes bare "1.1.1.1"
+	rep := fo.CheckNow(true)
+	if switchTo != "nld.conf" {
+		t.Fatalf("expected ping failover switch to nld.conf, got %q", switchTo)
+	}
+	if rep.ProbeMethod != ProbeMethodPing {
+		t.Fatalf("expected ProbeMethod=ping, got %q", rep.ProbeMethod)
+	}
+	probeMu.Lock()
+	targetsSnap := append([]string(nil), seenPingTargets...)
+	probeMu.Unlock()
+	for _, s := range targetsSnap {
+		if !strings.HasSuffix(s, ":1.1.1.1") {
+			t.Fatalf("ping probe should strip :443, got %q", s)
+		}
+	}
+	if rep.Tunnels[1].PingOK == nil || !*rep.Tunnels[1].PingOK || rep.Tunnels[1].TCPOK != nil || rep.Tunnels[1].PingRTTMs != 24 {
+		t.Fatalf("unexpected tunnel#2 ping health: %+v", rep.Tunnels[1])
+	}
+
+	// 2. Method "both": awg1 ping OK, TCP fails -> unhealthy; restoring TCP -> healthy
+	cur := st.Get()
+	cur.FailoverProbeMethod = ProbeMethodBoth
+	_, _ = st.Update(SettingsUpdate{AppSettings: cur})
+	setDown(map[string]bool{}, map[string]bool{"awg1": true})
+	repBoth := fo.CheckNow(true)
+	var nldHealth TunnelHealth
+	for _, h := range repBoth.Tunnels {
+		if h.Name == "nld.conf" {
+			nldHealth = h
+		}
+	}
+	if nldHealth.State != "unhealthy" || nldHealth.PingOK == nil || !*nldHealth.PingOK || nldHealth.TCPOK == nil || *nldHealth.TCPOK {
+		t.Fatalf("expected nld unhealthy under both when tcp fails, got %+v", nldHealth)
+	}
+
+	// 3. Method "any": awg1 tcp fails while ping OK -> cooldown passes probeOK, then clearing cooldown restores healthy
+	cur.FailoverProbeMethod = ProbeMethodAny
+	_, _ = st.Update(SettingsUpdate{AppSettings: cur})
+	repAny := fo.CheckNow(true)
+	for _, h := range repAny.Tunnels {
+		if h.Name == "nld.conf" {
+			nldHealth = h
+		}
+	}
+	if nldHealth.State != "cooldown" || nldHealth.ProbeOK == nil || !*nldHealth.ProbeOK {
+		t.Fatalf("expected nld in cooldown with probeOK=true under any, got %+v", nldHealth)
+	}
+	fo.mu.Lock()
+	delete(fo.cooldownUntil, "nld.conf")
+	fo.mu.Unlock()
+	repAny2 := fo.CheckNow(true)
+	for _, h := range repAny2.Tunnels {
+		if h.Name == "nld.conf" {
+			nldHealth = h
+		}
+	}
+	if nldHealth.State != "healthy" || nldHealth.ProbeOK == nil || !*nldHealth.ProbeOK {
+		t.Fatalf("expected nld healthy under any after cooldown, got %+v", nldHealth)
+	}
+
+	// 4. Interactive PingHostAcrossTunnels & /api/failover/ping HTTP endpoint
+	setDown(map[string]bool{}, map[string]bool{"awg0": true})
+	pingRep := fo.PingHostAcrossTunnels("gemini.google.com", "both")
+	if pingRep.Method != ProbeMethodBoth || len(pingRep.Results) != 3 {
+		t.Fatalf("expected 3 targets (2 wg + direct) for both, got %+v", pingRep)
+	}
+	if pingRep.Results[0].OK || !pingRep.Results[1].OK || !pingRep.Results[2].OK || !pingRep.Results[2].Direct {
+		t.Fatalf("unexpected PingHostAcrossTunnels results: %+v", pingRep.Results)
+	}
+
+	ws := &WebServer{failover: fo}
+	req := httptest.NewRequest(http.MethodPost, "/api/failover/ping", strings.NewReader(`{"host":"1.1.1.1","method":"ping"}`))
+	rec := httptest.NewRecorder()
+	ws.handleFailoverPing(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/failover/ping status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var httpRep FailoverPingReport
+	if err := json.Unmarshal(rec.Body.Bytes(), &httpRep); err != nil {
+		t.Fatal(err)
+	}
+	if httpRep.Method != ProbeMethodPing || len(httpRep.Results) != 3 || !httpRep.Results[0].OK {
+		t.Fatalf("unexpected HTTP ping report: %+v", httpRep)
 	}
 }
 

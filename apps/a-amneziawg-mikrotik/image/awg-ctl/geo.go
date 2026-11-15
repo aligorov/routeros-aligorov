@@ -368,6 +368,51 @@ func (g *GeoStore) CategoryIPs(cat string) *GeoIPCategory {
 	return g.ips[strings.ToLower(cat)]
 }
 
+// SiteSeedDomains returns a deterministic bounded sample of concrete domains from a GeoSite category.
+func (g *GeoStore) SiteSeedDomains(cat string, limit int) []string {
+	if g == nil || limit <= 0 {
+		return nil
+	}
+	g.mu.RLock()
+	c := g.sites[strings.ToLower(strings.TrimSpace(cat))]
+	if c == nil {
+		g.mu.RUnlock()
+		return nil
+	}
+	roots := make([]string, 0, len(c.Root))
+	for d := range c.Root {
+		if strings.Contains(d, ".") && !strings.HasPrefix(d, ".") {
+			roots = append(roots, d)
+		}
+	}
+	fulls := make([]string, 0, len(c.Full))
+	for d := range c.Full {
+		if strings.Contains(d, ".") && !strings.HasPrefix(d, ".") {
+			fulls = append(fulls, d)
+		}
+	}
+	g.mu.RUnlock()
+
+	sort.Strings(roots)
+	sort.Strings(fulls)
+
+	seen := make(map[string]struct{}, limit)
+	out := make([]string, 0, limit)
+	for _, list := range [][]string{roots, fulls} {
+		for _, d := range list {
+			if _, dup := seen[d]; dup {
+				continue
+			}
+			seen[d] = struct{}{}
+			out = append(out, d)
+			if len(out) >= limit {
+				return out
+			}
+		}
+	}
+	return out
+}
+
 // --- Zero-dependency Protobuf wire reader & plain-list fallback ---
 
 func readVarint(b []byte) (uint64, int, bool) {

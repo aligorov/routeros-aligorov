@@ -164,6 +164,9 @@ type ROSClient struct {
 	dynStore   *DynIPStore
 	policy     *PolicyEngine
 	mgr        *TunnelManager
+	dns        *DNSForwarder
+
+	resolveSeedFn func(ctx context.Context, domain string) []netip.Addr
 
 	liveBreakerMu    sync.Mutex
 	liveBreakerUntil time.Time
@@ -264,6 +267,13 @@ func (c *ROSClient) SetManager(m *TunnelManager) {
 	c.mu.Unlock()
 }
 
+// SetDNS attaches DNSForwarder so policy updates can proactively seed domain rules.
+func (c *ROSClient) SetDNS(d *DNSForwarder) {
+	c.mu.Lock()
+	c.dns = d
+	c.mu.Unlock()
+}
+
 // Close shuts down persistent Binary API sockets, BGP speaker, and flushes dynamic IP store.
 func (c *ROSClient) Close() {
 	if c == nil {
@@ -293,15 +303,41 @@ func (c *ROSClient) OnPolicyChanged() {
 	mode := c.rosMode
 	c.mu.Unlock()
 
-	if mode == ROSModeBGP {
-		c.refreshBGPDesiredPrefixes()
-		return
-	}
-	if mode == ROSModeAddressList {
+	if mode == ROSModeBGP || mode == ROSModeAddressList {
 		go func() {
-			_ = c.SyncAll(nil)
+			_ = c.OnPolicyChangedSync(nil)
 		}()
 	}
+}
+
+// OnPolicyChangedSync backfills recently observed DNS answers, proactively resolves representative
+// domains for active PROXY rules, and immediately synchronizes RouterOS state.
+func (c *ROSClient) OnPolicyChangedSync(mgr *TunnelManager) error {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	c.lastFingerprint = ""
+	mode := c.rosMode
+	if mgr == nil {
+		mgr = c.mgr
+	}
+	c.mu.Unlock()
+
+	if mode == ROSModeBGP || mode == ROSModeAddressList {
+		ctx, cancel := context.WithTimeout(context.Background(), 2600*time.Millisecond)
+		c.syncBackfillAndSeedDomains(ctx, mgr)
+		cancel()
+	}
+
+	if mode == ROSModeBGP {
+		c.refreshBGPDesiredPrefixes()
+		return nil
+	}
+	if mode == ROSModeAddressList {
+		return c.SyncAll(mgr)
+	}
+	return nil
 }
 
 // Configure applies runtime AppSettings and resets backoff on credential/URL changes.

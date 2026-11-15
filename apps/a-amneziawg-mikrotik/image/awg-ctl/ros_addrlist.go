@@ -851,6 +851,10 @@ func (c *ROSClient) syncPolicyAddressListWithConn(conn rosConnConfig, mgr *Tunne
 // EnsureDynamicIPs records resolved IPv4 addresses for an explicit PROXY domain rule and pushes
 // any new or expiring IPs to RouterOS immediately using a lock-free fast path so DNS does not stall.
 func (c *ROSClient) EnsureDynamicIPs(domain, matchedRule string, ips []netip.Addr) {
+	c.ensureDynamicIPs(domain, matchedRule, ips, true)
+}
+
+func (c *ROSClient) ensureDynamicIPs(domain, matchedRule string, ips []netip.Addr, pushLiveNow bool) {
 	if c == nil || len(ips) == 0 {
 		return
 	}
@@ -887,8 +891,15 @@ func (c *ROSClient) EnsureDynamicIPs(domain, matchedRule string, ips []netip.Add
 		return
 	}
 
-	// address_list mode real-time injection
-	if len(toPush) == 0 {
+	if storeChanged {
+		c.mu.Lock()
+		c.status.DynSynced = dynStore.Count()
+		c.mu.Unlock()
+	}
+
+	// When invoked right before a full SyncAll reconciliation, skip single-item REST calls;
+	// SyncAll will push the consolidated diff cleanly in one pass.
+	if !pushLiveNow || len(toPush) == 0 {
 		return
 	}
 	conn := c.connSnapshot()
@@ -953,4 +964,104 @@ func (c *ROSClient) PushDynamicFromDNS(domain string, ips []netip.Addr) {
 		return
 	}
 	c.EnsureDynamicIPs(domain, rule, filtered)
+}
+
+func (c *ROSClient) syncBackfillAndSeedDomains(ctx context.Context, mgr *TunnelManager) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	mode := c.rosMode
+	pol := c.policy
+	if mgr == nil {
+		mgr = c.mgr
+	}
+	dnsFwd := c.dns
+	resolveFn := c.resolveSeedFn
+	c.mu.Unlock()
+
+	if pol == nil || (mode != ROSModeAddressList && mode != ROSModeBGP) {
+		return
+	}
+	if resolveFn == nil && dnsFwd != nil {
+		resolveFn = dnsFwd.ResolveSeedIPv4
+	}
+
+	conn := c.connSnapshot()
+	exclude := rosExcludedHostAddrs(conn, mgr)
+	pushLiveDuringBackfill := (mode == ROSModeBGP)
+
+	// 1. Instantly backfill any matching domains recently seen on the container DNS resolver
+	//    (including domains previously routed under DIRECT / default before rule edits).
+	backfilled := pol.ReevaluateRecentDNSForRouterOS(2*time.Hour, exclude...)
+	alreadySeen := make(map[string]struct{}, len(backfilled))
+	backfilledIPs := 0
+	for _, bf := range backfilled {
+		alreadySeen[bf.Domain] = struct{}{}
+		c.ensureDynamicIPs(bf.Domain, bf.Rule, bf.IPs, pushLiveDuringBackfill)
+		backfilledIPs += len(bf.IPs)
+	}
+
+	// 2. Proactively seed explicit domain:/full: rules and representative geosite: roots
+	//    so RouterOS address-list / BGP gets initial /32 entries immediately upon Save.
+	seededDomains := 0
+	seededIPs := 0
+	if resolveFn != nil {
+		candidates := pol.RouterOSSeedDomains(36)
+		todo := make([]string, 0, len(candidates))
+		for _, dom := range candidates {
+			if _, ok := alreadySeen[dom]; !ok {
+				todo = append(todo, dom)
+			}
+		}
+		if len(todo) > 0 {
+			type seedRes struct {
+				domain string
+				ips    []netip.Addr
+			}
+			ch := make(chan seedRes, len(todo))
+			sem := make(chan struct{}, 6)
+			var wg sync.WaitGroup
+			for _, dom := range todo {
+				if ctx.Err() != nil {
+					break
+				}
+				wg.Add(1)
+				go func(d string) {
+					defer wg.Done()
+					select {
+					case sem <- struct{}{}:
+						defer func() { <-sem }()
+					case <-ctx.Done():
+						return
+					}
+					rCtx, rCancel := context.WithTimeout(ctx, 1800*time.Millisecond)
+					ips := resolveFn(rCtx, d)
+					rCancel()
+					if len(ips) > 0 {
+						ch <- seedRes{domain: d, ips: ips}
+					}
+				}(dom)
+			}
+			wg.Wait()
+			close(ch)
+
+			for res := range ch {
+				pol.RecordRecentDNS(res.domain, res.ips)
+				okROS, rule, filtered := pol.EvaluateForRouterOS(res.domain, res.ips, exclude...)
+				if !okROS || len(filtered) == 0 {
+					continue
+				}
+				pol.RecordResolvedIPsForTarget(res.domain, ActionProxy, rule, "", filtered)
+				c.ensureDynamicIPs(res.domain, rule, filtered, pushLiveDuringBackfill)
+				seededDomains++
+				seededIPs += len(filtered)
+			}
+		}
+	}
+
+	if c.logger != nil && (backfilledIPs > 0 || seededIPs > 0) {
+		c.logger.Logf("ROS dynamic backfill/seed: %d/%d cached (%d IPs), %d seeded (%d IPs)",
+			len(backfilled), len(alreadySeen), backfilledIPs, seededDomains, seededIPs)
+	}
 }

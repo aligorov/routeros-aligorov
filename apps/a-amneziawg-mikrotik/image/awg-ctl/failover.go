@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -21,6 +22,11 @@ type TunnelHealth struct {
 	HandshakeAgeSec int64  `json:"handshake_age_sec"` // -1 if never
 	ProbeOK         *bool  `json:"probe_ok,omitempty"`
 	ProbeRTTMs      int64  `json:"probe_rtt_ms,omitempty"`
+	ProbeMethod     string `json:"probe_method,omitempty"`
+	PingOK          *bool  `json:"ping_ok,omitempty"`
+	PingRTTMs       int64  `json:"ping_rtt_ms,omitempty"`
+	TCPOK           *bool  `json:"tcp_ok,omitempty"`
+	TCPRTTMs        int64  `json:"tcp_rtt_ms,omitempty"`
 	CooldownLeftSec int64  `json:"cooldown_left_sec,omitempty"`
 	LastCheckAt     int64  `json:"last_check_at,omitempty"`
 }
@@ -32,6 +38,7 @@ type FailoverStatus struct {
 	Threshold        int            `json:"threshold"`
 	CooldownSec      int            `json:"cooldown_sec"`
 	ProbeTarget      string         `json:"probe_target"`
+	ProbeMethod      string         `json:"probe_method"`
 	Failback         bool           `json:"failback"`
 	LastSwitchAt     int64          `json:"last_switch_at,omitempty"`
 	LastSwitchReason string         `json:"last_switch_reason,omitempty"`
@@ -63,6 +70,8 @@ type FailoverMonitor struct {
 	// Injectable hooks for deterministic unit tests
 	nowFn       func() time.Time
 	probeFn     func(ctx context.Context, iface string, mark int, target string) (int64, error)
+	pingFn      func(ctx context.Context, iface string, mark int, target string) (int64, error)
+	directIface string
 	ifacesFn    func() ([]InterfaceStatus, error)
 	configsFn   func() ([]ConfigMeta, error)
 	startedAtFn func(iface string) time.Time
@@ -87,7 +96,9 @@ func NewFailoverMonitor(mgr *TunnelManager, settings *SettingsStore, tg *TGNotif
 		nowFn:          time.Now,
 	}
 	f.probeFn = defaultTunnelProbe
+	f.pingFn = defaultICMPPingProbe
 	if mgr != nil {
+		f.directIface = mgr.LanIface()
 		f.ifacesFn = mgr.ShowInterfaces
 		f.configsFn = mgr.ListConfigs
 		f.startedAtFn = mgr.InterfaceStartedAt
@@ -120,10 +131,19 @@ func (f *FailoverMonitor) Wake() {
 	}
 }
 
+func defaultICMPPingProbe(ctx context.Context, iface string, mark int, target string) (int64, error) {
+	host := extractProbeHost(target)
+	if host == "" {
+		host = "1.1.1.1"
+	}
+	rtt, _, err := icmpPingHost(ctx, iface, mark, host, 3*time.Second)
+	return rtt, err
+}
+
 func defaultTunnelProbe(ctx context.Context, iface string, mark int, target string) (int64, error) {
 	dialer := sockBindDialer(iface, mark, 3*time.Second)
 	t0 := time.Now()
-	conn, err := dialer.DialContext(ctx, "tcp", target)
+	conn, err := dialer.DialContext(ctx, "tcp", normalizeTCPProbeTarget(target))
 	if err != nil {
 		return 0, err
 	}
@@ -182,6 +202,7 @@ func (f *FailoverMonitor) Status() FailoverStatus {
 		Threshold:        st.FailoverThreshold,
 		CooldownSec:      st.FailoverCooldownSec,
 		ProbeTarget:      st.FailoverProbeTarget,
+		ProbeMethod:      normalizeProbeMethod(st.FailoverProbeMethod, st.FailoverProbeTarget),
 		Failback:         st.FailoverFailback,
 		LastSwitchAt:     f.lastSwitchAt,
 		LastSwitchReason: f.lastSwitchReason,
@@ -416,19 +437,24 @@ func (f *FailoverMonitor) CheckNow(forceProbe bool) FailoverStatus {
 			h.State = "unhealthy"
 			h.Reason = "нет peer в конфиге"
 		} else {
+			method := normalizeProbeMethod(st.FailoverProbeMethod, st.FailoverProbeTarget)
+			h.ProbeMethod = method
 			var probeOK *bool
 			var probeErr error
-			if allowProbe && f.probeFn != nil {
+			if allowProbe && (f.probeFn != nil || f.pingFn != nil) {
 				mark := 0
 				if f.markFn != nil {
 					mark = f.markFn(c.Interface)
 				}
 				pctx, cancel := context.WithTimeout(context.Background(), 3500*time.Millisecond)
-				rtt, err := f.probeFn(pctx, c.Interface, mark, st.FailoverProbeTarget)
+				ok, rtt, pOK, pRTT, tOK, tRTT, err := f.runHealthProbe(pctx, c.Interface, mark, method, st.FailoverProbeTarget)
 				cancel()
-				ok := (err == nil)
 				probeOK = &ok
 				probeErr = err
+				h.PingOK = pOK
+				h.PingRTTMs = pRTT
+				h.TCPOK = tOK
+				h.TCPRTTMs = tRTT
 				if ok {
 					h.ProbeRTTMs = rtt
 				}
@@ -647,4 +673,251 @@ func (f *FailoverMonitor) pickCandidateLocked(enabled []ConfigMeta, upMap map[st
 		}
 	}
 	return best
+}
+
+type FailoverPingTargetResult struct {
+	Name      string `json:"name"`
+	Config    string `json:"config,omitempty"`
+	Interface string `json:"interface"`
+	Primary   bool   `json:"primary,omitempty"`
+	Direct    bool   `json:"direct,omitempty"`
+	Method    string `json:"method"`
+	Target    string `json:"target"`
+	OK        bool   `json:"ok"`
+	RTTMs     int64  `json:"rtt_ms,omitempty"`
+	PingOK    *bool  `json:"ping_ok,omitempty"`
+	PingRTTMs int64  `json:"ping_rtt_ms,omitempty"`
+	TCPOK     *bool  `json:"tcp_ok,omitempty"`
+	TCPRTTMs  int64  `json:"tcp_rtt_ms,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+type FailoverPingReport struct {
+	Host    string                     `json:"host"`
+	Method  string                     `json:"method"`
+	Results []FailoverPingTargetResult `json:"results"`
+}
+
+func (f *FailoverMonitor) runHealthProbe(ctx context.Context, iface string, mark int, method, target string) (ok bool, rttMs int64, pingOK *bool, pingRTT int64, tcpOK *bool, tcpRTT int64, err error) {
+	m := normalizeProbeMethod(method, target)
+	tcpFn := f.probeFn
+	if tcpFn == nil {
+		tcpFn = defaultTunnelProbe
+	}
+	pingFn := f.pingFn
+	if pingFn == nil {
+		pingFn = defaultICMPPingProbe
+	}
+	tcpTarget := normalizeTCPProbeTarget(target)
+	pingTarget := extractProbeHost(target)
+	if pingTarget == "" {
+		pingTarget = "1.1.1.1"
+	}
+
+	switch m {
+	case ProbeMethodPing:
+		rtt, pErr := pingFn(ctx, iface, mark, pingTarget)
+		b := (pErr == nil)
+		pingOK = &b
+		if b {
+			pingRTT = rtt
+			return true, rtt, pingOK, pingRTT, nil, 0, nil
+		}
+		return false, 0, pingOK, 0, nil, 0, pErr
+
+	case ProbeMethodAny, ProbeMethodBoth:
+		var wg sync.WaitGroup
+		var tErr, pErr error
+		var tR, pR int64
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			tR, tErr = tcpFn(ctx, iface, mark, tcpTarget)
+		}()
+		go func() {
+			defer wg.Done()
+			pR, pErr = pingFn(ctx, iface, mark, pingTarget)
+		}()
+		wg.Wait()
+
+		tb := (tErr == nil)
+		pb := (pErr == nil)
+		tcpOK = &tb
+		pingOK = &pb
+		if tb {
+			tcpRTT = tR
+		}
+		if pb {
+			pingRTT = pR
+		}
+
+		if m == ProbeMethodAny {
+			if pb && tb {
+				best := pingRTT
+				if tcpRTT >= 0 && (best <= 0 || tcpRTT < best) {
+					best = tcpRTT
+				}
+				return true, best, pingOK, pingRTT, tcpOK, tcpRTT, nil
+			}
+			if pb {
+				return true, pingRTT, pingOK, pingRTT, tcpOK, tcpRTT, nil
+			}
+			if tb {
+				return true, tcpRTT, pingOK, pingRTT, tcpOK, tcpRTT, nil
+			}
+			return false, 0, pingOK, 0, tcpOK, 0, fmt.Errorf("ICMP: %v; TCP: %v", pErr, tErr)
+		}
+
+		// ProbeMethodBoth requires both ICMP and TCP probes to succeed.
+		if pb && tb {
+			best := pingRTT
+			if best <= 0 {
+				best = tcpRTT
+			}
+			return true, best, pingOK, pingRTT, tcpOK, tcpRTT, nil
+		}
+		switch {
+		case !pb && !tb:
+			return false, 0, pingOK, pingRTT, tcpOK, tcpRTT, fmt.Errorf("ICMP: %v; TCP: %v", pErr, tErr)
+		case !pb:
+			return false, 0, pingOK, pingRTT, tcpOK, tcpRTT, fmt.Errorf("ICMP fail: %v", pErr)
+		default:
+			return false, 0, pingOK, pingRTT, tcpOK, tcpRTT, fmt.Errorf("TCP fail: %v", tErr)
+		}
+
+	default: // ProbeMethodTCP
+		rtt, tErr := tcpFn(ctx, iface, mark, tcpTarget)
+		b := (tErr == nil)
+		tcpOK = &b
+		if b {
+			tcpRTT = rtt
+			return true, rtt, nil, 0, tcpOK, tcpRTT, nil
+		}
+		return false, 0, nil, 0, tcpOK, 0, tErr
+	}
+}
+
+// PingHostAcrossTunnels probes target host/IP concurrently across all configured active tunnels and Direct LAN.
+func (f *FailoverMonitor) PingHostAcrossTunnels(host, method string) FailoverPingReport {
+	var st AppSettings
+	if f.settings != nil {
+		st = f.settings.Get()
+	}
+	host = strings.TrimSpace(host)
+	if host == "" {
+		host = strings.TrimSpace(st.FailoverProbeTarget)
+	}
+	if host == "" {
+		host = "1.1.1.1"
+	}
+	if strings.TrimSpace(method) == "" && !strings.HasPrefix(strings.ToLower(host), "tcp://") {
+		method = ProbeMethodPing
+	}
+	normMethod := normalizeProbeMethod(method, host)
+
+	type probeSpec struct {
+		name      string
+		config    string
+		iface     string
+		mark      int
+		primary   bool
+		direct    bool
+		canProbe  bool
+		downError string
+	}
+
+	var cfgs []ConfigMeta
+	if f.configsFn != nil {
+		cfgs, _ = f.configsFn()
+	}
+	upMap := map[string]bool{}
+	if f.ifacesFn != nil {
+		if ifaces, err := f.ifacesFn(); err == nil {
+			for _, i := range ifaces {
+				upMap[i.Name] = true
+			}
+		}
+	}
+	primaryName := ""
+	f.mu.Lock()
+	for name, h := range f.health {
+		if h.Primary {
+			primaryName = name
+			break
+		}
+	}
+	f.mu.Unlock()
+
+	var specs []probeSpec
+	for _, c := range cfgs {
+		if c.Disabled {
+			continue
+		}
+		mark := 0
+		if f.markFn != nil {
+			mark = f.markFn(c.Interface)
+		}
+		name := strings.TrimSuffix(c.Name, ".conf")
+		if name == "" {
+			name = c.Interface
+		}
+		specs = append(specs, probeSpec{
+			name:      name,
+			config:    c.Name,
+			iface:     c.Interface,
+			mark:      mark,
+			primary:   c.Primary || c.Name == primaryName,
+			canProbe:  upMap[c.Interface],
+			downError: "туннель не поднят",
+		})
+	}
+	if f.directIface != "" {
+		specs = append(specs, probeSpec{
+			name:     "Direct (" + f.directIface + ")",
+			iface:    f.directIface,
+			direct:   true,
+			canProbe: true,
+		})
+	}
+
+	results := make([]FailoverPingTargetResult, len(specs))
+	var wg sync.WaitGroup
+	for idx, sp := range specs {
+		results[idx] = FailoverPingTargetResult{
+			Name:      sp.name,
+			Config:    sp.config,
+			Interface: sp.iface,
+			Primary:   sp.primary,
+			Direct:    sp.direct,
+			Method:    normMethod,
+			Target:    host,
+		}
+		if !sp.canProbe {
+			results[idx].Error = sp.downError
+			continue
+		}
+		wg.Add(1)
+		go func(i int, s probeSpec) {
+			defer wg.Done()
+			pctx, cancel := context.WithTimeout(context.Background(), 3500*time.Millisecond)
+			defer cancel()
+			ok, rtt, pOK, pRTT, tOK, tRTT, err := f.runHealthProbe(pctx, s.iface, s.mark, normMethod, host)
+			results[i].OK = ok
+			results[i].RTTMs = rtt
+			results[i].PingOK = pOK
+			results[i].PingRTTMs = pRTT
+			results[i].TCPOK = tOK
+			results[i].TCPRTTMs = tRTT
+			if err != nil {
+				results[i].Error = err.Error()
+			}
+		}(idx, sp)
+	}
+	wg.Wait()
+
+	return FailoverPingReport{
+		Host:    host,
+		Method:  normMethod,
+		Results: results,
+	}
 }

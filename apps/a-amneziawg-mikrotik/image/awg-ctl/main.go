@@ -60,6 +60,7 @@ func main() {
 	rosClient.Configure(st)
 	if dnsFwd != nil {
 		dnsFwd.SetROS(rosClient)
+		rosClient.SetDNS(dnsFwd)
 	}
 
 	tg := NewTGNotifier(settingsStore, mgr, logger)

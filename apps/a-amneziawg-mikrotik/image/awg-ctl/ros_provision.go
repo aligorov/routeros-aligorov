@@ -729,6 +729,10 @@ func (c *ROSClient) InspectSchema(s AppSettings) ROSSchemaReport {
 		})
 	}
 
+	if mode == ROSModeAddressList || mode == ROSModeBGP {
+		c.appendIPDNSRoutingWarnings(ctx, conn, listName, &report)
+	}
+
 	allOK := len(report.Checks) > 0
 	for _, ch := range report.Checks {
 		if !ch.OK && !ch.Warn {
@@ -1231,4 +1235,95 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 		c.logger.Logf("ROS schema provisioned (%s): %s", mode, strings.Join(applied, "; "))
 	}
 	return res
+}
+
+func (c *ROSClient) readIPDNSConfig(ctx context.Context, conn rosConnConfig) (map[string]any, error) {
+	if binCfg, ok := canUseBinAPI(conn); ok && c.binSync != nil {
+		rows, err := c.binSync.Exec(ctx, binCfg, "/ip/dns/print", "=.proplist=servers,dynamic-servers,allow-remote-requests")
+		if err == nil && len(rows) > 0 {
+			out := make(map[string]any, len(rows[0]))
+			for k, v := range rows[0] {
+				out[k] = v
+			}
+			return out, nil
+		}
+		if !isBinTransportFallbackErr(err) || conn.baseURL == "" {
+			if err != nil {
+				return nil, err
+			}
+			return nil, errors.New("empty /ip/dns response")
+		}
+	}
+	if conn.baseURL == "" {
+		return nil, errors.New("RouterOS REST URL is not configured")
+	}
+	raw, _, err := c.doWithConn(conn, http.MethodGet, "/ip/dns", nil)
+	if err != nil {
+		return nil, err
+	}
+	var obj map[string]any
+	if json.Unmarshal(raw, &obj) == nil && obj != nil {
+		return obj, nil
+	}
+	var arr []map[string]any
+	if json.Unmarshal(raw, &arr) == nil && len(arr) > 0 {
+		return arr[0], nil
+	}
+	return nil, errors.New("unexpected /ip/dns JSON shape")
+}
+
+func (c *ROSClient) appendIPDNSRoutingWarnings(ctx context.Context, conn rosConnConfig, listName string, report *ROSSchemaReport) {
+	if report == nil || conn.gatewayIP == "" {
+		return
+	}
+	obj, err := c.readIPDNSConfig(ctx, conn)
+	if err != nil || obj == nil {
+		return
+	}
+	parseCSV := func(raw string) []string {
+		var out []string
+		for _, p := range strings.Split(raw, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	staticServers := parseCSV(strField(obj, "servers"))
+	dynamicServers := parseCSV(strField(obj, "dynamic-servers"))
+
+	hasContainer := false
+	hasExtraStatic := false
+	for _, s := range staticServers {
+		if s == conn.gatewayIP {
+			hasContainer = true
+		} else {
+			hasExtraStatic = true
+		}
+	}
+
+	if !hasContainer {
+		shown := strField(obj, "servers")
+		if shown == "" && len(dynamicServers) > 0 {
+			shown = "dynamic: " + strings.Join(dynamicServers, ",")
+		}
+		if shown == "" {
+			shown = "не задан"
+		}
+		report.Warnings = append(report.Warnings, fmt.Sprintf(
+			"RouterOS /ip/dns (%s) не указывает на DNS контейнера %s: динамические правила geosite:/domain: не будут наполнять %s автоматически через клиентские DNS-запросы.",
+			shown, conn.gatewayIP, listName))
+		return
+	}
+	if hasExtraStatic || len(dynamicServers) > 0 {
+		report.Warnings = append(report.Warnings, fmt.Sprintf(
+			"В RouterOS /ip/dns кроме контейнера %s есть дополнительные DNS (%s%s) — часть запросов geosite:/domain: может идти мимо awg-ctl.",
+			conn.gatewayIP, strings.Join(staticServers, ","), func() string {
+				if len(dynamicServers) > 0 {
+					return " + dynamic:" + strings.Join(dynamicServers, ",")
+				}
+				return ""
+			}()))
+	}
 }

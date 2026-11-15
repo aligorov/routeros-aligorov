@@ -100,6 +100,7 @@ func (w *WebServer) Start() error {
 	mux.HandleFunc("GET /api/failover", w.withAuth(w.handleFailoverStatus))
 	mux.HandleFunc("POST /api/failover/check", w.withAuth(w.handleFailoverCheck))
 	mux.HandleFunc("POST /api/failover/switch", w.withAuth(w.handleFailoverSwitch))
+	mux.HandleFunc("POST /api/failover/ping", w.withAuth(w.handleFailoverPing))
 	mux.HandleFunc("POST /api/telegram/test", w.withAuth(w.handleTelegramTest))
 	mux.HandleFunc("POST /api/keygen", w.withAuth(w.handleKeygen))
 	mux.HandleFunc("POST /api/qr", w.withAuth(w.handleQR))
@@ -518,6 +519,27 @@ func (w *WebServer) handleFailoverSwitch(rw http.ResponseWriter, r *http.Request
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "failover": w.failover.Status()})
 }
 
+func (w *WebServer) handleFailoverPing(rw http.ResponseWriter, r *http.Request) {
+	if w.failover == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "failover monitor unavailable"})
+		return
+	}
+	var body struct {
+		Host   string `json:"host"`
+		Target string `json:"target"`
+		Method string `json:"method"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body)
+	}
+	host := strings.TrimSpace(body.Host)
+	if host == "" {
+		host = strings.TrimSpace(body.Target)
+	}
+	rep := w.failover.PingHostAcrossTunnels(host, strings.TrimSpace(body.Method))
+	writeJSON(rw, http.StatusOK, rep)
+}
+
 func (w *WebServer) handleTelegramTest(rw http.ResponseWriter, r *http.Request) {
 	if w.tg == nil {
 		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "telegram notifier unavailable"})
@@ -920,15 +942,29 @@ func (w *WebServer) handleSaveRules(rw http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	var rosStatus any
 	if w.ros != nil {
-		w.ros.OnPolicyChanged()
+		done := make(chan struct{})
+		go func() {
+			_ = w.ros.OnPolicyChangedSync(w.mgr)
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(3800 * time.Millisecond):
+		}
+		rosStatus = w.ros.Status()
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"ok":    true,
 		"rules": rules,
 		"stats": w.policy.Stats(),
 		"geo":   w.geo.Status(),
-	})
+	}
+	if rosStatus != nil {
+		resp["ros"] = rosStatus
+	}
+	writeJSON(rw, http.StatusOK, resp)
 }
 
 func (w *WebServer) handleTestRule(rw http.ResponseWriter, r *http.Request) {

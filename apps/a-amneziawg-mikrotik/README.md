@@ -2,7 +2,7 @@
 
 Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go v3.1.20260828` + `awg-quick v3.1.20260812`) для **MikroTik RouterOS (`/app`)** с современным **WebUI (`:8092`)**, одновременной работой нескольких туннелей (**Multi-Tunnel**), автоматическим переключением (**Auto-Failover**), маршрутизацией по **GeoSite / GeoIP**, встроенным **DoH DNS-форвардером (`:53`)**, **Telegram-уведомлениями** и 4-режимной синхронизацией с **RouterOS (Binary API `:8728/:8729`, REST API, Address-List + Mangle, BGP)**.
 
-- **Образ:** `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`v1.5.0`, `linux/arm64`)
+- **Образ:** `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`v1.5.1`, `linux/arm64`)
 - **WebUI:** `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox)
 - **Сеть:** `/app` автоматически создаёт выделенный `veth` (без ручной подготовки интерфейсов)
 - **Том:** `awg-config` → `/etc/amnezia/amneziawg` (`*.conf`, `.active`, `settings.json`, `rules.conf`, `geo/`, `domains.txt`, `ros-dynamic.json`)
@@ -10,10 +10,10 @@
 
 ---
 
-## Возможности (v1.5.0)
+## Возможности (v1.5.1)
 
 - **Multi-Tunnel и приоритеты профилей** — загрузка любого числа `.conf` (drag-and-drop в браузере), порядок приоритетов (`#1` — Primary), одновременный подъём нескольких туннелей в отдельных таблицах (`awg`, `202+`, `210`), проверка конфликтов подсетей `Address` и переключение Primary в один клик.
-- **Auto-Failover (`Cold Switch` и `Hot Standby`)** — контроль здоровья каждого профиля по `Hybrid` (`Handshake + TCP-probe`), только `Handshake` или только `TCP-probe`; настройка интервала, порога ошибок, cooldown и авто-возврата (**Failback**) на приоритет `#1`.
+- **Auto-Failover (`Cold Switch` и `Hot Standby`)** — контроль здоровья каждого профиля по `Hybrid` (`Handshake + Probe`), только `Handshake` или только `Probe` (`TCP connect`, реальный **ICMP Ping** через интерфейс/fwmark или комбинированные `any`/`both`); настройка интервала, порога ошибок, cooldown, авто-возврат (**Failback**) на приоритет `#1` и интерактивная проверка **Ping хоста (HEALTHY)** через все активные туннели + `Direct` прямо со вкладки статуса.
 - **Правила маршрутизации и GeoSite / GeoIP** — поддержка баз `geosite.dat` и `geoip.dat` (по умолчанию из `Loyalsoldier/v2ray-rules-dat`) с автообновлением по расписанию; политика по умолчанию (`PROXY` / `DIRECT`), правила `PROXY` (основной или конкретный туннель `PROXY:<iface>`), `DIRECT`, `DROP`, готовые пресеты (Реклама → `DROP`, РФ → `DIRECT`, YouTube/Telegram → `PROXY`) и проверка маршрута для любого домена или IP.
 - **DNS-форвардер + DoH (RFC 8484)** — локальный DNS на `:53` (UDP/TCP), раздельные **Proxy DNS** (строго через туннель с `fwmark`) и **Direct DNS**, плюс встроенный каталог из **179 DoH-серверов** (`dns.quic.best`, включая `w.quic.best`) с поддержкой fallback-цепочек.
 - **Telegram-уведомления** — отправка алертов о старте, failover-переключениях, падениях и ежедневной сводки в ЛС, группу или топик форума (`message_thread_id`, с отдельным топиком для критических алертов); маршрут доставки до `api.telegram.org` (`Auto` / напрямую / через туннель) и поддержка зеркала Bot API.
@@ -132,7 +132,7 @@
 # мульти-арх сборка (arm64, amd64, arm/v7)
 docker buildx build --builder multiarch \
   --platform linux/arm64,linux/amd64,linux/arm/v7 \
-  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.5.0 \
+  -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.5.1 \
   -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1 \
   --push apps/a-amneziawg-mikrotik/image
 ```
