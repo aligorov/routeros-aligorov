@@ -52,12 +52,19 @@ type ConfigMeta struct {
 	Interface  string   `json:"interface"`
 	Active     bool     `json:"active"`
 	Selected   bool     `json:"selected"`
+	Primary    bool     `json:"primary"`
+	Enabled    bool     `json:"enabled"`
+	Disabled   bool     `json:"disabled,omitempty"`
+	Priority   int      `json:"priority"`
+	Table      string   `json:"table,omitempty"`
+	Endpoint   string   `json:"endpoint,omitempty"`
 	ListenPort string   `json:"listen_port,omitempty"`
 	Address    string   `json:"address,omitempty"`
 	DNS        []string `json:"dns,omitempty"`
 	AllowedIPs []string `json:"allowed_ips,omitempty"`
 	HasPostUp  bool     `json:"has_postup"`
 	HasTable   bool     `json:"has_table"`
+	StartError string   `json:"start_error,omitempty"`
 }
 
 type TunnelManager struct {
@@ -68,9 +75,17 @@ type TunnelManager struct {
 	autoRoute   bool
 	killSwitch  bool
 	multiTunnel bool
+	order       []string
+	disabled    map[string]bool
 	started     []string
+	primaryCfg  string
+	ifaceTable  map[string]string
+	ifaceMark   map[string]int
+	startedAt   map[string]time.Time
+	startErrors map[string]string
 	logger      *RingLogger
 	onChange    func()
+	ipCmdFn     func(args ...string) error
 }
 
 func NewTunnelManager(srcDir, runDir, lanIface string, autoRoute, killSwitch bool, logger *RingLogger) *TunnelManager {
@@ -81,7 +96,23 @@ func NewTunnelManager(srcDir, runDir, lanIface string, autoRoute, killSwitch boo
 		autoRoute:   autoRoute,
 		killSwitch:  killSwitch,
 		multiTunnel: envOr("AWG_MULTI_TUNNEL", "off") == "on",
+		disabled:    map[string]bool{},
+		ifaceTable:  map[string]string{},
+		ifaceMark:   map[string]int{},
+		startedAt:   map[string]time.Time{},
+		startErrors: map[string]string{},
 		logger:      logger,
+		ipCmdFn: func(args ...string) error {
+			out, err := exec.Command("ip", args...).CombinedOutput()
+			if err != nil {
+				msg := strings.TrimSpace(string(out))
+				if msg != "" {
+					return fmt.Errorf("ip %s: %s (%w)", strings.Join(args, " "), msg, err)
+				}
+				return fmt.Errorf("ip %s: %w", strings.Join(args, " "), err)
+			}
+			return nil
+		},
 	}
 }
 
@@ -90,6 +121,20 @@ func (m *TunnelManager) SetRuntimeOptions(autoRoute, killSwitch, multiTunnel boo
 	m.autoRoute = autoRoute
 	m.killSwitch = killSwitch
 	m.multiTunnel = multiTunnel
+	m.mu.Unlock()
+}
+
+func (m *TunnelManager) SetTunnelPlan(order, disabled []string) {
+	m.mu.Lock()
+	m.order = append([]string(nil), order...)
+	dis := make(map[string]bool, len(disabled))
+	for _, n := range disabled {
+		n = strings.TrimSpace(n)
+		if n != "" {
+			dis[n] = true
+		}
+	}
+	m.disabled = dis
 	m.mu.Unlock()
 }
 
@@ -223,6 +268,28 @@ func (m *TunnelManager) ListConfigs() ([]ConfigMeta, error) {
 		}
 	}
 
+	m.mu.Lock()
+	order := append([]string(nil), m.order...)
+	disabled := make(map[string]bool, len(m.disabled))
+	for k, v := range m.disabled {
+		disabled[k] = v
+	}
+	primaryCfg := m.primaryCfg
+	ifaceTable := make(map[string]string, len(m.ifaceTable))
+	for k, v := range m.ifaceTable {
+		ifaceTable[k] = v
+	}
+	startErrors := make(map[string]string, len(m.startErrors))
+	for k, v := range m.startErrors {
+		startErrors[k] = v
+	}
+	m.mu.Unlock()
+
+	rank := make(map[string]int, len(order))
+	for i, n := range order {
+		rank[n] = i
+	}
+
 	activeName := m.GetActiveConfig()
 	var out []ConfigMeta
 	for _, e := range entries {
@@ -240,27 +307,79 @@ func (m *TunnelManager) ListConfigs() ([]ConfigMeta, error) {
 		meta := parseConfigMeta(e.Name(), text)
 		meta.Active = activeSet[meta.Interface]
 		meta.Selected = (e.Name() == activeName)
+		meta.Disabled = disabled[e.Name()]
+		meta.Enabled = !meta.Disabled
+		meta.Table = ifaceTable[meta.Interface]
+		meta.StartError = startErrors[e.Name()]
+		if primaryCfg != "" {
+			meta.Primary = (e.Name() == primaryCfg) && meta.Active
+		} else {
+			meta.Primary = meta.Selected && meta.Active
+		}
 		out = append(out, meta)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	sort.Slice(out, func(i, j int) bool {
+		ri, oki := rank[out[i].Name]
+		rj, okj := rank[out[j].Name]
+		if oki && okj && ri != rj {
+			return ri < rj
+		}
+		if oki != okj {
+			return oki
+		}
+		return out[i].Name < out[j].Name
+	})
+	prio := 1
+	for idx := range out {
+		if out[idx].Enabled {
+			out[idx].Priority = prio
+			prio++
+		}
+	}
 	if activeName == "" && len(out) > 0 {
 		out[0].Selected = true
 	}
 	return out, nil
 }
 
-// selectStartConfigs: by default only ONE profile runs (the selected one).
-// AWG_MULTI_TUNNEL=on keeps legacy behaviour (all *.conf up, first is primary).
+// selectStartConfigs: by default only ONE profile runs (the selected/first enabled one).
+// In Multi-Tunnel mode, all enabled configs start, with the selected active config placed FIRST (Primary -> table awg).
 func selectStartConfigs(cfgs []ConfigMeta, active string, multi bool) []ConfigMeta {
-	if multi || len(cfgs) == 0 {
+	if len(cfgs) == 0 {
 		return cfgs
 	}
+	enabled := make([]ConfigMeta, 0, len(cfgs))
 	for _, c := range cfgs {
-		if c.Name == active {
-			return []ConfigMeta{c}
+		if !c.Disabled {
+			enabled = append(enabled, c)
 		}
 	}
-	return cfgs[:1]
+	if !multi {
+		for _, c := range cfgs {
+			if c.Name == active {
+				return []ConfigMeta{c}
+			}
+		}
+		if len(enabled) > 0 {
+			return enabled[:1]
+		}
+		return cfgs[:1]
+	}
+	if len(enabled) == 0 {
+		enabled = cfgs
+	}
+	var ordered []ConfigMeta
+	for _, c := range enabled {
+		if c.Name == active {
+			ordered = append(ordered, c)
+		}
+	}
+	for _, c := range enabled {
+		if c.Name != active {
+			ordered = append(ordered, c)
+		}
+	}
+	return ordered
 }
 
 func (m *TunnelManager) activeFilePath() string {
@@ -297,13 +416,160 @@ func (m *TunnelManager) ActivateConfig(name string) error {
 		return err
 	}
 	m.logger.Logf("Switched active profile to %s", name)
+	// Fast hot-switch in Multi-Tunnel mode when target interface is already UP
+	m.mu.Lock()
+	multi := m.multiTunnel
+	hasStarted := len(m.started) > 0
+	m.mu.Unlock()
+	if multi && hasStarted {
+		targetIface := strings.TrimSuffix(name, ".conf")
+		if ifaces, err := m.ShowInterfaces(); err == nil {
+			for _, ifc := range ifaces {
+				if ifc.Name == targetIface {
+					if err := m.SwitchPrimaryFast(name); err == nil {
+						return nil
+					}
+					break
+				}
+			}
+		}
+	}
 	return m.RestartAll()
+}
+
+// SwitchPrimaryFast switches Primary routing (table awg -> new interface) in <100ms
+// without tearing down running tunnels in Multi-Tunnel / Hot-Standby mode.
+func (m *TunnelManager) SwitchPrimaryFast(name string) error {
+	if err := m.SetActiveConfig(name); err != nil {
+		return err
+	}
+	targetIface := strings.TrimSuffix(name, ".conf")
+	m.mu.Lock()
+	autoRoute := m.autoRoute
+	killSwitch := m.killSwitch
+	lanIface := m.lanIface
+	ipCmd := m.ipCmdFn
+	prevPrimary := m.primaryCfg
+	m.primaryCfg = name
+	if m.ifaceTable == nil {
+		m.ifaceTable = map[string]string{}
+	}
+	for k, v := range m.ifaceTable {
+		if v == "awg" && k != targetIface {
+			// Clear stale "awg" label from previous primary; its own probe table remains active
+			delete(m.ifaceTable, k)
+		}
+	}
+	m.ifaceTable[targetIface] = "awg"
+	m.mu.Unlock()
+
+	if autoRoute && ipCmd != nil {
+		if err := ipCmd("route", "replace", "default", "dev", targetIface, "table", "awg"); err != nil {
+			m.mu.Lock()
+			m.primaryCfg = prevPrimary
+			m.mu.Unlock()
+			return err
+		}
+		if killSwitch {
+			_ = ipCmd("route", "replace", "blackhole", "default", "table", "awg", "metric", "254")
+		}
+		if lanIface != "" {
+			_ = ipCmd("rule", "del", "priority", "300")
+			_ = ipCmd("rule", "add", "priority", "300", "from", "all", "iif", lanIface, "lookup", "awg")
+		}
+	}
+	m.logger.Logf("Primary tunnel fast-switched to %s (iface=%s)", name, targetIface)
+	if m.onChange != nil {
+		go m.onChange()
+	}
+	return nil
+}
+
+func (m *TunnelManager) PrimaryInterface() string {
+	ifaces, err := m.ShowInterfaces()
+	if err != nil || len(ifaces) == 0 {
+		return ""
+	}
+	up := make(map[string]bool, len(ifaces))
+	for _, i := range ifaces {
+		up[i.Name] = true
+	}
+	m.mu.Lock()
+	pcfg := m.primaryCfg
+	m.mu.Unlock()
+	if pcfg != "" {
+		pifc := strings.TrimSuffix(pcfg, ".conf")
+		if up[pifc] {
+			return pifc
+		}
+	}
+	if active := m.GetActiveConfig(); active != "" {
+		aifc := strings.TrimSuffix(active, ".conf")
+		if up[aifc] {
+			return aifc
+		}
+	}
+	return ifaces[0].Name
+}
+
+func (m *TunnelManager) ProbeMarkForInterface(iface string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if mk := m.ifaceMark[iface]; mk != 0 {
+		return mk
+	}
+	if tbl := m.ifaceTable[iface]; tbl == "awg" {
+		return ProxyDNSFwmark
+	}
+	return 0
+}
+
+func (m *TunnelManager) InterfaceStartedAt(iface string) time.Time {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.startedAt[iface]
+}
+
+func (m *TunnelManager) DetectConflicts(cfgs []ConfigMeta) []string {
+	var warnings []string
+	ports := map[string]string{}
+	addrs := map[string]string{}
+	eps := map[string]string{}
+	for _, c := range cfgs {
+		if c.Disabled {
+			continue
+		}
+		if c.ListenPort != "" && c.ListenPort != "0" {
+			if prev, ok := ports[c.ListenPort]; ok {
+				warnings = append(warnings, fmt.Sprintf("Одинаковый ListenPort %s в %s и %s — в Multi-Tunnel один не запустится", c.ListenPort, prev, c.Name))
+			} else {
+				ports[c.ListenPort] = c.Name
+			}
+		}
+		if c.Address != "" {
+			ipOnly := strings.Split(strings.TrimSpace(c.Address), ",")[0]
+			if prev, ok := addrs[ipOnly]; ok {
+				warnings = append(warnings, fmt.Sprintf("Совпадает локальный Address (%s) у %s и %s", ipOnly, prev, c.Name))
+			} else {
+				addrs[ipOnly] = c.Name
+			}
+		}
+		if c.Endpoint != "" {
+			if prev, ok := eps[c.Endpoint]; ok {
+				warnings = append(warnings, fmt.Sprintf("Одинаковый Endpoint %s в %s и %s (если отказ провайдера/сервера, упадут оба)", c.Endpoint, prev, c.Name))
+			} else {
+				eps[c.Endpoint] = c.Name
+			}
+		}
+	}
+	return warnings
 }
 
 func parseConfigMeta(name, text string) ConfigMeta {
 	meta := ConfigMeta{
 		Name:      name,
 		Interface: strings.TrimSuffix(name, ".conf"),
+		Enabled:   true,
 	}
 	for _, line := range strings.Split(normalizeLF(text), "\n") {
 		line = strings.TrimSpace(line)
@@ -321,6 +587,8 @@ func parseConfigMeta(name, text string) ConfigMeta {
 			meta.Address = val
 		case "listenport":
 			meta.ListenPort = val
+		case "endpoint":
+			meta.Endpoint = val
 		case "dns":
 			for _, part := range strings.Split(val, ",") {
 				p := strings.TrimSpace(part)
@@ -449,7 +717,9 @@ func (m *TunnelManager) StartAll() error {
 		}
 	}
 
+	m.mu.Unlock()
 	configs, err := m.ListConfigs()
+	m.mu.Lock()
 	if err != nil {
 		return err
 	}
@@ -460,26 +730,72 @@ func (m *TunnelManager) StartAll() error {
 
 	target := selectStartConfigs(configs, m.GetActiveConfig(), m.multiTunnel)
 	m.started = nil
-	for idx, cfg := range target {
+	m.primaryCfg = ""
+	m.ifaceTable = map[string]string{}
+	m.ifaceMark = map[string]int{}
+	m.startedAt = map[string]time.Time{}
+	m.startErrors = map[string]string{}
+
+	var firstErr error
+	startedCount := 0
+	for _, cfg := range target {
 		srcBytes, err := os.ReadFile(filepath.Join(m.srcDir, cfg.Name))
 		if err != nil {
-			return err
+			m.startErrors[cfg.Name] = err.Error()
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
 		}
+		isPrimary := (startedCount == 0)
 		table := "awg"
-		if idx > 0 {
-			table = strconv.Itoa(200 + idx)
+		if !isPrimary {
+			table = strconv.Itoa(200 + startedCount)
 		}
-		prepared := m.injectAutoRoute(normalizeLF(string(srcBytes)), table, idx == 0)
+		prepared := m.injectAutoRoute(normalizeLF(string(srcBytes)), table, isPrimary)
 		runPath := filepath.Join(m.runDir, cfg.Name)
 		if err := os.WriteFile(runPath, []byte(prepared), 0o600); err != nil {
-			return err
+			m.startErrors[cfg.Name] = err.Error()
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
 		}
-		m.logger.Logf("Starting %s (table=%s, primary=%v)...", cfg.Name, table, idx == 0)
+		m.logger.Logf("Starting %s (table=%s, primary=%v)...", cfg.Name, table, isPrimary)
 		if err := m.runCmd("/usr/bin/awg-quick", "up", runPath); err != nil {
-			m.stopStartedLocked()
-			return fmt.Errorf("awg-quick up %s: %w", cfg.Name, err)
+			m.startErrors[cfg.Name] = err.Error()
+			m.logger.Logf("ERROR starting %s: %v", cfg.Name, err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("awg-quick up %s: %w", cfg.Name, err)
+			}
+			if !m.multiTunnel {
+				m.stopStartedLocked()
+				return firstErr
+			}
+			continue
 		}
 		m.started = append(m.started, runPath)
+		m.startedAt[cfg.Interface] = time.Now()
+		m.ifaceTable[cfg.Interface] = table
+		if isPrimary {
+			m.primaryCfg = cfg.Name
+		}
+		// Install dedicated per-tunnel probe table + fwmark (0x201, 0x202, ...) when Multi-Tunnel is active
+		// so health probes always traverse THAT exact tunnel even if table "awg" swaps to another primary.
+		if m.multiTunnel && m.ipCmdFn != nil {
+			probeTbl := strconv.Itoa(201 + startedCount)
+			probeMark := 0x201 + startedCount
+			m.ifaceMark[cfg.Interface] = probeMark
+			markHex := fmt.Sprintf("0x%x", probeMark)
+			_ = m.ipCmdFn("route", "replace", "default", "dev", cfg.Interface, "table", probeTbl)
+			_ = m.ipCmdFn("rule", "del", "priority", "241", "from", "all", "fwmark", markHex, "lookup", probeTbl)
+			_ = m.ipCmdFn("rule", "add", "priority", "241", "from", "all", "fwmark", markHex, "lookup", probeTbl)
+		}
+		startedCount++
+	}
+
+	if startedCount == 0 && firstErr != nil {
+		return firstErr
 	}
 	if m.onChange != nil {
 		go m.onChange()
@@ -497,6 +813,14 @@ func (m *TunnelManager) StopAll() {
 }
 
 func (m *TunnelManager) stopStartedLocked() {
+	for ifc, mk := range m.ifaceMark {
+		if m.ipCmdFn != nil && mk >= 0x201 {
+			tbl := strconv.Itoa(mk - 0x200 + 200)
+			_ = m.ipCmdFn("rule", "del", "priority", "241", "from", "all", "fwmark", fmt.Sprintf("0x%x", mk), "lookup", tbl)
+			_ = m.ipCmdFn("route", "flush", "table", tbl)
+		}
+		delete(m.ifaceMark, ifc)
+	}
 	for i := len(m.started) - 1; i >= 0; i-- {
 		p := m.started[i]
 		m.logger.Logf("Stopping %s...", p)
@@ -505,6 +829,9 @@ func (m *TunnelManager) stopStartedLocked() {
 		}
 	}
 	m.started = nil
+	m.primaryCfg = ""
+	m.ifaceTable = map[string]string{}
+	m.startedAt = map[string]time.Time{}
 }
 
 func (m *TunnelManager) RestartAll() error {
@@ -617,7 +944,7 @@ func (m *TunnelManager) ActiveDNSServers() []string {
 	}
 	seen := map[string]bool{}
 	var out []string
-	for _, c := range cfgs {
+	addFrom := func(c ConfigMeta) {
 		for _, d := range c.DNS {
 			host := d
 			if _, _, err := net.SplitHostPort(d); err != nil {
@@ -626,6 +953,23 @@ func (m *TunnelManager) ActiveDNSServers() []string {
 			if !seen[host] {
 				seen[host] = true
 				out = append(out, host)
+			}
+		}
+	}
+	for _, c := range cfgs {
+		if c.Primary || (c.Selected && c.Active) {
+			addFrom(c)
+		}
+	}
+	for _, c := range cfgs {
+		if c.Active {
+			addFrom(c)
+		}
+	}
+	if len(out) == 0 {
+		for _, c := range cfgs {
+			if c.Selected {
+				addFrom(c)
 			}
 		}
 	}

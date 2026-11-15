@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -29,6 +30,7 @@ func main() {
 
 	mgr := NewTunnelManager(srcDir, runDir, lanIface, st.AutoRoute, st.KillSwitch, logger)
 	mgr.SetRuntimeOptions(st.AutoRoute, st.KillSwitch, st.MultiTunnel)
+	mgr.SetTunnelPlan(st.TunnelOrder, st.DisabledConfigs)
 	if err := mgr.SeedFromEnv(); err != nil {
 		logger.Logf("ERROR seeding env config: %v", err)
 		os.Exit(1)
@@ -54,6 +56,9 @@ func main() {
 	rosClient := NewROSClient(srcDir, logger)
 	rosClient.Configure(st)
 
+	tg := NewTGNotifier(settingsStore, mgr, logger)
+	failover := NewFailoverMonitor(mgr, settingsStore, tg, logger)
+
 	mgr.onChange = func() {
 		if dnsFwd != nil {
 			dnsFwd.SetUpstreams(mgr.ActiveDNSServers())
@@ -65,6 +70,7 @@ func main() {
 	}
 
 	web := NewWebServer(envOr("UI_LISTEN", ":8080"), mgr, dnsFwd, rosClient, settingsStore, geoStore, policy, logger)
+	web.SetIntegrations(failover, tg)
 	go func() {
 		if err := web.Start(); err != nil {
 			logger.Logf("ERROR WebUI server: %v", err)
@@ -75,6 +81,7 @@ func main() {
 	if err := mgr.StartAll(); err != nil {
 		logger.Logf("ERROR starting tunnels: %v", err)
 		_ = policy.ApplyRouting()
+		tg.Notify(TGKindDown, "boot:err", "Ошибка запуска туннеля", err.Error())
 		if envOr("AWG_EXIT_ON_ERROR", "off") == "on" {
 			os.Exit(1)
 		}
@@ -83,9 +90,14 @@ func main() {
 			dnsFwd.SetUpstreams(mgr.ActiveDNSServers())
 		}
 		_ = policy.ApplyRouting()
+		if primary := mgr.PrimaryInterface(); primary != "" {
+			cur := settingsStore.Get()
+			tg.Notify(TGKindStart, "boot:ok", "Контейнер запущен", fmt.Sprintf("Основной туннель: <code>%s</code>\nMulti-Tunnel: %v · Failover: %s",
+				primary, cur.MultiTunnel, cur.FailoverMode))
+		}
 	}
 
-	// Periodic RouterOS sync & optional Geo auto-update
+	// Periodic RouterOS sync, Telegram digest & optional Geo auto-update
 	go func() {
 		if rosClient.Status().Enabled {
 			_ = rosClient.SyncAll(mgr)
@@ -97,6 +109,7 @@ func main() {
 			if rosClient.Status().Enabled {
 				_ = rosClient.SyncAll(mgr)
 			}
+			tg.MaybeSendDigest(now)
 			cur := settingsStore.Get()
 			if cur.GeoAutoUpdateHours > 0 && now.Sub(lastGeoCheck) >= time.Duration(cur.GeoAutoUpdateHours)*time.Hour {
 				lastGeoCheck = now
@@ -112,5 +125,7 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	sig := <-sigCh
 	logger.Logf("Received signal %s, shutting down...", sig)
+	failover.Stop()
+	tg.Stop()
 	mgr.StopAll()
 }

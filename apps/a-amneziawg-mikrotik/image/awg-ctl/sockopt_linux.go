@@ -5,18 +5,34 @@ package main
 import (
 	"net"
 	"syscall"
+	"time"
 )
 
 func sockMarkDialer(mark int) net.Dialer {
-	if mark == 0 {
-		return net.Dialer{Timeout: 2 * 1e9}
+	return sockBindDialer("", mark, 2*time.Second)
+}
+
+func sockBindDialer(iface string, mark int, timeout time.Duration) net.Dialer {
+	if iface == "" && mark == 0 {
+		return net.Dialer{Timeout: timeout}
 	}
 	return net.Dialer{
-		Timeout: 2 * 1e9,
+		Timeout: timeout,
 		Control: func(_, _ string, c syscall.RawConn) error {
 			var setErr error
 			if err := c.Control(func(fd uintptr) {
-				setErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_MARK, mark)
+				if iface != "" {
+					if err := syscall.SetsockoptString(int(fd), syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, iface); err != nil {
+						setErr = err
+						return
+					}
+				}
+				if mark != 0 {
+					if err := syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_MARK, mark); err != nil {
+						setErr = err
+						return
+					}
+				}
 			}); err != nil {
 				return err
 			}

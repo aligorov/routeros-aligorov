@@ -1,10 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"crypto/tls"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"net/netip"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -22,11 +29,31 @@ type DNSForwarder struct {
 	logger     *RingLogger
 }
 
+func isDoHUpstream(s string) bool {
+	low := strings.ToLower(strings.TrimSpace(s))
+	return strings.HasPrefix(low, "https://") || strings.HasPrefix(low, "http://")
+}
+
+func normalizeDoHURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return strings.TrimSpace(raw)
+	}
+	if u.Path == "" || u.Path == "/" {
+		u.Path = "/dns-query"
+	}
+	return u.String()
+}
+
 func parseUpstreamList(raw string) []string {
 	var list []string
 	for _, s := range strings.Split(raw, ",") {
 		s = strings.TrimSpace(s)
 		if s == "" {
+			continue
+		}
+		if isDoHUpstream(s) {
+			list = append(list, normalizeDoHURL(s))
 			continue
 		}
 		if _, _, err := net.SplitHostPort(s); err != nil {
@@ -195,10 +222,11 @@ func (d *DNSForwarder) handleDNSQuery(query []byte, proto string) ([]byte, error
 	ups := d.Upstreams()
 	action := PolicyAction("")
 	matchedBy := ""
+	targetTun := ""
 	fwmark := 0
 
 	if ok && policy != nil && qname != "" {
-		action, matchedBy = policy.MatchDomain(qname)
+		action, matchedBy, targetTun = policy.MatchDomainTarget(qname)
 		policy.NoteDNSStats(action)
 
 		switch action {
@@ -217,8 +245,16 @@ func (d *DNSForwarder) handleDNSQuery(query []byte, proto string) ([]byte, error
 				killSwitch = st.KillSwitch
 			}
 			tun := policy.activeTunnelIface()
+			if targetTun != "" && policy.activeIfaceSet()[targetTun] {
+				tun = targetTun
+			}
 			if tun != "" && bindTun {
 				fwmark = ProxyDNSFwmark
+				if targetTun != "" && policy.mgr != nil {
+					if m := policy.mgr.ProbeMarkForInterface(tun); m != 0 {
+						fwmark = m
+					}
+				}
 			} else if tun == "" && killSwitch && matchedBy != "default" {
 				return buildDNSReplyError(query, qEnd, 2), nil // SERVFAIL: prevent leak when proxy-only domain and tunnel down
 			} else if tun == "" && killSwitch {
@@ -227,94 +263,236 @@ func (d *DNSForwarder) handleDNSQuery(query []byte, proto string) ([]byte, error
 		}
 	}
 
-	var resp []byte
-	var err error
-	if proto == "tcp" {
-		resp, err = exchangeUpstreamTCP(query, ups, fwmark)
-	} else {
-		resp, err = exchangeUpstreamUDP(query, ups, fwmark)
-	}
+	resp, err := exchangeUpstream(query, ups, fwmark, proto)
 	if err != nil {
 		return nil, err
 	}
 
 	if policy != nil && qname != "" && (action == ActionDirect || action == ActionProxy) {
 		if ips := extractDNSAnswerIPv4s(resp); len(ips) > 0 {
-			policy.RecordResolvedIPs(qname, action, matchedBy, ips)
+			policy.RecordResolvedIPsForTarget(qname, action, matchedBy, targetTun, ips)
 		}
 	}
 	return resp, nil
 }
 
-func exchangeUpstreamUDP(query []byte, ups []string, fwmark int) ([]byte, error) {
-	dialer := sockMarkDialer(fwmark)
+func exchangeUpstream(query []byte, ups []string, fwmark int, proto string) ([]byte, error) {
 	var lastErr error
 	for _, up := range ups {
-		conn, err := dialer.Dial("udp", up)
+		var resp []byte
+		var err error
+		if isDoHUpstream(up) {
+			resp, err = exchangeSingleDoH(query, up, ups, fwmark)
+		} else if proto == "tcp" {
+			resp, err = exchangeSingleTCP(query, up, fwmark)
+		} else {
+			resp, err = exchangeSingleUDP(query, up, fwmark)
+		}
+		if err == nil && len(resp) >= 12 {
+			return resp, nil
+		}
 		if err != nil {
 			lastErr = err
-			continue
 		}
-		_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
-		if _, err := conn.Write(query); err != nil {
-			_ = conn.Close()
-			lastErr = err
-			continue
-		}
-		resp := make([]byte, 4096)
-		n, err := conn.Read(resp)
-		_ = conn.Close()
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		return resp[:n], nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no DNS upstreams succeeded")
 	}
 	return nil, lastErr
 }
 
-func exchangeUpstreamTCP(query []byte, ups []string, fwmark int) ([]byte, error) {
+func exchangeSingleUDP(query []byte, up string, fwmark int) ([]byte, error) {
 	dialer := sockMarkDialer(fwmark)
-	var lastErr error
-	for _, up := range ups {
-		conn, err := dialer.Dial("tcp", up)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
-		var lenBuf [2]byte
-		binary.BigEndian.PutUint16(lenBuf[:], uint16(len(query)))
-		if _, err := conn.Write(lenBuf[:]); err != nil {
-			_ = conn.Close()
-			lastErr = err
-			continue
-		}
-		if _, err := conn.Write(query); err != nil {
-			_ = conn.Close()
-			lastErr = err
-			continue
-		}
-		if _, err := io.ReadFull(conn, lenBuf[:]); err != nil {
-			_ = conn.Close()
-			lastErr = err
-			continue
-		}
-		rLen := int(binary.BigEndian.Uint16(lenBuf[:]))
-		if rLen <= 0 || rLen > 65535 {
-			_ = conn.Close()
-			continue
-		}
-		resp := make([]byte, rLen)
-		if _, err := io.ReadFull(conn, resp); err != nil {
-			_ = conn.Close()
-			lastErr = err
-			continue
-		}
-		_ = conn.Close()
-		return resp, nil
+	conn, err := dialer.Dial("udp", up)
+	if err != nil {
+		return nil, err
 	}
-	return nil, lastErr
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := conn.Write(query); err != nil {
+		return nil, err
+	}
+	resp := make([]byte, 4096)
+	n, err := conn.Read(resp)
+	if err != nil {
+		return nil, err
+	}
+	return resp[:n], nil
+}
+
+func exchangeSingleTCP(query []byte, up string, fwmark int) ([]byte, error) {
+	dialer := sockMarkDialer(fwmark)
+	conn, err := dialer.Dial("tcp", up)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+	var lenBuf [2]byte
+	binary.BigEndian.PutUint16(lenBuf[:], uint16(len(query)))
+	if _, err := conn.Write(lenBuf[:]); err != nil {
+		return nil, err
+	}
+	if _, err := conn.Write(query); err != nil {
+		return nil, err
+	}
+	if _, err := io.ReadFull(conn, lenBuf[:]); err != nil {
+		return nil, err
+	}
+	rLen := int(binary.BigEndian.Uint16(lenBuf[:]))
+	if rLen <= 0 || rLen > 65535 {
+		return nil, fmt.Errorf("invalid TCP DNS frame length %d", rLen)
+	}
+	resp := make([]byte, rLen)
+	if _, err := io.ReadFull(conn, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+type dohCacheItem struct {
+	ip  string
+	exp time.Time
+}
+
+var (
+	dohClientMu sync.Mutex
+	dohClients  = map[int]*http.Client{}
+	dohBootMu   sync.Mutex
+	dohBootIPs  = map[string]dohCacheItem{}
+	// Overridable TLS root/skip verify only for self-signed unit test servers
+	dohTestTLSConfig *tls.Config
+)
+
+func getDoHClient(bootstrapUps []string, fwmark int) *http.Client {
+	dohClientMu.Lock()
+	defer dohClientMu.Unlock()
+	if cli, ok := dohClients[fwmark]; ok {
+		return cli
+	}
+	baseDialer := sockBindDialer("", fwmark, 4*time.Second)
+	var tlsCfg *tls.Config
+	if dohTestTLSConfig != nil {
+		tlsCfg = dohTestTLSConfig.Clone()
+	}
+	tr := &http.Transport{
+		ForceAttemptHTTP2:   true,
+		TLSClientConfig:     tlsCfg,
+		MaxIdleConns:        16,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 4 * time.Second,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err == nil && net.ParseIP(host) == nil {
+				if resolved := bootstrapResolveDoHHost(host, bootstrapUps, fwmark); resolved != "" {
+					addr = net.JoinHostPort(resolved, port)
+				}
+			}
+			return baseDialer.DialContext(ctx, network, addr)
+		},
+	}
+	cli := &http.Client{Transport: tr, Timeout: 5 * time.Second}
+	dohClients[fwmark] = cli
+	return cli
+}
+
+func bootstrapResolveDoHHost(host string, ups []string, fwmark int) string {
+	now := time.Now()
+	dohBootMu.Lock()
+	if it, ok := dohBootIPs[host]; ok && now.Before(it.exp) {
+		dohBootMu.Unlock()
+		return it.ip
+	}
+	dohBootMu.Unlock()
+
+	q := buildBootstrapAQuery(host)
+	if len(q) == 0 {
+		return ""
+	}
+	var boot []string
+	for _, u := range ups {
+		if !isDoHUpstream(u) {
+			boot = append(boot, u)
+		}
+	}
+	boot = append(boot, "1.1.1.1:53", "8.8.8.8:53", "77.88.8.8:53")
+	for _, b := range boot {
+		if resp, err := exchangeSingleUDP(q, b, fwmark); err == nil {
+			if ips := extractDNSAnswerIPv4s(resp); len(ips) > 0 {
+				ip := ips[0].String()
+				dohBootMu.Lock()
+				dohBootIPs[host] = dohCacheItem{ip: ip, exp: now.Add(5 * time.Minute)}
+				dohBootMu.Unlock()
+				return ip
+			}
+		}
+	}
+	// Last resort: try direct fwmark=0 bootstrap if tunnel hasn't learned route yet
+	if fwmark != 0 {
+		for _, b := range boot {
+			if resp, err := exchangeSingleUDP(q, b, 0); err == nil {
+				if ips := extractDNSAnswerIPv4s(resp); len(ips) > 0 {
+					ip := ips[0].String()
+					dohBootMu.Lock()
+					dohBootIPs[host] = dohCacheItem{ip: ip, exp: now.Add(2 * time.Minute)}
+					dohBootMu.Unlock()
+					return ip
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func buildBootstrapAQuery(host string) []byte {
+	host = strings.Trim(strings.ToLower(host), ". ")
+	if host == "" {
+		return nil
+	}
+	var buf bytes.Buffer
+	var id [2]byte
+	_, _ = rand.Read(id[:])
+	buf.Write(id[:])
+	buf.Write([]byte{0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	for _, lbl := range strings.Split(host, ".") {
+		if len(lbl) == 0 || len(lbl) > 63 {
+			return nil
+		}
+		buf.WriteByte(byte(len(lbl)))
+		buf.WriteString(lbl)
+	}
+	buf.WriteByte(0)
+	buf.Write([]byte{0x00, 0x01, 0x00, 0x01}) // QTYPE=A, QCLASS=IN
+	return buf.Bytes()
+}
+
+func exchangeSingleDoH(query []byte, endpoint string, allUps []string, fwmark int) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 4500*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(query))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/dns-message")
+	req.Header.Set("Accept", "application/dns-message")
+
+	cli := getDoHClient(allUps, fwmark)
+	resp, err := cli.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("doh %s returned HTTP %d", endpoint, resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 65536))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) < 12 {
+		return nil, fmt.Errorf("doh %s returned short response (%dB)", endpoint, len(body))
+	}
+	return body, nil
 }
 
 // --- Zero-dependency RFC1035 helpers ---

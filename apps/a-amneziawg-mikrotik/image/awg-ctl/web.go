@@ -51,7 +51,14 @@ type WebServer struct {
 	geo        *GeoStore
 	policy     *PolicyEngine
 	term       *TermRunner
+	failover   *FailoverMonitor
+	tg         *TGNotifier
 	logger     *RingLogger
+}
+
+func (w *WebServer) SetIntegrations(fo *FailoverMonitor, tg *TGNotifier) {
+	w.failover = fo
+	w.tg = tg
 }
 
 func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros *ROSClient, settings *SettingsStore, geo *GeoStore, policy *PolicyEngine, logger *RingLogger) *WebServer {
@@ -83,12 +90,17 @@ func (w *WebServer) Start() error {
 	mux.HandleFunc("GET /", w.withAuth(w.handleIndex))
 	mux.HandleFunc("GET /api/status", w.withAuth(w.handleStatus))
 	mux.HandleFunc("GET /api/configs/{name}", w.withAuth(w.handleGetConfig))
+	mux.HandleFunc("POST /api/configs/plan", w.withAuth(w.handleSaveTunnelPlan))
 	mux.HandleFunc("POST /api/configs/{name}", w.withAuth(w.handleSaveConfig))
 	mux.HandleFunc("DELETE /api/configs/{name}", w.withAuth(w.handleDeleteConfig))
 	mux.HandleFunc("POST /api/configs/{name}/activate", w.withAuth(w.handleActivateConfig))
 	mux.HandleFunc("POST /api/tunnel/up", w.withAuth(w.handleTunnelUp))
 	mux.HandleFunc("POST /api/tunnel/down", w.withAuth(w.handleTunnelDown))
 	mux.HandleFunc("POST /api/tunnel/restart", w.withAuth(w.handleTunnelRestart))
+	mux.HandleFunc("GET /api/failover", w.withAuth(w.handleFailoverStatus))
+	mux.HandleFunc("POST /api/failover/check", w.withAuth(w.handleFailoverCheck))
+	mux.HandleFunc("POST /api/failover/switch", w.withAuth(w.handleFailoverSwitch))
+	mux.HandleFunc("POST /api/telegram/test", w.withAuth(w.handleTelegramTest))
 	mux.HandleFunc("POST /api/keygen", w.withAuth(w.handleKeygen))
 	mux.HandleFunc("POST /api/qr", w.withAuth(w.handleQR))
 	mux.HandleFunc("GET /api/settings", w.withAuth(w.handleGetSettings))
@@ -267,7 +279,7 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 	var upstreams []string
 	var directUpstreams []string
 	if w.dns != nil {
-		upstreams = w.dns.Upstreams()
+		upstreams = w.dns.getProxyUpstreams()
 		directUpstreams = w.dns.getDirectUpstreams()
 	}
 	var policyStats PolicyStats
@@ -282,10 +294,20 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 		multiTun = st.MultiTunnel
 	}
 	containerIP, gw := w.containerNetInfo()
+	var foStatus any
+	if w.failover != nil {
+		foStatus = w.failover.Status()
+	}
+	var tgStatus any
+	if w.tg != nil {
+		tgStatus = w.tg.Status()
+	}
+	conflicts := w.mgr.DetectConflicts(cfgs)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"version":        AppVersion,
 		"interfaces":     ifaces,
 		"configs":        cfgs,
+		"conflicts":      conflicts,
 		"lan_iface":      w.mgr.lanIface,
 		"container_ip":   containerIP,
 		"gateway":        gw,
@@ -296,6 +318,8 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 		"dns_upstreams":  upstreams,
 		"direct_dns":     directUpstreams,
 		"policy":         policyStats,
+		"failover":       foStatus,
+		"tg":             tgStatus,
 		"ros":            w.ros.Status(),
 		"logs":           w.logger.Lines(),
 	})
@@ -353,15 +377,57 @@ func (w *WebServer) handleSaveConfig(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if w.tg != nil {
+		w.tg.Notify(TGKindConfig, "cfg:"+name, "Профиль обновлён", "Профиль: <b>"+name+"</b>")
+	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (w *WebServer) handleActivateConfig(rw http.ResponseWriter, r *http.Request) {
-	if err := w.mgr.ActivateConfig(r.PathValue("name")); err != nil {
+	name := r.PathValue("name")
+	if err := w.mgr.ActivateConfig(name); err != nil {
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	if w.tg != nil {
+		w.tg.Notify(TGKindFailover, "act:"+name, "Активный профиль изменён", "Выбран: <b>"+name+"</b>")
+	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (w *WebServer) handleSaveTunnelPlan(rw http.ResponseWriter, r *http.Request) {
+	if w.settings == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "settings store unavailable"})
+		return
+	}
+	var body struct {
+		Order    []string `json:"order"`
+		Disabled []string `json:"disabled"`
+		Apply    bool     `json:"apply"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	next, err := w.settings.UpdateTunnelPlan(body.Order, body.Disabled)
+	if err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	w.mgr.SetTunnelPlan(next.TunnelOrder, next.DisabledConfigs)
+	var applyErr string
+	if body.Apply && next.MultiTunnel {
+		if err := w.mgr.RestartAll(); err != nil {
+			applyErr = err.Error()
+		}
+	}
+	if w.failover != nil {
+		w.failover.Wake()
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":          applyErr == "",
+		"apply_error": applyErr,
+	})
 }
 
 func (w *WebServer) handleDeleteConfig(rw http.ResponseWriter, r *http.Request) {
@@ -369,6 +435,9 @@ func (w *WebServer) handleDeleteConfig(rw http.ResponseWriter, r *http.Request) 
 	if err := w.mgr.DeleteConfig(name); err != nil {
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
+	}
+	if w.tg != nil {
+		w.tg.Notify(TGKindConfig, "del:"+name, "Профиль удалён", "Удалён: <b>"+name+"</b>")
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
 }
@@ -378,11 +447,20 @@ func (w *WebServer) handleTunnelUp(rw http.ResponseWriter, _ *http.Request) {
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	if w.tg != nil {
+		w.tg.Notify(TGKindStart, "up", "Туннели подняты", "Основной: <code>"+w.mgr.PrimaryInterface()+"</code>")
+	}
+	if w.failover != nil {
+		w.failover.Wake()
+	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (w *WebServer) handleTunnelDown(rw http.ResponseWriter, _ *http.Request) {
 	w.mgr.StopAll()
+	if w.tg != nil {
+		w.tg.Notify(TGKindDown, "down:manual", "Туннели остановлены", "Остановлено вручную через WebUI")
+	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -391,7 +469,96 @@ func (w *WebServer) handleTunnelRestart(rw http.ResponseWriter, _ *http.Request)
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	if w.tg != nil {
+		w.tg.Notify(TGKindStart, "restart", "Туннели перезапущены", "Основной: <code>"+w.mgr.PrimaryInterface()+"</code>")
+	}
+	if w.failover != nil {
+		w.failover.Wake()
+	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (w *WebServer) handleFailoverStatus(rw http.ResponseWriter, _ *http.Request) {
+	if w.failover == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "failover monitor unavailable"})
+		return
+	}
+	writeJSON(rw, http.StatusOK, w.failover.Status())
+}
+
+func (w *WebServer) handleFailoverCheck(rw http.ResponseWriter, _ *http.Request) {
+	if w.failover == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "failover monitor unavailable"})
+		return
+	}
+	writeJSON(rw, http.StatusOK, w.failover.CheckNow(true))
+}
+
+func (w *WebServer) handleFailoverSwitch(rw http.ResponseWriter, r *http.Request) {
+	if w.failover == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "failover monitor unavailable"})
+		return
+	}
+	var body struct {
+		Target string `json:"target"`
+		Reason string `json:"reason"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body)
+	}
+	if err := w.failover.SwitchTo(strings.TrimSpace(body.Target), strings.TrimSpace(body.Reason)); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "failover": w.failover.Status()})
+}
+
+func (w *WebServer) handleTelegramTest(rw http.ResponseWriter, r *http.Request) {
+	if w.tg == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "telegram notifier unavailable"})
+		return
+	}
+	var body struct {
+		TGBotToken      string `json:"tg_bot_token"`
+		TGChatID        string `json:"tg_chat_id"`
+		TGThreadID      int    `json:"tg_thread_id"`
+		TGAlertThreadID int    `json:"tg_alert_thread_id"`
+		TGNodeName      string `json:"tg_node_name"`
+		TGAPIURL        string `json:"tg_api_url"`
+		TGVia           string `json:"tg_via"`
+		TGSilent        bool   `json:"tg_silent"`
+	}
+	var override *AppSettings
+	if r.Body != nil {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err == nil && (body.TGChatID != "" || body.TGBotToken != "") {
+			cur := w.settings.Get()
+			if strings.TrimSpace(body.TGBotToken) != "" {
+				cur.TGBotToken = strings.TrimSpace(body.TGBotToken)
+			}
+			if strings.TrimSpace(body.TGChatID) != "" {
+				cur.TGChatID = strings.TrimSpace(body.TGChatID)
+			}
+			cur.TGThreadID = body.TGThreadID
+			cur.TGAlertThreadID = body.TGAlertThreadID
+			if strings.TrimSpace(body.TGNodeName) != "" {
+				cur.TGNodeName = strings.TrimSpace(body.TGNodeName)
+			}
+			if strings.TrimSpace(body.TGAPIURL) != "" {
+				cur.TGAPIURL = strings.TrimRight(strings.TrimSpace(body.TGAPIURL), "/")
+			}
+			if strings.TrimSpace(body.TGVia) != "" {
+				cur.TGVia = strings.TrimSpace(body.TGVia)
+			}
+			cur.TGSilent = body.TGSilent
+			override = &cur
+		}
+	}
+	msgID, err := w.tg.SendTest(override)
+	if err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error(), "tg": w.tg.Status()})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "message_id": msgID, "tg": w.tg.Status()})
 }
 
 func (w *WebServer) handleKeygen(rw http.ResponseWriter, _ *http.Request) {
@@ -500,6 +667,7 @@ func (w *WebServer) handleSaveSettings(rw http.ResponseWriter, r *http.Request) 
 	}
 
 	w.mgr.SetRuntimeOptions(next.AutoRoute, next.KillSwitch, next.MultiTunnel)
+	w.mgr.SetTunnelPlan(next.TunnelOrder, next.DisabledConfigs)
 	if w.dns != nil {
 		w.dns.ConfigureFromSettings(next)
 	}
@@ -516,7 +684,14 @@ func (w *WebServer) handleSaveSettings(rw http.ResponseWriter, r *http.Request) 
 			applyErr = err.Error()
 		}
 	}
-	w.logger.Logf("Settings updated (default_policy=%s, auto_route=%v, kill_switch=%v, multi=%v)", next.DefaultPolicy, next.AutoRoute, next.KillSwitch, next.MultiTunnel)
+	if w.failover != nil {
+		w.failover.Wake()
+	}
+	if w.tg != nil {
+		w.tg.Notify(TGKindConfig, "settings", "Настройки сохранены", "failover="+next.FailoverMode+", multi="+strconv.FormatBool(next.MultiTunnel))
+	}
+	w.logger.Logf("Settings updated (default_policy=%s, auto_route=%v, kill_switch=%v, multi=%v, failover=%s/%s)",
+		next.DefaultPolicy, next.AutoRoute, next.KillSwitch, next.MultiTunnel, next.FailoverMode, next.FailoverTrigger)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"ok":          applyErr == "",
 		"apply_error": applyErr,

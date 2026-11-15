@@ -42,6 +42,7 @@ type PolicyRule struct {
 	LineNo  int          `json:"line"`
 	Raw     string       `json:"raw"`
 	Action  PolicyAction `json:"action"`
+	Target  string       `json:"target,omitempty"` // optional tunnel iface for PROXY:<iface>
 	Kind    RuleKind     `json:"kind"`
 	Value   string       `json:"value"`
 	Comment string       `json:"comment,omitempty"`
@@ -61,17 +62,19 @@ type PolicyStats struct {
 }
 
 type MatchResult struct {
-	Query      string       `json:"query"`
-	Action     PolicyAction `json:"action"`
-	MatchedBy  string       `json:"matched_by"`
-	Kind       string       `json:"kind"`
+	Query     string       `json:"query"`
+	Action    PolicyAction `json:"action"`
+	Target    string       `json:"target,omitempty"`
+	MatchedBy string       `json:"matched_by"`
+	Kind      string       `json:"kind"`
 }
 
 type learnedEntry struct {
-	Action  PolicyAction
-	Rule    string
-	Domain  string
-	Target  string // tunIface or "via:"+gw
+	Action    PolicyAction
+	TargetTun string // optional explicit tunnel iface (for PROXY:<iface>)
+	Rule      string
+	Domain    string
+	Target    string // resolved route spec e.g. "dev:awg0" or "via:"+gw
 }
 
 type PolicyEngine struct {
@@ -257,7 +260,7 @@ func parsePolicyLine(lineNo int, line string) (PolicyRule, bool) {
 		}
 	}
 
-	action, ok := normalizeAction(actionStr)
+	action, targetTun, ok := normalizeActionTarget(actionStr)
 	if !ok || matcher == "" {
 		return PolicyRule{}, false
 	}
@@ -271,6 +274,7 @@ func parsePolicyLine(lineNo int, line string) (PolicyRule, bool) {
 		LineNo:  lineNo,
 		Raw:     line,
 		Action:  action,
+		Target:  targetTun,
 		Kind:    kind,
 		Value:   val,
 		Comment: comment,
@@ -279,15 +283,33 @@ func parsePolicyLine(lineNo int, line string) (PolicyRule, bool) {
 }
 
 func normalizeAction(s string) (PolicyAction, bool) {
-	switch strings.ToUpper(strings.TrimSpace(s)) {
-	case "PROXY", "VPN", "TUNNEL":
-		return ActionProxy, true
+	act, _, ok := normalizeActionTarget(s)
+	return act, ok
+}
+
+func normalizeActionTarget(s string) (PolicyAction, string, bool) {
+	raw := strings.TrimSpace(s)
+	head := raw
+	target := ""
+	if idx := strings.IndexAny(raw, ":@"); idx > 0 {
+		head = strings.TrimSpace(raw[:idx])
+		target = strings.TrimSpace(raw[idx+1:])
+	}
+	switch strings.ToUpper(head) {
+	case "PROXY", "VPN", "TUNNEL", "TUN":
+		if target != "" {
+			if !validConfNameRe.MatchString(target+".conf") && !validConfNameRe.MatchString(target) {
+				return "", "", false
+			}
+			target = strings.TrimSuffix(target, ".conf")
+		}
+		return ActionProxy, target, true
 	case "DIRECT", "BYPASS", "PASS":
-		return ActionDirect, true
+		return ActionDirect, "", true
 	case "DROP", "BLOCK", "REJECT":
-		return ActionDrop, true
+		return ActionDrop, "", true
 	default:
-		return "", false
+		return "", "", false
 	}
 }
 
@@ -354,9 +376,14 @@ func (p *PolicyEngine) DefaultAction() PolicyAction {
 }
 
 func (p *PolicyEngine) MatchDomain(rawHost string) (PolicyAction, string) {
+	act, by, _ := p.MatchDomainTarget(rawHost)
+	return act, by
+}
+
+func (p *PolicyEngine) MatchDomainTarget(rawHost string) (PolicyAction, string, string) {
 	host := normalizeDomain(rawHost)
 	if host == "" {
-		return p.DefaultAction(), "default"
+		return p.DefaultAction(), "default", ""
 	}
 
 	p.mu.RLock()
@@ -367,26 +394,31 @@ func (p *PolicyEngine) MatchDomain(rawHost string) (PolicyAction, string) {
 		switch r.Kind {
 		case RuleFull:
 			if host == r.Value {
-				return r.Action, "full:" + r.Value
+				return r.Action, "full:" + r.Value, r.Target
 			}
 		case RuleDomain:
 			if host == r.Value || strings.HasSuffix(host, "."+r.Value) {
-				return r.Action, "domain:" + r.Value
+				return r.Action, "domain:" + r.Value, r.Target
 			}
 		case RuleKeyword:
 			if r.Value != "" && strings.Contains(host, r.Value) {
-				return r.Action, "keyword:" + r.Value
+				return r.Action, "keyword:" + r.Value, r.Target
 			}
 		case RuleGeoSite:
 			if p.geo != nil && p.geo.MatchSite(r.Value, host) {
-				return r.Action, "geosite:" + r.Value
+				return r.Action, "geosite:" + r.Value, r.Target
 			}
 		}
 	}
-	return p.DefaultAction(), "default"
+	return p.DefaultAction(), "default", ""
 }
 
 func (p *PolicyEngine) MatchStaticIP(addr netip.Addr) (PolicyAction, string, bool) {
+	act, by, _, ok := p.MatchStaticIPTarget(addr)
+	return act, by, ok
+}
+
+func (p *PolicyEngine) MatchStaticIPTarget(addr netip.Addr) (PolicyAction, string, string, bool) {
 	p.mu.RLock()
 	rules := p.rules
 	p.mu.RUnlock()
@@ -395,33 +427,33 @@ func (p *PolicyEngine) MatchStaticIP(addr netip.Addr) (PolicyAction, string, boo
 		switch r.Kind {
 		case RuleCIDR:
 			if r.Prefix.Contains(addr) {
-				return r.Action, "cidr:" + r.Value, true
+				return r.Action, "cidr:" + r.Value, r.Target, true
 			}
 		case RuleGeoIP:
 			if p.geo != nil && p.geo.MatchIP(r.Value, addr) {
-				return r.Action, "geoip:" + r.Value, true
+				return r.Action, "geoip:" + r.Value, r.Target, true
 			}
 		}
 	}
-	return "", "", false
+	return "", "", "", false
 }
 
 func (p *PolicyEngine) TestQuery(raw string) MatchResult {
 	q := strings.TrimSpace(raw)
 	if addr, err := netip.ParseAddr(q); err == nil {
-		if act, by, ok := p.MatchStaticIP(addr); ok {
-			return MatchResult{Query: q, Action: act, MatchedBy: by, Kind: "ip"}
+		if act, by, tgt, ok := p.MatchStaticIPTarget(addr); ok {
+			return MatchResult{Query: q, Action: act, Target: tgt, MatchedBy: by, Kind: "ip"}
 		}
 		p.mu.RLock()
 		le, ok := p.learned[addr]
 		p.mu.RUnlock()
 		if ok {
-			return MatchResult{Query: q, Action: le.Action, MatchedBy: le.Rule + " (dns:" + le.Domain + ")", Kind: "ip"}
+			return MatchResult{Query: q, Action: le.Action, Target: le.TargetTun, MatchedBy: le.Rule + " (dns:" + le.Domain + ")", Kind: "ip"}
 		}
 		return MatchResult{Query: q, Action: p.DefaultAction(), MatchedBy: "default", Kind: "ip"}
 	}
-	act, by := p.MatchDomain(q)
-	return MatchResult{Query: q, Action: act, MatchedBy: by, Kind: "domain"}
+	act, by, tgt := p.MatchDomainTarget(q)
+	return MatchResult{Query: q, Action: act, Target: tgt, MatchedBy: by, Kind: "domain"}
 }
 
 func (p *PolicyEngine) NoteDNSStats(action PolicyAction) {
@@ -460,6 +492,10 @@ func (p *PolicyEngine) Stats() PolicyStats {
 // RecordResolvedIPs updates table 210 synchronously for newly resolved A records
 // matching domain rules (e.g. DIRECT or PROXY overrides via DNS).
 func (p *PolicyEngine) RecordResolvedIPs(domain string, action PolicyAction, matchedRule string, addrs []netip.Addr) {
+	p.RecordResolvedIPsForTarget(domain, action, matchedRule, "", addrs)
+}
+
+func (p *PolicyEngine) RecordResolvedIPsForTarget(domain string, action PolicyAction, matchedRule, targetTun string, addrs []netip.Addr) {
 	if len(addrs) == 0 || action == ActionDrop {
 		return
 	}
@@ -471,6 +507,13 @@ func (p *PolicyEngine) RecordResolvedIPs(domain string, action PolicyAction, mat
 		killSwitch = p.mgr.killSwitch
 	}
 	tunIface := p.activeTunnelIface()
+	effectiveTun := tunIface
+	if action == ActionProxy && targetTun != "" {
+		upSet := p.activeIfaceSet()
+		if upSet[targetTun] {
+			effectiveTun = targetTun
+		}
+	}
 
 	p.mu.Lock()
 	gw := p.lastGateway
@@ -483,9 +526,9 @@ func (p *PolicyEngine) RecordResolvedIPs(domain string, action PolicyAction, mat
 			routeTarget = fmt.Sprintf("via %s dev %s", gw, lanIface)
 		}
 	case ActionProxy:
-		if tunIface != "" {
-			target = "dev:" + tunIface
-			routeTarget = fmt.Sprintf("dev %s", tunIface)
+		if effectiveTun != "" {
+			target = "dev:" + effectiveTun
+			routeTarget = fmt.Sprintf("dev %s", effectiveTun)
 		} else if killSwitch {
 			target = "blackhole"
 		}
@@ -499,7 +542,7 @@ func (p *PolicyEngine) RecordResolvedIPs(domain string, action PolicyAction, mat
 		if _, _, isStatic := p.matchStaticIPLocked(addr); isStatic {
 			continue
 		}
-		if cur, ok := p.learned[addr]; ok && cur.Action == action && cur.Target == target {
+		if cur, ok := p.learned[addr]; ok && cur.Action == action && cur.Target == target && cur.TargetTun == targetTun {
 			continue
 		}
 		if _, exists := p.learned[addr]; !exists {
@@ -511,10 +554,11 @@ func (p *PolicyEngine) RecordResolvedIPs(domain string, action PolicyAction, mat
 			p.learnedOrder = append(p.learnedOrder, addr)
 		}
 		p.learned[addr] = learnedEntry{
-			Action: action,
-			Rule:   matchedRule,
-			Domain: domain,
-			Target: target,
+			Action:    action,
+			TargetTun: targetTun,
+			Rule:      matchedRule,
+			Domain:    domain,
+			Target:    target,
 		}
 		if lanIface != "" {
 			if target == "blackhole" {
@@ -553,11 +597,27 @@ func (p *PolicyEngine) activeTunnelIface() string {
 	if p.mgr == nil {
 		return ""
 	}
+	if pifc := p.mgr.PrimaryInterface(); pifc != "" {
+		return pifc
+	}
 	ifaces, err := p.mgr.ShowInterfaces()
 	if err != nil || len(ifaces) == 0 {
 		return ""
 	}
 	return ifaces[0].Name
+}
+
+func (p *PolicyEngine) activeIfaceSet() map[string]bool {
+	set := map[string]bool{}
+	if p.mgr == nil {
+		return set
+	}
+	if ifaces, err := p.mgr.ShowInterfaces(); err == nil {
+		for _, i := range ifaces {
+			set[i.Name] = true
+		}
+	}
+	return set
 }
 
 func (p *PolicyEngine) ApplyRouting() error {
@@ -645,9 +705,20 @@ func (p *PolicyEngine) BuildBatchScript(
 		}
 	}
 
+	upIfaces := p.activeIfaceSet()
+	if tunIface != "" {
+		upIfaces[tunIface] = true
+	}
+	resolveProxyIface := func(reqTarget string) string {
+		if reqTarget != "" && upIfaces[reqTarget] {
+			return reqTarget
+		}
+		return tunIface
+	}
+
 	seen := make(map[netip.Prefix]bool)
 	staticCount := 0
-	addPrefix := func(pfx netip.Prefix, act PolicyAction) {
+	addPrefix := func(pfx netip.Prefix, act PolicyAction, reqTarget string) {
 		if !pfx.Addr().Is4() || pfx.Bits() == 0 {
 			return
 		}
@@ -666,8 +737,8 @@ func (p *PolicyEngine) BuildBatchScript(
 				staticCount++
 			}
 		case ActionProxy:
-			if tunIface != "" {
-				fmt.Fprintf(&b, "route replace %s dev %s table %s\n", pfx.String(), tunIface, PolicyTableID)
+			if ifc := resolveProxyIface(reqTarget); ifc != "" {
+				fmt.Fprintf(&b, "route replace %s dev %s table %s\n", pfx.String(), ifc, PolicyTableID)
 				staticCount++
 			} else if killSwitch {
 				fmt.Fprintf(&b, "route replace blackhole %s metric 254 table %s\n", pfx.String(), PolicyTableID)
@@ -679,12 +750,12 @@ func (p *PolicyEngine) BuildBatchScript(
 	for _, r := range rules {
 		switch r.Kind {
 		case RuleCIDR:
-			addPrefix(r.Prefix, r.Action)
+			addPrefix(r.Prefix, r.Action, r.Target)
 		case RuleGeoIP:
 			if p.geo != nil {
 				if cat := p.geo.CategoryIPs(r.Value); cat != nil && !cat.InverseMatch {
 					for _, pfx := range cat.Prefixes {
-						addPrefix(pfx, r.Action)
+						addPrefix(pfx, r.Action, r.Target)
 					}
 				}
 			}
@@ -705,8 +776,8 @@ func (p *PolicyEngine) BuildBatchScript(
 				fmt.Fprintf(&b, "route replace %s/32 via %s dev %s table %s\n", addr.String(), gw, lanIface, PolicyTableID)
 			}
 		case ActionProxy:
-			if tunIface != "" {
-				fmt.Fprintf(&b, "route replace %s/32 dev %s table %s\n", addr.String(), tunIface, PolicyTableID)
+			if ifc := resolveProxyIface(le.TargetTun); ifc != "" {
+				fmt.Fprintf(&b, "route replace %s/32 dev %s table %s\n", addr.String(), ifc, PolicyTableID)
 			} else if killSwitch {
 				fmt.Fprintf(&b, "route replace blackhole %s/32 metric 254 table %s\n", addr.String(), PolicyTableID)
 			}
