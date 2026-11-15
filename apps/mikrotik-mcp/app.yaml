@@ -1,0 +1,40 @@
+name: A-mikrotik-mcp
+descr: "MCP-шлюз для RouterOS 7.24+ (REST API + Binary API over Streamable HTTP) — 35 инструментов управления, диагностики, анализа логов и скриптов"
+page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/mikrotik-mcp
+category: ai
+icon: icon.png
+url-path: /healthz
+auto-update: false
+
+services:
+  mikrotik-mcp:
+    image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:1
+    hostname: mikrotik-mcp
+    ports:
+      - 3000:3000/tcp:web
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "3000"
+      MCP_PATH: /mcp
+      MCP_BEARER_TOKEN: auto
+      MIKROTIK_HOST: auto
+      MIKROTIK_ROUTER_ID: local-router
+      MIKROTIK_USERNAME: mcp
+      MIKROTIK_PASSWORD: change-me-router-password
+      MIKROTIK_TRANSPORT_PREF: auto
+      MIKROTIK_REST_PROTOCOL: https
+      MIKROTIK_REST_PORT: "443"
+      MIKROTIK_API_TLS: "true"
+      MIKROTIK_API_PORT: "8729"
+      MIKROTIK_TLS_VERIFY: "false"
+      MIKROTIK_TIMEOUT_MS: "30000"
+      TZ: UTC
+    volumes:
+      - mcp-config:/app/config
+      - mcp-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  mcp-config: {}
+  mcp-data: {}

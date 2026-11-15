@@ -111,6 +111,7 @@ scripts/ghcr-push.sh       # сборка arm64-образа и пуш в GHCR
 | `A-openchat-node-server` | OpenChat Sovereign Mesh Node: STUN Rendezvous, Blind Mailbox, No-Exit Relay и MediaRelay | порт `4433/udp`, см. `apps/openchat-node-server/README.md` |
 | `A-ligament-ice` | Ligament ICE (`coturn` + `certbot`): WebRTC STUN/TURN/TURNS TLS с автовыпуском Let's Encrypt | порты `80/tcp`, `443`, `3478`, `5349`, см. `apps/ligament-ice/README.md` |
 | `A-ligament-relay` | Ligament Relay: edge-узел филиала Ligament 2FA (RADIUS 1812, HTTP/WS 8082, LDAP/LDAPS, offline TOTP) | порты `1812/udp`, `8082/tcp`, см. `apps/ligament-relay/README.md` |
+| `A-mikrotik-mcp` | Мульти-роутерный MCP-шлюз для RouterOS 7.24+ (REST API + Binary API over Streamable HTTP) | `http://<ip-роутера>:3000/healthz`, endpoint `/mcp` |
 
 ## Полезное
 
