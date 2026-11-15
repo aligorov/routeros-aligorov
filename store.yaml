@@ -31,226 +31,128 @@
       restart: unless-stopped
   volumes:
     awg-config: {}
-- name: A-awg-proxy
-  descr: awg-proxy (C11) — AmneziaWG 1.0–3.1 UDP-прокси для штатного WireGuard RouterOS
-    (клиент/сервер/WARP)
-  page: https://github.com/timbrs/amneziawg-mikrotik-c
+- name: A-ligament-ice
+  descr: Ligament ICE (coturn + certbot) — WebRTC STUN/TURN/TURNS TLS (443, 3478,
+    5349) для Ligament 2FA
+  page: https://github.com/aligorov/ligament-ice
   category: networking
-  icon: https://aligorov.github.io/routeros-aligorov/apps/a-awg-proxy/icon.png
+  icon: https://aligorov.github.io/routeros-aligorov/apps/ligament-ice/icon.png
+  default-credentials: ligament:change-me
   auto-update: false
   services:
-    a-awg-proxy:
-      image: ghcr.io/timbrs/awg-proxy:latest
-      hostname: awg-proxy
+    certbot:
+      image: ghcr.io/aligorov/routeros-aligorov/ligament-ice-certbot:1
+      hostname: ligament-ice-certbot
       ports:
-      - 51820:51820/udp
+      - 80:80/tcp
       environment:
-        AWG_MODE: normal
-        AWG_LISTEN: :51820
-        AWG_REMOTE: engage.cloudflareclient.com:2408,500,1701,4500
-        AWG_SERVER_PUB: bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
-        AWG_CLIENT_PUB: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-        AWG_JC: '4'
-        AWG_JMIN: '40'
-        AWG_JMAX: '70'
-        AWG_S1: '0'
-        AWG_S2: '0'
-        AWG_S3: '0'
-        AWG_S4: '0'
-        AWG_H1: '1'
-        AWG_H2: '2'
-        AWG_H3: '3'
-        AWG_H4: '4'
-        AWG_RANDOM_TRAILERS: 'off'
-        AWG_DISABLE_COOKIES: 'off'
-        AWG_SRC_PORT: random
-        AWG_TIMEOUT: '60'
-        AWG_DNS_REFRESH: '60'
-        AWG_PORT_ROTATE: 30m-2h
-        AWG_PORT_ROTATE_SOFT: auto
-        AWG_HE_DELAY: '250'
-        AWG_STATE_FILE: /etc/awg-proxy/awg-proxy.state
-        AWG_LOG_LEVEL: info
-        AWG_NO_GRO: '0'
-        AWG_NO_GSO: '0'
-        AWG_NO_DF: '0'
-        AWG_AUTO_CPU: 'on'
-        AWG_STATS: '0'
+        REALM: turn.example.com
+        ACME_EMAIL: admin@example.com
+        TZ: UTC
       volumes:
-      - awg-state:/etc/awg-proxy
+      - certs:/etc/letsencrypt
       restart: unless-stopped
-  volumes:
-    awg-state: {}
-- name: A-mihomo-mikrotik
-  descr: mihomo (Clash) tunnel-gateway + mixed-прокси 1080 и панель — адаптация для
-    RouterOS
-  page: https://github.com/wiktorbgu/mihomo-mikrotik
-  category: networking
-  icon: https://aligorov.github.io/routeros-aligorov/apps/a-mihomo-mikrotik/icon.png
-  auto-update: false
-  services:
-    a-mihomo-mikrotik:
-      image: docker.io/wiktorbgu/mihomo-mikrotik:latest
-      ports:
-      - 1080:1080/tcp
-      - 9091:9090/tcp:web
-      environment:
-        UI_SECRET: '[secret:ui-secret]'
-        EXTERNAL_UI_URL: https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip
-        LOG_LEVEL: error
-        DISABLE_NFTABLES: '1'
-        CONFIG: default_config.yaml
-        WORKDIR: /etc/mihomo
-        HEALTH_CHECK_ENABLE: 'true'
-        HEALTH_CHECK_URL: https://www.gstatic.com/generate_204
-        HEALTH_CHECK_INTERVAL: '300'
-        HEALTH_CHECK_TIMEOUT: '5000'
-        HEALTH_CHECK_LAZY: 'true'
-        HEALTH_CHECK_EXPECTED_STATUS: '204'
-        TOLERANCE: '10'
-        MIXED_PORT: '1080'
-        UI_PORT: '9090'
-        EXTERNAL_CONTROLLER_ADDRESS: 0.0.0.0
-        TUN_STACK: system
-        TUN_INET4_ADDRESS: 198.19.0.1/30
-        TUN_INET6_ADDRESS: fdfe:dcba:9876::1/126
-        TUN_AUTO_REDIRECT: 'true'
-        TUN_AUTO_DETECT_INTERFACE: 'true'
-        TUN_AUTO_ROUTE: 'true'
-        TUN_DISABLE_ICMP_FORWARDING: 'true'
-        EXTERNAL_UI_PATH: ui
-        IPV6: 'true'
-        IP_VERSION: dual
-        PROVIDER_INTERVAL: '3600'
-        DNS_ENABLE: 'true'
-        DNS_USE_SYSTEM_HOSTS: 'true'
-        DNS_CACHE_ALGORITHM: arc
-        DNS_PREFER_H3: 'false'
-        DNS_LISTEN: 0.0.0.0:53
-        DNS_ENHANCED_MODE: fake-ip
-        DNS_FAKE_IP_RANGE: 198.18.0.0/15
-        DNS_FAKE_IP_TTL: '1'
-        TCP_CONCURRENT: 'true'
-        KEEP_ALIVE_IDLE: '60'
-        KEEP_ALIVE_INTERVAL: '30'
-        FIND_PROCESS_MODE: 'off'
-        STORE_SELECTED: 'true'
-        UNIFIED_DELAY: 'true'
-        LOADBALANCE_STRATEGY: consistent-hashing
-      volumes:
-      - mihomo-config:/etc/mihomo
-      restart: unless-stopped
-  volumes:
-    mihomo-config: {}
-  secrets:
-    ui-secret: null
-- name: A-mihomo-proxy
-  descr: Mihomo (Clash.Meta) TPROXY-прокси с WebUI. Сначала один раз прогоните router-setup.rsc
-    — см. README
-  page: https://github.com/Medium1992/mihomo-proxy-ros
-  category: networking
-  icon: https://aligorov.github.io/routeros-aligorov/apps/a-mihomo-proxy/icon.png
-  auto-update: false
-  networks:
-    mihomo:
-      name: MihomoProxyRoS
-      external: true
-  services:
-    a-mihomo-proxy:
-      image: docker.io/medium1992/mihomo-proxy-ros:latest
-      ports:
-      - 8090:80/tcp:web
-      - 9090:9090/tcp
-      environment:
-        UI_SECRET: '[secret:ui-secret]'
-        BASIC_AUTH_USER: admin
-        FAKE_IP_RANGE: 198.18.0.0/15
-        FAKE_IP_TTL: '10'
-        FAKE_IP_FILTER1: DOMAIN,www.youtube.com,real-ip
-        LOG_LEVEL: error
-        GROUP: YouTube,Telegram,Discord,META,Twitch
-        YOUTUBE_GEOSITE: youtube
-        TELEGRAM_GEOSITE: telegram
-        TELEGRAM_GEOIP: telegram
-        TELEGRAM_AS: AS62041,AS59930,AS62014,AS211157,AS44907
-        DISCORD_GEOSITE: discord
-        DISCORD_GEOIP: discord
-        META_GEOSITE: meta
-        META_GEOIP: facebook
-      volumes:
-      - mihomo-config:/root/.config/mihomo
-      restart: unless-stopped
-  volumes:
-    mihomo-config: {}
-  secrets:
-    ui-secret: null
-- name: A-mihomo-ros
-  descr: Ядро mihomo (Clash.Meta) + веб-панель ручной настройки config.yaml — для
-    RouterOS 7.21+
-  page: https://github.com/Medium1992/mihomo-ros
-  category: networking
-  icon: https://aligorov.github.io/routeros-aligorov/apps/a-mihomo-ros/icon.png
-  auto-update: false
-  services:
-    a-mihomo-ros:
-      image: docker.io/medium1992/mihomo-ros:latest
-      ports:
-      - 8091:80/tcp:web
-      environment:
-        BASIC_AUTH_USER: admin
-      volumes:
-      - mihomo-config:/etc/mihomo
-      restart: unless-stopped
-  volumes:
-    mihomo-config: {}
-- name: A-demo-nginx
-  descr: 'Демо: nginx — проверка работоспособности app-store end-to-end'
-  page: https://nginx.org/
-  category: development
-  icon: https://aligorov.github.io/routeros-aligorov/apps/demo-nginx/icon.png
-  auto-update: false
-  services:
-    demo-nginx:
-      image: docker.io/library/nginx:1.27-alpine
-      ports:
-      - 8080:80/tcp:web
-      restart: unless-stopped
-- name: A-vpn-manager
-  descr: 'VPN user manager for MikroTik: WireGuard/OpenVPN/VLESS provisioning, AD
-    sync, external RADIUS auth (Ligament 2FA), self-service portal'
-  page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/vpn-manager
-  category: security
-  icon: https://aligorov.github.io/routeros-aligorov/apps/vpn-manager/icon.png
-  default-credentials: admin:change-me
-  auto-update: false
-  services:
-    db:
-      image: docker.io/library/postgres:15-alpine
-      environment:
-        POSTGRES_USER: vpn_user
-        POSTGRES_PASSWORD: change-me
-        POSTGRES_DB: vpn_creator
-      volumes:
-      - pgdata:/var/lib/postgresql/data
-      restart: unless-stopped
-    app:
-      image: ghcr.io/aligorov/routeros-aligorov/vpn-app:1.0.4
+    ice:
+      image: ghcr.io/aligorov/routeros-aligorov/ligament-ice:1
+      hostname: ligament-ice
       depends_on:
-      - db
+      - certbot
       ports:
-      - 3000:3000/tcp:web
+      - 443:443/tcp
+      - 443:443/udp
+      - 3478:3478/tcp
+      - 3478:3478/udp
+      - 5349:5349/tcp
+      - 5349:5349/udp
       environment:
-        DATABASE_URL: postgresql://vpn_user:__POSTGRES_PASSWORD__@localhost:5432/vpn_creator
-        POSTGRES_PASSWORD: change-me
-        ENCRYPTION_KEY: auto
-        SESSION_SECRET: auto
-        ADMIN_DEFAULT_USERNAME: admin
-        ADMIN_DEFAULT_PASSWORD: change-me
+        REALM: turn.example.com
+        EXTERNAL_IP: auto
+        TURN_USER: ligament
+        TURN_PASSWORD: change-me
+        TURN_MIN_PORT: '49152'
+        TURN_MAX_PORT: '49250'
+        TZ: UTC
       volumes:
-      - app-data:/app/data
-      - downloads:/app/public/portal/downloads
+      - certs:/etc/coturn/certs
+      - ice-config:/etc/coturn
       restart: unless-stopped
   volumes:
-    pgdata: {}
-    app-data: {}
-    downloads: {}
+    certs: {}
+    ice-config: {}
+- name: A-ligament-relay
+  descr: Ligament Relay — периферийный edge-узел филиала Ligament 2FA (RADIUS 1812,
+    HTTP/WS 8082, LDAP/LDAPS, offline TOTP)
+  page: https://github.com/aligorov/ligament-relay
+  category: security
+  icon: https://aligorov.github.io/routeros-aligorov/apps/ligament-relay/icon.png
+  auto-update: false
+  services:
+    ligament-relay:
+      image: ghcr.io/aligorov/routeros-aligorov/ligament-relay:1
+      hostname: ligament-relay
+      ports:
+      - 1812:1812/udp
+      - 8082:8082/tcp
+      environment:
+        CONFIG_MODE: env
+        RELAY_ID: branch-routeros
+        RELAY_NAME: RouterOS Branch
+        RELAY_HOST_IP: auto
+        RELAY_MAX_OFFLINE_TTL: 72h
+        CORE_URL: https://2fa.example.com
+        RELAY_CORE_PASSWORD: change-me-core-password
+        CORE_INSECURE_SKIP_VERIFY: 'false'
+        CORE_ALLOW_INSECURE: 'false'
+        RADIUS_ENABLED: 'true'
+        RELAY_RADIUS_SECRET: change-me-radius-secret
+        RADIUS_TRUST_DAYS: '7'
+        RADIUS_REQUIRE_MSG_AUTH: 'true'
+        RADIUS_VERIFY_NAS_IP: 'false'
+        LDAP_ENABLED: 'true'
+        LDAP_URL: ldaps://dc01.example.local:636
+        LDAP_BASE_DN: DC=example,DC=local
+        LDAP_BIND_DN: CN=svc_2fa,OU=Service Accounts,DC=example,DC=local
+        RELAY_LDAP_PASSWORD: change-me-ldap-password
+        LDAP_USER_FILTER: (sAMAccountName=%s)
+        LDAP_INSECURE_SKIP_VERIFY: 'false'
+        RELAY_API_TOKEN: auto
+        DISCOVERY_ENABLED: 'true'
+        DISCOVERY_PORT: '8082'
+        BASTION_ALLOW_CIDRS: 192.168.0.0/16,10.0.0.0/8
+        TZ: UTC
+      volumes:
+      - relay-config:/app/config
+      - relay-data:/app/data
+      - relay-keys:/app/keys
+      - relay-certs:/app/certs
+      restart: unless-stopped
+  volumes:
+    relay-config: {}
+    relay-data: {}
+    relay-keys: {}
+    relay-certs: {}
+- name: A-openchat-node-server
+  descr: OpenChat Sovereign Mesh Node — STUN Rendezvous, Blind Mailbox, No-Exit Relay
+    и MediaRelay (UDP :4433)
+  page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/openchat-node-server
+  category: messaging
+  icon: https://aligorov.github.io/routeros-aligorov/apps/openchat-node-server/icon.png
+  auto-update: false
+  services:
+    openchat-node-server:
+      image: ghcr.io/aligorov/routeros-aligorov/openchat-node-server:1
+      hostname: openchat-node-server
+      ports:
+      - 4433:4433/udp
+      environment:
+        OPENCHAT_PORT: '4433'
+        OPENCHAT_PIN: auto
+        OPENCHAT_ENABLE_TG: 'false'
+        OPENCHAT_SPONSOR: '@openchat_freedom'
+        OPENCHAT_PUSH_GATEWAY_URL: none
+        TZ: UTC
+      volumes:
+      - openchat-data:/var/lib/openchat
+      restart: unless-stopped
+  volumes:
+    openchat-data: {}

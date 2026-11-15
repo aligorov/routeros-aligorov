@@ -107,13 +107,10 @@ scripts/ghcr-push.sh       # сборка arm64-образа и пуш в GHCR
 
 | Приложение | Что это | Проверка |
 |---|---|---|
-| `A-vpn-manager` | VPN-менеджер: админка (Next.js) + PostgreSQL, синк с AD, провижининг WG/OpenVPN/VLESS на MikroTik, внешний RADIUS (Ligament 2FA), портал пользователей | после установки открыть `http://<ip-роутера>:3000`, вход `admin`/`change-me` (сменить!) |
-| `A-awg-proxy` | AmneziaWG 1.0–3.1 UDP-прокси (C11, ~0.1 МБ) для штатного WireGuard RouterOS (клиент/сервер/WARP) | порт `51820/udp`, см. `apps/a-awg-proxy/README.md` |
 | `A-amneziawg-mikrotik` | AmneziaWG 3.1 (`amneziawg-go` + `awg-quick`) с WebUI, QR, DNS-форвардером, Netwatch и REST-синком RouterOS | `http://<ip-роутера>:8092`, порт `51821:51820/udp` |
-| `A-mihomo-mikrotik` | mihomo (Clash) tunnel-gateway + mixed-прокси 1080 и панель zashboard | `http://<ip-роутера>:9091/ui/` |
-| `A-mihomo-proxy` | Mihomo (Clash.Meta) TPROXY-прокси с WebUI и скриптом маршрутизации `router-setup.rsc` | `http://<ip-роутера>:8090` |
-| `A-mihomo-ros` | Ядро mihomo (Clash.Meta) + веб-панель ручной настройки `config.yaml` | `http://<ip-роутера>:8091` |
-| `A-demo-nginx` | nginx — проверка работоспособности стора end-to-end | после установки открыть `http://<ip-роутера>:8080` |
+| `A-openchat-node-server` | OpenChat Sovereign Mesh Node: STUN Rendezvous, Blind Mailbox, No-Exit Relay и MediaRelay | порт `4433/udp`, см. `apps/openchat-node-server/README.md` |
+| `A-ligament-ice` | Ligament ICE (`coturn` + `certbot`): WebRTC STUN/TURN/TURNS TLS с автовыпуском Let's Encrypt | порты `80/tcp`, `443`, `3478`, `5349`, см. `apps/ligament-ice/README.md` |
+| `A-ligament-relay` | Ligament Relay: edge-узел филиала Ligament 2FA (RADIUS 1812, HTTP/WS 8082, LDAP/LDAPS, offline TOTP) | порты `1812/udp`, `8082/tcp`, см. `apps/ligament-relay/README.md` |
 
 ## Полезное
 

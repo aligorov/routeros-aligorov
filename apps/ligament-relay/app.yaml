@@ -1,0 +1,53 @@
+name: A-ligament-relay
+descr: "Ligament Relay — периферийный edge-узел филиала Ligament 2FA (RADIUS 1812, HTTP/WS 8082, LDAP/LDAPS, offline TOTP)"
+page: https://github.com/aligorov/ligament-relay
+category: security
+icon: icon.png
+auto-update: false
+
+services:
+  ligament-relay:
+    image: ghcr.io/aligorov/routeros-aligorov/ligament-relay:1
+    hostname: ligament-relay
+    ports:
+      - 1812:1812/udp
+      - 8082:8082/tcp
+    environment:
+      CONFIG_MODE: env
+      RELAY_ID: branch-routeros
+      RELAY_NAME: "RouterOS Branch"
+      RELAY_HOST_IP: auto
+      RELAY_MAX_OFFLINE_TTL: 72h
+      CORE_URL: "https://2fa.example.com"
+      RELAY_CORE_PASSWORD: change-me-core-password
+      CORE_INSECURE_SKIP_VERIFY: "false"
+      CORE_ALLOW_INSECURE: "false"
+      RADIUS_ENABLED: "true"
+      RELAY_RADIUS_SECRET: change-me-radius-secret
+      RADIUS_TRUST_DAYS: "7"
+      RADIUS_REQUIRE_MSG_AUTH: "true"
+      RADIUS_VERIFY_NAS_IP: "false"
+      LDAP_ENABLED: "true"
+      LDAP_URL: "ldaps://dc01.example.local:636"
+      LDAP_BASE_DN: "DC=example,DC=local"
+      LDAP_BIND_DN: "CN=svc_2fa,OU=Service Accounts,DC=example,DC=local"
+      RELAY_LDAP_PASSWORD: change-me-ldap-password
+      LDAP_USER_FILTER: "(sAMAccountName=%s)"
+      LDAP_INSECURE_SKIP_VERIFY: "false"
+      RELAY_API_TOKEN: auto
+      DISCOVERY_ENABLED: "true"
+      DISCOVERY_PORT: "8082"
+      BASTION_ALLOW_CIDRS: "192.168.0.0/16,10.0.0.0/8"
+      TZ: UTC
+    volumes:
+      - relay-config:/app/config
+      - relay-data:/app/data
+      - relay-keys:/app/keys
+      - relay-certs:/app/certs
+    restart: unless-stopped
+
+volumes:
+  relay-config: {}
+  relay-data: {}
+  relay-keys: {}
+  relay-certs: {}

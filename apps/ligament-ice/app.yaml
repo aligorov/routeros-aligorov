@@ -1,0 +1,50 @@
+name: A-ligament-ice
+descr: "Ligament ICE (coturn + certbot) — WebRTC STUN/TURN/TURNS TLS (443, 3478, 5349) для Ligament 2FA"
+page: https://github.com/aligorov/ligament-ice
+category: networking
+icon: icon.png
+default-credentials: "ligament:change-me"
+auto-update: false
+
+services:
+  certbot:
+    image: ghcr.io/aligorov/routeros-aligorov/ligament-ice-certbot:1
+    hostname: ligament-ice-certbot
+    ports:
+      - 80:80/tcp
+    environment:
+      REALM: turn.example.com
+      ACME_EMAIL: admin@example.com
+      TZ: UTC
+    volumes:
+      - certs:/etc/letsencrypt
+    restart: unless-stopped
+
+  ice:
+    image: ghcr.io/aligorov/routeros-aligorov/ligament-ice:1
+    hostname: ligament-ice
+    depends_on:
+      - certbot
+    ports:
+      - 443:443/tcp
+      - 443:443/udp
+      - 3478:3478/tcp
+      - 3478:3478/udp
+      - 5349:5349/tcp
+      - 5349:5349/udp
+    environment:
+      REALM: turn.example.com
+      EXTERNAL_IP: auto
+      TURN_USER: ligament
+      TURN_PASSWORD: change-me
+      TURN_MIN_PORT: "49152"
+      TURN_MAX_PORT: "49250"
+      TZ: UTC
+    volumes:
+      - certs:/etc/coturn/certs
+      - ice-config:/etc/coturn
+    restart: unless-stopped
+
+volumes:
+  certs: {}
+  ice-config: {}
