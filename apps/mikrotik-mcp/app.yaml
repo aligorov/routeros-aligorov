@@ -29,6 +29,9 @@ services:
       MIKROTIK_API_PORT: "8729"
       MIKROTIK_TLS_VERIFY: "false"
       MIKROTIK_TIMEOUT_MS: "30000"
+      MCP_AUDIT_LOG_PATH: /app/data/mcp-audit.jsonl
+      MIKROTIK_ROUTER_AUDIT_LOG: "true"
+      MIKROTIK_ROUTER_LOG_MARKERS: "true"
       TZ: UTC
     volumes:
       - mcp-config:/app/config

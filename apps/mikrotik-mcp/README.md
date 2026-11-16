@@ -49,4 +49,7 @@
 | `MIKROTIK_API_TLS` / `MIKROTIK_API_PORT` | TLS (`true`/`false`) и порт Binary API | `true` / `8729` |
 | `MIKROTIK_TLS_VERIFY` | Проверять TLS-сертификат роутера (при `ca.pem` можно `true`) | `false` |
 | `MCP_PORT` / `MCP_PATH` | Порт и URL-путь HTTP MCP endpoint | `3000` / `/mcp` |
+| `MCP_AUDIT_LOG_PATH` | Файл JSONL-аудита вызовов MCP внутри тома `mcp-data` | `/app/data/mcp-audit.jsonl` |
+| `MIKROTIK_ROUTER_AUDIT_LOG` | Автоматически создавать на роутере отдельный лог `mcpdisk` + правила `[MCP-LOG]` в `/system/logging` | `true` |
+| `MIKROTIK_ROUTER_LOG_MARKERS` | Писать `[MCP]`-метки через `/log/info` / `/log/warning` при мутациях | `true` |
 | `TZ` | Часовой пояс | `UTC` |
