@@ -1,5 +1,5 @@
 name: A-mikrotik-mcp
-descr: "MCP-шлюз для RouterOS 7.24+ (REST API + Binary API over Streamable HTTP) — 35 инструментов управления, диагностики, анализа логов и скриптов"
+descr: "MCP-шлюз (v1.1.0) для RouterOS 7.24+ (REST API + Binary API over Streamable HTTP) — 35 инструментов управления, диагностики, анализа логов и скриптов"
 page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/mikrotik-mcp
 category: ai
 icon: icon.png
@@ -8,7 +8,7 @@ auto-update: false
 
 services:
   mikrotik-mcp:
-    image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:1
+    image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:1.1.0
     hostname: mikrotik-mcp
     ports:
       - 3000:3000/tcp:web

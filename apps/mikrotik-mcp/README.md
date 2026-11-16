@@ -2,7 +2,7 @@
 
 Полнофункциональный мульти-роутерный **MCP-шлюз (`mikrotik-mcp-server`)** для **MikroTik RouterOS 7.24+** по протоколам **REST API** (`/rest`) и **Binary API** (`8728`/`8729`), без использования SSH.
 
-- Образ: `ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:1` (`linux/arm64`, `linux/amd64`).
+- Образ: `ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:1.1.0` (`linux/arm64`, `linux/amd64`; также публикуются теги каналов `:1.1` и `:1`).
 - Порт: `3000/tcp` (Streamable HTTP MCP endpoint `/mcp` и проверка живости `/healthz`).
 - Тома:
   - `mcp-config` → `/app/config` (опциональные `routers.yaml` для управления парком роутеров и `ca.pem` для TLS-верификации).
