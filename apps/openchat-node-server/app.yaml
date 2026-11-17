@@ -1,5 +1,5 @@
 name: A-openchat-node-server
-descr: "OpenChat Sovereign Mesh Node — STUN Rendezvous, Blind Mailbox, No-Exit Relay и MediaRelay (UDP :4433)"
+descr: "OpenChat Sovereign Mesh Node — STUN Rendezvous, Blind Mailbox, No-Exit Relay, MediaRelay (UDP :4433) & ShadowTLS v3 (TCP :8443)"
 page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/openchat-node-server
 category: messaging
 icon: icon.png
@@ -11,8 +11,12 @@ services:
     hostname: openchat-node-server
     ports:
       - 4433:4433/udp
+      - 8443:8443/tcp
     environment:
       OPENCHAT_PORT: "4433"
+      OPENCHAT_TLS_PORT: "8443"
+      OPENCHAT_SNI_DONOR: "yastatic.net"
+      OPENCHAT_STRICT_NOISE: "true"
       OPENCHAT_PIN: auto
       OPENCHAT_ENABLE_TG: "false"
       OPENCHAT_SPONSOR: "@openchat_freedom"
