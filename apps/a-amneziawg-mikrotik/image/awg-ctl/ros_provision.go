@@ -246,13 +246,30 @@ func BuildROSSchemaCLIScript(s AppSettings, containerIP, peerIP string) string {
 :if ([:len [find chain="awg-bgp-in" comment="awg-ctl:bgp-in"]] = 0) do={
   add chain="awg-bgp-in" rule="if (dst in 0.0.0.0/0 && dst-len > 0) { accept }" comment="awg-ctl:bgp-in"
 }
-/routing/bgp/connection
 `)
-		b.WriteString(fmt.Sprintf(`:if ([:len [find name="awg-ctl-bgp"]] = 0) do={
-  add name="awg-ctl-bgp" as=%d remote.address=%s/32 remote.as=%d local.role=%s connect=no listen=yes routing-table="%s" input.filter="awg-bgp-in" comment="awg-ctl:bgp"
+		b.WriteString(fmt.Sprintf(`/routing/bgp/instance
+:if ([:len [find name="default"]] = 0) do={
+  :do { add name="default" as=%d } on-error={}
 } else={
-  set [find name="awg-ctl-bgp"] as=%d remote.address=%s/32 remote.as=%d local.role=%s connect=no listen=yes routing-table="%s" input.filter="awg-bgp-in" disabled=no
+  :do { set [find name="default"] as=%d } on-error={}
+}
+/routing/bgp/connection
+:if ([:len [find name="awg-ctl-bgp"]] = 0) do={
+  :do {
+    add name="awg-ctl-bgp" instance="default" as=%d remote.address=%s/32 remote.as=%d local.role=%s connect=no listen=yes routing-table="%s" input.filter="awg-bgp-in" comment="awg-ctl:bgp"
+  } on-error={
+    add name="awg-ctl-bgp" as=%d remote.address=%s/32 remote.as=%d local.role=%s connect=no listen=yes routing-table="%s" input.filter="awg-bgp-in" comment="awg-ctl:bgp"
+  }
+} else={
+  :do {
+    set [find name="awg-ctl-bgp"] instance="default" as=%d remote.address=%s/32 remote.as=%d local.role=%s connect=no listen=yes routing-table="%s" input.filter="awg-bgp-in" disabled=no
+  } on-error={
+    set [find name="awg-ctl-bgp"] as=%d remote.address=%s/32 remote.as=%d local.role=%s connect=no listen=yes routing-table="%s" input.filter="awg-bgp-in" disabled=no
+  }
 }`,
+			remoteAS, remoteAS,
+			remoteAS, containerIP, localAS, role, bgpTable,
+			remoteAS, containerIP, localAS, role, bgpTable,
 			remoteAS, containerIP, localAS, role, bgpTable,
 			remoteAS, containerIP, localAS, role, bgpTable,
 		))
@@ -725,9 +742,13 @@ func (c *ROSClient) InspectSchema(s AppSettings) ROSSchemaReport {
 					connDetail = fmt.Sprintf("%s: remote.address=%s (нужно %s/32)", name, remAddr, conn.gatewayIP)
 					continue
 				}
-				if strField(r, "as") != wantRemoteAS || strField(r, "remote.as") != wantLocalAS {
-					connDetail = fmt.Sprintf("%s: AS=%s/remote.as=%s (ожидалось %s/%s)",
-						name, strField(r, "as"), strField(r, "remote.as"), wantRemoteAS, wantLocalAS)
+				rAS := strField(r, "as")
+				if rAS != "" && rAS != wantRemoteAS {
+					connDetail = fmt.Sprintf("%s: AS=%s (ожидалось %s)", name, rAS, wantRemoteAS)
+					continue
+				}
+				if strField(r, "remote.as") != "" && strField(r, "remote.as") != wantLocalAS {
+					connDetail = fmt.Sprintf("%s: remote.as=%s (ожидалось %s)", name, strField(r, "remote.as"), wantLocalAS)
 					continue
 				}
 				if !isTruthyROS(r["listen"]) {
@@ -738,8 +759,12 @@ func (c *ROSClient) InspectSchema(s AppSettings) ROSSchemaReport {
 					connDetail = fmt.Sprintf("%s: не задан input.filter", name)
 					continue
 				}
+				dispAS := rAS
+				if dispAS == "" {
+					dispAS = wantRemoteAS
+				}
 				connOK = true
-				connDetail = fmt.Sprintf("%s (AS%s <- AS%s, peer=%s, table=%s)", name, wantRemoteAS, wantLocalAS, remAddr, firstNonEmpty(strField(r, "routing-table"), "main"))
+				connDetail = fmt.Sprintf("%s (AS%s <- AS%s, peer=%s, table=%s)", name, dispAS, wantLocalAS, remAddr, firstNonEmpty(strField(r, "routing-table"), "main"))
 				break
 			}
 		}
@@ -1217,24 +1242,58 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 			applied = append(applied, "updated BGP input filter rule awg-bgp-in")
 		}
 
+		// RouterOS 7.20+ requires an explicit BGP instance (/routing/bgp/instance)
+		// and mandatory instance parameter on /routing/bgp/connection.
+		remoteASStr := strconv.FormatUint(uint64(normS.ROSBGPRemoteAS), 10)
+		chosenInst := "default"
+		instRows, iErr := c.rosPrint(ctx, conn, "/routing/bgp/instance", []string{".id", "name", "as", "disabled"})
+		if iErr == nil {
+			var defaultInstID string
+			var defaultInstAS string
+			for _, r := range instRows {
+				if strField(r, "name") == "default" {
+					defaultInstID = strField(r, ".id")
+					defaultInstAS = strField(r, "as")
+					break
+				}
+			}
+			if defaultInstID == "" {
+				if err := c.rosAdd(ctx, conn, "/routing/bgp/instance", map[string]string{
+					"name": "default",
+					"as":   remoteASStr,
+				}); err == nil {
+					applied = append(applied, fmt.Sprintf("created BGP instance default (AS%d)", normS.ROSBGPRemoteAS))
+				} else if len(instRows) > 0 {
+					chosenInst = strField(instRows[0], "name")
+				}
+			} else if defaultInstAS == "" || defaultInstAS == "0" {
+				if err := c.rosSet(ctx, conn, "/routing/bgp/instance", defaultInstID, map[string]string{
+					"as": remoteASStr,
+				}); err == nil {
+					applied = append(applied, fmt.Sprintf("updated BGP instance default (AS%d)", normS.ROSBGPRemoteAS))
+				}
+			}
+		}
+
 		role := "ebgp"
 		if normS.ROSBGPLocalAS == normS.ROSBGPRemoteAS {
 			role = "ibgp"
 		}
 		bgpFields := map[string]string{
-			"name":             "awg-ctl-bgp",
-			"as":               strconv.FormatUint(uint64(normS.ROSBGPRemoteAS), 10),
-			"remote.address":   conn.gatewayIP + "/32",
-			"remote.as":        strconv.FormatUint(uint64(normS.ROSBGPLocalAS), 10),
+			"name":           "awg-ctl-bgp",
+			"instance":       chosenInst,
+			"as":             remoteASStr,
+			"remote.address": conn.gatewayIP + "/32",
+			"remote.as":      strconv.FormatUint(uint64(normS.ROSBGPLocalAS), 10),
 			"local.role":     role,
 			"connect":        "no",
 			"listen":         "yes",
 			"routing-table":  tableName,
-			"input.filter":     "awg-bgp-in",
-			"comment":          "awg-ctl:bgp",
+			"input.filter":   "awg-bgp-in",
+			"comment":        "awg-ctl:bgp",
 		}
 		bgpRows, err := c.rosPrint(ctx, conn, "/routing/bgp/connection", []string{
-			".id", "name", "as", "remote.address", "remote.as", "local.role",
+			".id", "name", "instance", "as", "remote.address", "remote.as", "local.role",
 			"connect", "listen", "routing-table", "input.filter", "disabled", "comment",
 		})
 		if err != nil {
@@ -1248,15 +1307,64 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 				break
 			}
 		}
+
+		addConnWithFallback := func(fields map[string]string) error {
+			f := make(map[string]string, len(fields))
+			for k, v := range fields {
+				f[k] = v
+			}
+			err := c.rosAdd(ctx, conn, "/routing/bgp/connection", f)
+			if err != nil {
+				errLower := strings.ToLower(err.Error())
+				if strings.Contains(errLower, "instance") && f["instance"] != "" {
+					delete(f, "instance")
+					if err2 := c.rosAdd(ctx, conn, "/routing/bgp/connection", f); err2 == nil {
+						return nil
+					}
+				}
+				if strings.Contains(errLower, "unknown parameter as") && f["as"] != "" {
+					delete(f, "as")
+					if err2 := c.rosAdd(ctx, conn, "/routing/bgp/connection", f); err2 == nil {
+						return nil
+					}
+				}
+			}
+			return err
+		}
+
+		setConnWithFallback := func(id string, fields map[string]string) error {
+			f := make(map[string]string, len(fields))
+			for k, v := range fields {
+				f[k] = v
+			}
+			err := c.rosSet(ctx, conn, "/routing/bgp/connection", id, f)
+			if err != nil {
+				errLower := strings.ToLower(err.Error())
+				if strings.Contains(errLower, "instance") && f["instance"] != "" {
+					delete(f, "instance")
+					if err2 := c.rosSet(ctx, conn, "/routing/bgp/connection", id, f); err2 == nil {
+						return nil
+					}
+				}
+				if strings.Contains(errLower, "unknown parameter as") && f["as"] != "" {
+					delete(f, "as")
+					if err2 := c.rosSet(ctx, conn, "/routing/bgp/connection", id, f); err2 == nil {
+						return nil
+					}
+				}
+			}
+			return err
+		}
+
 		if bgpID == "" {
-			if err := c.rosAdd(ctx, conn, "/routing/bgp/connection", bgpFields); err != nil {
+			if err := addConnWithFallback(bgpFields); err != nil {
 				provErr = err
 				break
 			}
 			applied = append(applied, fmt.Sprintf("added BGP peer awg-ctl-bgp (%s/32 AS%d)", conn.gatewayIP, normS.ROSBGPLocalAS))
 		} else {
 			bgpFields["disabled"] = "no"
-			if err := c.rosSet(ctx, conn, "/routing/bgp/connection", bgpID, bgpFields); err != nil {
+			if err := setConnWithFallback(bgpID, bgpFields); err != nil {
 				provErr = err
 				break
 			}

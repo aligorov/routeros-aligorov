@@ -703,6 +703,7 @@ func TestROSProvisionAddressListAndBGP(t *testing.T) {
 	}
 	mangles := []map[string]any{}
 	bgpFilters := map[string]map[string]any{}
+	bgpInstances := map[string]map[string]any{}
 	bgpConns := map[string]map[string]any{}
 	nextID := 10
 
@@ -797,6 +798,26 @@ func TestROSProvisionAddressListAndBGP(t *testing.T) {
 			bgpFilters[id] = body
 			rw.WriteHeader(http.StatusCreated)
 
+		case r.Method == http.MethodPost && r.URL.Path == "/rest/routing/bgp/instance/print":
+			var out []map[string]any
+			for _, v := range bgpInstances {
+				out = append(out, v)
+			}
+			_ = json.NewEncoder(rw).Encode(out)
+		case r.Method == http.MethodPut && r.URL.Path == "/rest/routing/bgp/instance":
+			id := allocID()
+			body[".id"] = id
+			bgpInstances[id] = body
+			rw.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/rest/routing/bgp/instance/"):
+			id := strings.TrimPrefix(r.URL.Path, "/rest/routing/bgp/instance/")
+			if cur, ok := bgpInstances[id]; ok {
+				for k, v := range body {
+					cur[k] = v
+				}
+			}
+			rw.WriteHeader(http.StatusOK)
+
 		case r.Method == http.MethodPost && r.URL.Path == "/rest/routing/bgp/connection/print":
 			var out []map[string]any
 			for _, v := range bgpConns {
@@ -869,9 +890,14 @@ func TestROSProvisionAddressListAndBGP(t *testing.T) {
 	sBGP := s
 	sBGP.ROSMode = ROSModeBGP
 	provBGP := ros.ProvisionSchema(sBGP, ROSProvisionOptions{})
-	if !provBGP.OK || len(bgpConns) != 1 || len(bgpFilters) != 1 {
-		t.Fatalf("expected BGP provision OK with 1 conn & 1 filter, got ok=%v err=%q conns=%d filters=%d",
-			provBGP.OK, provBGP.Error, len(bgpConns), len(bgpFilters))
+	if !provBGP.OK || len(bgpConns) != 1 || len(bgpFilters) != 1 || len(bgpInstances) != 1 {
+		t.Fatalf("expected BGP provision OK with 1 conn, 1 filter & 1 instance, got ok=%v err=%q conns=%d filters=%d instances=%d",
+			provBGP.OK, provBGP.Error, len(bgpConns), len(bgpFilters), len(bgpInstances))
+	}
+	for _, c := range bgpConns {
+		if strField(c, "instance") != "default" {
+			t.Fatalf("expected BGP connection to have instance=default, got %+v", c)
+		}
 	}
 	checkMap := map[string]bool{}
 	for _, ch := range provBGP.Report.Checks {
@@ -879,6 +905,17 @@ func TestROSProvisionAddressListAndBGP(t *testing.T) {
 	}
 	if !checkMap["bgp_filter"] || !checkMap["bgp_conn"] {
 		t.Fatalf("expected bgp_filter and bgp_conn OK after provision, got %+v", provBGP.Report.Checks)
+	}
+
+	cliScript := BuildROSSchemaCLIScript(sBGP, "172.18.0.99", "172.18.0.1")
+	if !strings.Contains(cliScript, `/routing/bgp/instance`) {
+		t.Fatalf("expected CLI script to configure /routing/bgp/instance, got:\n%s", cliScript)
+	}
+	if !strings.Contains(cliScript, `instance="default"`) {
+		t.Fatalf("expected CLI script to pass instance=\"default\", got:\n%s", cliScript)
+	}
+	if strings.Contains(cliScript, `address-families`) {
+		t.Fatalf("CLI script should not contain address-families, got:\n%s", cliScript)
 	}
 }
 
