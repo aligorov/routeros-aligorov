@@ -249,9 +249,9 @@ func BuildROSSchemaCLIScript(s AppSettings, containerIP, peerIP string) string {
 /routing/bgp/connection
 `)
 		b.WriteString(fmt.Sprintf(`:if ([:len [find name="awg-ctl-bgp"]] = 0) do={
-  add name="awg-ctl-bgp" as=%d remote.address=%s/32 remote.as=%d local.role=%s connect=no listen=yes address-families=ip routing-table="%s" input.filter="awg-bgp-in" comment="awg-ctl:bgp"
+  add name="awg-ctl-bgp" as=%d remote.address=%s/32 remote.as=%d local.role=%s connect=no listen=yes routing-table="%s" input.filter="awg-bgp-in" comment="awg-ctl:bgp"
 } else={
-  set [find name="awg-ctl-bgp"] as=%d remote.address=%s/32 remote.as=%d local.role=%s connect=no listen=yes address-families=ip routing-table="%s" input.filter="awg-bgp-in" disabled=no
+  set [find name="awg-ctl-bgp"] as=%d remote.address=%s/32 remote.as=%d local.role=%s connect=no listen=yes routing-table="%s" input.filter="awg-bgp-in" disabled=no
 }`,
 			remoteAS, containerIP, localAS, role, bgpTable,
 			remoteAS, containerIP, localAS, role, bgpTable,
@@ -1226,11 +1226,10 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 			"as":               strconv.FormatUint(uint64(normS.ROSBGPRemoteAS), 10),
 			"remote.address":   conn.gatewayIP + "/32",
 			"remote.as":        strconv.FormatUint(uint64(normS.ROSBGPLocalAS), 10),
-			"local.role":       role,
-			"connect":          "no",
-			"listen":           "yes",
-			"address-families": "ip",
-			"routing-table":    tableName,
+			"local.role":     role,
+			"connect":        "no",
+			"listen":         "yes",
+			"routing-table":  tableName,
 			"input.filter":     "awg-bgp-in",
 			"comment":          "awg-ctl:bgp",
 		}

@@ -202,3 +202,34 @@
       restart: unless-stopped
   volumes:
     openchat-data: {}
+- name: A-openchat-push-gateway
+  descr: OpenChat Blind Push Gateway — слепые PushCapability (XChaCha20-Poly1305)
+    и APNs/FCM пробуждение без раскрытия контактов
+  page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/openchat-push-gateway
+  category: messaging
+  icon: https://aligorov.github.io/routeros-aligorov/apps/openchat-push-gateway/icon.png
+  url-path: /health
+  auto-update: false
+  services:
+    openchat-push-gateway:
+      image: ghcr.io/aligorov/routeros-aligorov/openchat-push-gateway:1
+      hostname: openchat-push-gateway
+      ports:
+      - 8088:8088/tcp:web
+      environment:
+        PUSH_GATEWAY_PORT: '8088'
+        PUSH_CAP_KEY: auto
+        APNS_KEY_PATH: auto
+        APNS_KEY_ID: none
+        APNS_TEAM_ID: none
+        APNS_BUNDLE_ID: org.openchat.ios
+        APNS_SANDBOX: 'false'
+        FCM_KEY_PATH: auto
+        TZ: UTC
+      volumes:
+      - push-data:/var/lib/openchat-push
+      - push-keys:/app/keys
+      restart: unless-stopped
+  volumes:
+    push-data: {}
+    push-keys: {}

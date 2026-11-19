@@ -108,7 +108,8 @@ scripts/ghcr-push.sh       # сборка arm64-образа и пуш в GHCR
 | Приложение | Что это | Проверка |
 |---|---|---|
 | `A-amneziawg-mikrotik` | AmneziaWG 3.1 (`amneziawg-go` + `awg-quick`) с WebUI, QR, DNS-форвардером, Netwatch и REST-синком RouterOS | `http://<ip-роутера>:8092`, порт `51821:51820/udp` |
-| `A-openchat-node-server` | OpenChat Sovereign Mesh Node: STUN Rendezvous, Blind Mailbox, No-Exit Relay и MediaRelay | порт `4433/udp`, см. `apps/openchat-node-server/README.md` |
+| `A-openchat-node-server` | OpenChat Sovereign Mesh Node: STUN Rendezvous, Blind Mailbox, No-Exit Relay, MediaRelay и ShadowTLS v3 | порты `4433/udp`, `8443/tcp`, см. `apps/openchat-node-server/README.md` |
+| `A-openchat-push-gateway` | OpenChat Blind Push Gateway: обезличенные PushCapability (XChaCha20-Poly1305), APNs HTTP/2 и FCM | `http://<ip-роутера>:8088/health`, см. `apps/openchat-push-gateway/README.md` |
 | `A-ligament-ice` | Ligament ICE (`coturn` + `certbot`): WebRTC STUN/TURN/TURNS TLS с автовыпуском Let's Encrypt | порты `80/tcp`, `443`, `3478`, `5349`, см. `apps/ligament-ice/README.md` |
 | `A-ligament-relay` | Ligament Relay: edge-узел филиала Ligament 2FA (RADIUS 1812, HTTP/WS 8082, LDAP/LDAPS, offline TOTP) | порты `1812/udp`, `8082/tcp`, см. `apps/ligament-relay/README.md` |
 | `A-mikrotik-mcp` | Мульти-роутерный MCP-шлюз для RouterOS 7.24+ (REST API + Binary API over Streamable HTTP) | `http://<ip-роутера>:3000/healthz`, endpoint `/mcp` |
