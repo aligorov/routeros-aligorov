@@ -89,6 +89,13 @@ AllowedIPs = 0.0.0.0/0
 	if u7 != expected4 {
 		t.Errorf("expected %s, got %s", expected4, u7)
 	}
+
+	// 8. Explicit URL with chained ports: http://64.118.150.81:48389:8443/sub/awg_tok_test123
+	sub8 := SubscriptionConfig{URL: "http://64.118.150.81:48389:8443/sub/awg_tok_test123"}
+	u8 := sm.EffectiveURL(sub8, "tok")
+	if u8 != expected4 {
+		t.Errorf("expected %s, got %s", expected4, u8)
+	}
 }
 
 func TestSubscriptionFetchAndSync(t *testing.T) {

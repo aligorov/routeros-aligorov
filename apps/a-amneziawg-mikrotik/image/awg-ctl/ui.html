@@ -1999,11 +1999,21 @@ async function saveSubModal(syncNow, btn) {
   if (cleanApiHost.includes(':') && !cleanApiHost.includes('::')) {
     cleanApiHost = cleanApiHost.split(':')[0];
   }
+  let cleanURL = document.getElementById('subModalURL').value.trim();
+  if (cleanURL.startsWith('http://') || cleanURL.startsWith('https://')) {
+    try {
+      const u = new URL(cleanURL);
+      let h = u.hostname;
+      if (h.includes(':') && !h.includes('::')) h = h.split(':')[0];
+      const p = u.port || '8443';
+      cleanURL = `${u.protocol}//${h}:${p}${u.pathname}${u.search}`;
+    } catch (_) {}
+  }
   const payload = {
     token: document.getElementById('subModalToken').value.trim(),
     api_port: parseInt(document.getElementById('subModalPort').value, 10) || 8443,
     api_host: cleanApiHost,
-    url: document.getElementById('subModalURL').value.trim(),
+    url: cleanURL,
     interval_min: parseInt(document.getElementById('subModalInterval').value, 10) || 30,
     auto_update: document.getElementById('subModalAuto').checked,
     sync_on_failure: document.getElementById('subModalOnFail').checked,

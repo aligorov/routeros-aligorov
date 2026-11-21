@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -75,11 +76,47 @@ func cleanHost(raw string) string {
 }
 
 // EffectiveURL resolves the actual subscription endpoint for a config:
-// 1. If explicit URL is given (http://, https://, vpn://), use it.
+// 1. If explicit URL is given (http://, https://, vpn://), use it (auto-cleaning any chained ports).
 // 2. If Token is given, construct http://<host>:<port>/sub/<token> using APIHost or config Endpoint.
 func (sm *SubscriptionManager) EffectiveURL(sub SubscriptionConfig, cfgName string) string {
 	rawURL := strings.TrimSpace(sub.URL)
-	if strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") || strings.HasPrefix(strings.ToLower(rawURL), "vpn://") {
+	if strings.HasPrefix(strings.ToLower(rawURL), "vpn://") {
+		return rawURL
+	}
+	if strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") {
+		scheme := "http://"
+		rest := rawURL[len("http://"):]
+		if strings.HasPrefix(rawURL, "https://") {
+			scheme = "https://"
+			rest = rawURL[len("https://"):]
+		}
+		pathIdx := strings.Index(rest, "/")
+		var hostPortStr, pathStr string
+		if pathIdx != -1 {
+			hostPortStr = rest[:pathIdx]
+			pathStr = rest[pathIdx:]
+		} else {
+			hostPortStr = rest
+			pathStr = ""
+		}
+		lastPort := ""
+		if idx := strings.LastIndex(hostPortStr, ":"); idx != -1 {
+			p := hostPortStr[idx+1:]
+			if _, err := strconv.Atoi(p); err == nil {
+				lastPort = p
+			}
+		}
+		cleanH := cleanHost(hostPortStr)
+		if cleanH != "" {
+			if lastPort != "" {
+				if strings.Contains(cleanH, ":") && !strings.HasPrefix(cleanH, "[") {
+					cleanH = fmt.Sprintf("[%s]:%s", cleanH, lastPort)
+				} else {
+					cleanH = fmt.Sprintf("%s:%s", cleanH, lastPort)
+				}
+			}
+			return scheme + cleanH + pathStr
+		}
 		return rawURL
 	}
 
