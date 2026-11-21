@@ -41,7 +41,7 @@ func NewSubscriptionManager(settings *SettingsStore, mgr *TunnelManager, tg *TGN
 	}
 }
 
-// cleanHost strips schema, path, brackets, and port from a host/endpoint string.
+// cleanHost strips schema, path, brackets, and all trailing port segments from a host/endpoint string.
 func cleanHost(raw string) string {
 	raw = strings.TrimSpace(raw)
 	raw = strings.TrimPrefix(raw, "http://")
@@ -49,6 +49,21 @@ func cleanHost(raw string) string {
 	if idx := strings.Index(raw, "/"); idx != -1 {
 		raw = raw[:idx]
 	}
+	// Check bracketed IPv6 first: e.g. [2001:db8::1]:1234
+	if strings.HasPrefix(raw, "[") {
+		if idx := strings.Index(raw, "]"); idx != -1 {
+			return raw[1:idx]
+		}
+	}
+	// If it contains dots, it is an IPv4 or domain name.
+	// Strip ANY and ALL trailing :port segments (even if accidentally repeated, e.g. 1.2.3.4:111:222)
+	if strings.Contains(raw, ".") {
+		if idx := strings.Index(raw, ":"); idx != -1 {
+			return strings.Trim(raw[:idx], "[]")
+		}
+		return strings.Trim(raw, "[]")
+	}
+	// Standard SplitHostPort
 	if h, _, err := net.SplitHostPort(raw); err == nil && h != "" {
 		return strings.Trim(h, "[]")
 	}

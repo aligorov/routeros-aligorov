@@ -1044,9 +1044,8 @@ func (w *WebServer) handleSaveSubscription(rw http.ResponseWriter, r *http.Reque
 	} else if existing.APIPort <= 0 {
 		existing.APIPort = 8443
 	}
-	if req.APIHost != "" {
-		existing.APIHost = cleanHost(req.APIHost)
-	}
+	// Always sanitize APIHost and allow clearing if empty
+	existing.APIHost = cleanHost(req.APIHost)
 	if req.URL != "" {
 		existing.URL = strings.TrimSpace(req.URL)
 	}
