@@ -88,7 +88,7 @@
   .term-bar input { border:none; background:transparent; padding:4px 2px; font-size:.85rem; }
 
   /* Toast */
-  #toast { position:fixed; right:16px; bottom:16px; z-index:99; background:#1e293b; border:1px solid var(--bd); border-radius:8px; padding:10px 14px; font-size:.84rem; box-shadow:0 8px 24px rgba(0,0,0,.45); max-width:380px; opacity:0; pointer-events:none; transition:opacity .18s; }
+  #toast { position:fixed; right:16px; bottom:16px; z-index:250; background:#1e293b; border:1px solid var(--bd); border-radius:8px; padding:10px 14px; font-size:.84rem; box-shadow:0 8px 24px rgba(0,0,0,.45); max-width:440px; opacity:0; pointer-events:none; transition:opacity .18s; }
   #toast.show { opacity:1; pointer-events:auto; }
   #toast.bad { border-color:var(--bad); color:#fecaca; }
   #toast.ok { border-color:var(--ok); color:#bbf7d0; }
@@ -747,6 +747,7 @@
       <label class="chk"><input type="checkbox" id="vpsHTTPS" checked> HTTPS (dual-mode TLS на :8443)</label>
       <label class="chk"><input type="checkbox" id="vpsTLSInsecure" checked> Принимать self-signed TLS</label>
     </div>
+    <div id="vpsModalErr" class="banner-warn hide" style="border-color:var(--bad);color:#fecaca;background:rgba(239,68,68,.14)"></div>
     <div class="row" style="justify-content:flex-end">
       <button onclick="closeModal('vpsModal')">Отмена</button>
       <button class="primary" onclick="saveVPSServer(this)">Сохранить и подключиться</button>
@@ -788,6 +789,7 @@
     </div>
 
     <div class="mut" style="margin-bottom:12px">После изменения локальные туннели роутера к этому VPS синхронизируются автоматически, а клиенты с включённой авто-рассылкой получат свежие QR и .conf в Telegram.</div>
+    <div id="vpsStealthErr" class="banner-warn hide" style="border-color:var(--bad);color:#fecaca;background:rgba(239,68,68,.14)"></div>
     <div class="row" style="justify-content:flex-end">
       <button onclick="closeModal('vpsStealthModal')">Закрыть</button>
     </div>
@@ -805,7 +807,7 @@
     <div class="grid" style="margin-bottom:8px">
       <div>
         <label class="mut">Сервер VPS</label>
-        <select id="cliVPSSelect"></select>
+        <select id="cliVPSSelect" onchange="updateCliVPSEndpointHint()"></select>
       </div>
       <div>
         <label class="mut">Имя клиента (латиница/цифры/_/-)</label>
@@ -822,6 +824,7 @@
           <option value="ipv6">Внешний IPv6 сервера</option>
           <option value="custom">Свой домен / IP</option>
         </select>
+        <div id="cliEpHint" class="mut" style="margin-top:4px;font-size:.77rem"></div>
       </div>
       <div id="cliEpCustomWrap" class="hide">
         <label class="mut">Свой хост Endpoint</label>
@@ -865,6 +868,7 @@
       </div>
     </div>
 
+    <div id="cliModalErr" class="banner-warn hide" style="border-color:var(--bad);color:#fecaca;background:rgba(239,68,68,.14)"></div>
     <div class="row" style="justify-content:flex-end">
       <button onclick="closeModal('vpsClientModal')">Отмена</button>
       <button class="primary" onclick="submitClientModal(this)">Сохранить</button>
@@ -1164,7 +1168,8 @@ function updateTermDisabledBanner(enabled) {
 }
 
 async function api(url, opts) {
-  const { timeoutMs = 12000, ...fetchOpts } = opts || {};
+  const defaultTimeout = (String(url).startsWith('/api/vps') || String(url).startsWith('/api/tg')) ? 65000 : 12000;
+  const { timeoutMs = defaultTimeout, ...fetchOpts } = opts || {};
   const ctrl = new AbortController();
   let timedOut = false;
   const tid = timeoutMs > 0 ? setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs) : null;
@@ -2850,6 +2855,15 @@ function pickDoHFromCatalog(inputId, sel, appendId) {
 let vpsFleetData = { servers: [], clients: [], contacts: [], candidates: [], presets: [] };
 let currentQRData = { vps_id: '', client_name: '', config: '', vpn_url: '', sub_url: '', tg_chat_id: '' };
 
+function setModalErr(errId, msg) {
+  const el = document.getElementById(errId);
+  if (el) {
+    if (msg) { el.textContent = msg; el.classList.remove('hide'); }
+    else { el.textContent = ''; el.classList.add('hide'); }
+  }
+  if (msg) toast(msg, 'bad');
+}
+
 function closeModal(id) {
   const el = document.getElementById(id);
   if (el) el.classList.add('hide');
@@ -3025,6 +3039,7 @@ function filterByVPS(vpsID) {
 }
 
 function openVPSModal(vpsID = '') {
+  setModalErr('vpsModalErr', '');
   const srv = vpsID ? (vpsFleetData.servers || []).find(s => s.id === vpsID) : null;
   document.getElementById('vpsModalTitle').textContent = srv ? `Настройки VPS: ${srv.name}` : 'Добавить сервер VPS';
   document.getElementById('vpsEditID').value = srv ? srv.id : '';
@@ -3049,6 +3064,7 @@ function openVPSModalPrefill(name, host, port) {
 }
 
 async function saveVPSServer(btn) {
+  setModalErr('vpsModalErr', '');
   const payload = {
     id: document.getElementById('vpsEditID').value.trim(),
     name: document.getElementById('vpsName').value.trim(),
@@ -3068,7 +3084,7 @@ async function saveVPSServer(btn) {
       closeModal('vpsModal');
       if (res.refresh_error) toast('VPS сохранён, но опрос не удался: ' + res.refresh_error, 'bad');
       else toast('VPS сохранён и синхронизирован', 'ok');
-    } catch (e) { toast(e.message, 'bad'); }
+    } catch (e) { setModalErr('vpsModalErr', e.message); }
   });
 }
 
@@ -3122,6 +3138,7 @@ async function refreshAllVPS(notifyChanges, btn) {
 }
 
 function openVPSStealthModal(vpsID) {
+  setModalErr('vpsStealthErr', '');
   const srv = (vpsFleetData.servers || []).find(s => s.id === vpsID);
   if (!srv) return;
   document.getElementById('vpsStealthID').value = srv.id;
@@ -3150,8 +3167,9 @@ function toggleCustomPresetFields() {
 }
 
 async function applyVPSEndpoint(target, btn) {
+  setModalErr('vpsStealthErr', '');
   target = (target || '').trim();
-  if (!target) { toast('Укажите IPv4, IPv6 или домен', 'bad'); return; }
+  if (!target) { setModalErr('vpsStealthErr', 'Укажите IPv4, IPv6 или домен'); return; }
   const vpsID = document.getElementById('vpsStealthID').value;
   const resetOverrides = document.getElementById('vpsEpResetAll').checked;
   await withBusy(btn, async () => {
@@ -3165,11 +3183,12 @@ async function applyVPSEndpoint(target, btn) {
       openVPSStealthModal(vpsID);
       const sent = res.result?.notified_tg || 0;
       toast(`Endpoint переключён на ${target}. Разослано в ТГ: ${sent}`, 'ok');
-    } catch (e) { toast(e.message, 'bad'); }
+    } catch (e) { setModalErr('vpsStealthErr', e.message); }
   });
 }
 
 async function applyVPSPreset(btn) {
+  setModalErr('vpsStealthErr', '');
   const vpsID = document.getElementById('vpsStealthID').value;
   const preset = document.getElementById('vpsPresetSelect').value;
   const port = document.getElementById('vpsCustomPort').value.trim();
@@ -3185,11 +3204,12 @@ async function applyVPSPreset(btn) {
       openVPSStealthModal(vpsID);
       const sent = res.result?.notified_tg || 0;
       toast(`Маскировка ${preset} применена. Разослано в ТГ: ${sent}`, 'ok');
-    } catch (e) { toast(e.message, 'bad'); }
+    } catch (e) { setModalErr('vpsStealthErr', e.message); }
   });
 }
 
 async function rotateVPSServer(btn) {
+  setModalErr('vpsStealthErr', '');
   const vpsID = document.getElementById('vpsStealthID').value;
   if (!confirm('Выполнить полную ротацию сервера (новый порт, ключи и параметры обфускации)?')) return;
   await withBusy(btn, async () => {
@@ -3203,13 +3223,36 @@ async function rotateVPSServer(btn) {
       openVPSStealthModal(vpsID);
       const sent = res.result?.notified_tg || 0;
       toast(`Ротация выполнена (новый порт: ${res.result?.server?.listen_port || '?'}). Разослано в ТГ: ${sent}`, 'ok');
-    } catch (e) { toast(e.message, 'bad'); }
+    } catch (e) { setModalErr('vpsStealthErr', e.message); }
   });
 }
 
 function toggleCliEpCustom() {
   const isCust = document.getElementById('cliEpMode').value === 'custom';
   document.getElementById('cliEpCustomWrap').classList.toggle('hide', !isCust);
+  updateCliVPSEndpointHint();
+}
+
+function updateCliVPSEndpointHint() {
+  const el = document.getElementById('cliEpHint');
+  if (!el) return;
+  const vpsID = document.getElementById('cliVPSSelect')?.value || '';
+  const srv = (vpsFleetData.servers || []).find(s => s.id === vpsID);
+  if (!srv) { el.textContent = ''; return; }
+  const mode = document.getElementById('cliEpMode')?.value || 'server';
+  const v4 = srv.last_public_ipv4 || srv.api_host || '—';
+  const v6 = srv.last_public_ipv6 || '';
+  if (mode === 'ipv6') {
+    el.innerHTML = v6
+      ? `IPv6 сервера: <code>${esc(v6)}</code>`
+      : `<span style="color:var(--warn)">На VPS пока не обнаружен публичный IPv6</span>`;
+  } else if (mode === 'ipv4') {
+    el.innerHTML = `IPv4 сервера: <code>${esc(v4)}</code>`;
+  } else if (mode === 'server') {
+    el.innerHTML = `Текущий сервера: <code>${esc(srv.last_endpoint || v4)}</code>`;
+  } else {
+    el.textContent = '';
+  }
 }
 
 function populateContactSelect() {
@@ -3229,6 +3272,7 @@ function pickTGContactForClient(id) {
 }
 
 function openClientModal(vpsID = '', clientName = '') {
+  setModalErr('cliModalErr', '');
   const servers = vpsFleetData.servers || [];
   if (!servers.length) { toast('Сначала добавьте хотя бы один VPS', 'bad'); return; }
   const isEdit = !!(vpsID && clientName);
@@ -3268,14 +3312,15 @@ function openClientModal(vpsID = '', clientName = '') {
 }
 
 async function submitClientModal(btn) {
+  setModalErr('cliModalErr', '');
   const mode = document.getElementById('cliEditMode').value;
   const vpsID = document.getElementById('cliVPSSelect').value;
   const name = document.getElementById('cliName').value.trim();
-  if (!name) { toast('Укажите имя клиента', 'bad'); return; }
+  if (!name) { setModalErr('cliModalErr', 'Укажите имя клиента'); return; }
 
   const epMode = document.getElementById('cliEpMode').value;
   const epVal = epMode === 'custom' ? document.getElementById('cliEpCustom').value.trim() : epMode;
-  if (epMode === 'custom' && !epVal) { toast('Укажите свой домен/IP для Endpoint', 'bad'); return; }
+  if (epMode === 'custom' && !epVal) { setModalErr('cliModalErr', 'Укажите свой домен/IP для Endpoint'); return; }
 
   const tgChat = document.getElementById('cliTGChat').value.trim();
   const tgThread = parseInt(document.getElementById('cliTGThread').value, 10) || 0;
@@ -3339,7 +3384,7 @@ async function submitClientModal(btn) {
         const tgNote = res.data?.tg_error ? ` (ошибка ТГ: ${res.data.tg_error})` : (res.data?.tg_sent ? ' + отправлен в ТГ' : '');
         toast(`Клиент ${name} обновлён${tgNote}`, res.data?.tg_error ? 'bad' : 'ok');
       }
-    } catch (e) { toast(e.message, 'bad'); }
+    } catch (e) { setModalErr('cliModalErr', e.message); }
   });
 }
 

@@ -3,7 +3,7 @@
 #  Источники приложений: apps/*/app.yaml
 # =============================================================
 - name: A-amneziawg-mikrotik
-  descr: AmneziaWG 3.1 (v1.7.2) — VPS Fleet & Client Manager (12 UDP Stealth + IPv4/IPv6
+  descr: AmneziaWG 3.1 (v1.7.3) — VPS Fleet & Client Manager (12 UDP Stealth + IPv4/IPv6
     + TG Auto-Delivery), Dual-Stack, Multi-Tunnel, Failover, DoH, GeoSite/GeoIP, RouterOS
     (Address-List/BGP/Binary API)
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/a-amneziawg-mikrotik
