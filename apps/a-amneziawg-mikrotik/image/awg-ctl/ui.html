@@ -514,38 +514,78 @@
     </div>
 
     <div class="card">
-      <h2>Telegram уведомления (ЛС / Группа / Топик форума)</h2>
-      <div class="row" style="gap:16px;margin-bottom:12px">
-        <label class="chk"><input type="checkbox" id="setTGEnabled"> Включить уведомления Telegram</label>
-        <label class="chk"><input type="checkbox" id="setTGSilent"> Тихий режим (без звука)</label>
+      <h2>Telegram: мониторинг и доставка конфигов</h2>
+      <div class="row" style="gap:16px;margin-bottom:10px;flex-wrap:wrap">
+        <label class="chk"><input type="checkbox" id="setTGEnabled"> Включить уведомления администратору</label>
+        <label class="chk"><input type="checkbox" id="setTGSilentInfo"> Без звука для инфо / сводки / recovery</label>
+        <label class="chk"><input type="checkbox" id="setTGSilent"> Полная тишина (глушить и аварии)</label>
         <label class="chk"><input type="checkbox" id="setTGClearTok"> Очистить сохранённый токен</label>
       </div>
       <div class="grid" style="margin-bottom:12px">
-        <div><label class="mut" id="setTGTokLbl">Bot Token</label><input id="setTGToken" type="password" placeholder="123456:ABC... (пусто — не менять)"></div>
-        <div><label class="mut">Chat ID (пользователь или -100... группы)</label><input id="setTGChat" placeholder="-1001234567890"></div>
-        <div><label class="mut">ID топика (message_thread_id, 0 = общий чат)</label><input id="setTGThread" type="number" min="0" value="0"></div>
-        <div><label class="mut">Топик для Failover / падений (0 = общий топик)</label><input id="setTGAlertThread" type="number" min="0" value="0"></div>
+        <div><label class="mut" id="setTGTokLbl">Bot Token (общий для алертов и VPS-клиентов)</label><input id="setTGToken" type="password" placeholder="123456:ABC... (пусто — не менять)"></div>
+        <div><label class="mut">Chat ID админа (ЛС или -100... группы)</label><input id="setTGChat" placeholder="-1001234567890"></div>
+        <div><label class="mut">Основной топик (инфо, сводка, ротации; 0 = чат)</label><input id="setTGThread" type="number" min="0" value="0"></div>
+        <div><label class="mut">Топик критических алертов (падения / Failover)</label><input id="setTGAlertThread" type="number" min="0" value="0"></div>
         <div><label class="mut">Имя роутера / узла</label><input id="setTGNode" placeholder="coredom25"></div>
         <div>
           <label class="mut">Доставка до api.telegram.org</label>
           <select id="setTGVia">
-            <option value="auto">Auto (напрямую → фолбэк в VPN)</option>
+            <option value="auto">Auto (sticky route: напрямую ↔ VPN)</option>
             <option value="direct">Напрямую (рекомендуется для алертов падения)</option>
             <option value="tunnel">Только через VPN-туннель</option>
           </select>
         </div>
         <div><label class="mut">Bot API URL</label><input id="setTGAPI" placeholder="https://api.telegram.org"></div>
-        <div><label class="mut">Ежедневная сводка (час 0..23, -1 = выкл)</label><input id="setTGDigest" type="number" min="-1" max="23" value="-1"></div>
+        <div><label class="mut">Тихие часы (не для Critical, напр. 23:00-08:00)</label><input id="setTGQuietHours" placeholder="выкл (напр. 23:00-08:00)"></div>
+        <div>
+          <label class="mut">Ежедневная сводка (час 0..23, -1 = выкл)</label>
+          <input id="setTGDigest" type="number" min="-1" max="23" value="-1">
+        </div>
+        <div>
+          <label class="mut">Часовой пояс (для сводки и тихих часов)</label>
+          <select id="setTGDigestTZ">
+            <option value="-300">UTC-5 (EST)</option>
+            <option value="0">UTC+0 (Лондон)</option>
+            <option value="60">UTC+1 (Берлин)</option>
+            <option value="120">UTC+2 (Киев / Рига)</option>
+            <option value="180">UTC+3 (Москва)</option>
+            <option value="240">UTC+4 (Тбилиси / Самара)</option>
+            <option value="300">UTC+5 (Екатеринбург / Ташкент)</option>
+            <option value="360">UTC+6 (Алматы / Омск)</option>
+            <option value="420">UTC+7 (Новосибирск / Красноярск)</option>
+            <option value="480">UTC+8 (Иркутск)</option>
+            <option value="540">UTC+9 (Якутск)</option>
+            <option value="600">UTC+10 (Владивосток)</option>
+          </select>
+        </div>
       </div>
-      <div class="row" style="gap:16px;margin-bottom:12px">
-        <span class="mut">События:</span>
+      <div class="row" style="gap:14px;margin-bottom:12px;flex-wrap:wrap">
+        <span class="mut">События админу:</span>
         <label class="chk"><input type="checkbox" id="setTGStart"> Старт / подъём</label>
-        <label class="chk"><input type="checkbox" id="setTGFailover"> Failover переключения</label>
-        <label class="chk"><input type="checkbox" id="setTGDown"> Падение / ошибки</label>
-        <label class="chk"><input type="checkbox" id="setTGConfig"> Изменения конфигов/правил</label>
+        <label class="chk"><input type="checkbox" id="setTGFailover"> Failover</label>
+        <label class="chk"><input type="checkbox" id="setTGDown"> Падения / блэкаут</label>
+        <label class="chk"><input type="checkbox" id="setTGRecovery"> Recovery (🟢 отбой)</label>
+        <label class="chk"><input type="checkbox" id="setTGIntegrations"> Подписки / RouterOS / Отчёты VPS</label>
+        <label class="chk"><input type="checkbox" id="setTGConfig"> Изменения конфигов</label>
+        <label class="chk"><input type="checkbox" id="setTGSecurity"> Безопасность (429 / пароль)</label>
+      </div>
+      <div class="peer" style="margin:0 0 12px 0;padding:10px 12px">
+        <div class="grid" style="align-items:center">
+          <div>
+            <label class="mut">Доставка конфигов клиентам VPS Fleet (работает и без админских алертов)</label>
+            <select id="setTGDeliveryMode">
+              <option value="full">QR-код + .conf + кнопка подписки (рекомендуется)</option>
+              <option value="compact">Компактно: QR при создании, только .conf при ротации</option>
+              <option value="full_vpn">Полный (+ ссылка vpn:// под спойлером)</option>
+              <option value="notify_only">Только текстовое уведомление (для автоподписок)</option>
+              <option value="off">Отключено (не отправлять клиентам в Telegram)</option>
+            </select>
+          </div>
+          <div class="mut" style="font-size:.78rem">Конфигурации рассылаются пользователям с учётом лимитов Telegram (анти-429 и пауза при повторных ошибках доставки).</div>
+        </div>
       </div>
       <div class="row">
-        <button onclick="testTelegram(this)">Отправить тест в Telegram</button>
+        <button onclick="testTelegram(this)">Отправить тест (проверить топики)</button>
         <span class="mut" id="tgTestMsg"></span>
       </div>
     </div>
@@ -1332,9 +1372,12 @@ async function refresh(manual = false, btn = null) {
 
     const ipStr = st.container_ip6 ? `${st.container_ip||'no IP'}, ${st.container_ip6}` : (st.container_ip||'no IP');
     const gwStr = st.gateway6 ? `${st.gateway||'—'}, ${st.gateway6}` : (st.gateway||'—');
+    const tgMeta = tg.enabled
+      ? 'alerts:on' + (tg.delivery_enabled ? '/deliv:' + (tg.delivery_mode||'full') : '')
+      : (tg.delivery_enabled ? 'alerts:off/deliv:' + (tg.delivery_mode||'full') : 'off');
     document.getElementById('meta').textContent =
       (st.applying ? `[${st.applying_op || 'Применение...'}] · ` : '') +
-      `${(st.default_policy||'proxy').toUpperCase()} · ${st.lan_iface||'—'} (${ipStr}, gw ${gwStr}) · rules: ${pol.rules_count||0} · failover: ${fo.mode||'off'} · TG: ${tg.enabled ? 'on' : 'off'}`;
+      `${(st.default_policy||'proxy').toUpperCase()} · ${st.lan_iface||'—'} (${ipStr}, gw ${gwStr}) · rules: ${pol.rules_count||0} · failover: ${fo.mode||'off'} · TG: ${tgMeta}`;
 
     const rosMode = ros.mode || 'gateway';
     const rosSelRules = document.getElementById('rosModeRules');
@@ -1491,9 +1534,11 @@ async function refresh(manual = false, btn = null) {
           <div class="statbox"><div class="mut">IP контейнера</div><div class="statval" style="font-size:${st.container_ip6 ? '.82rem' : '1.1rem'}">${esc(st.container_ip||'—')}${st.container_ip6 ? '<br><span style="color:var(--ok)">' + esc(st.container_ip6) + '</span>' : ''}</div></div>
           <div class="statbox"><div class="mut">Шлюз</div><div class="statval" style="font-size:${st.gateway6 ? '.82rem' : '1.1rem'}">${esc(st.gateway||'—')}${st.gateway6 ? '<br><span style="color:var(--ok)">' + esc(st.gateway6) + '</span>' : ''}</div></div>
           <div class="statbox"><div class="mut">Proxy DNS ${(st.dns_upstreams||[]).some(u=>/^https?:\/\//i.test(u)) ? '<span class="badge purp">DoH</span>' : ''}</div><div class="statval" style="font-size:.86rem">${esc((st.dns_upstreams||[]).join(', ')||'off')}</div></div>
-          <div class="statbox"><div class="mut">Telegram</div><div class="statval">${tg.enabled ? `ON${tg.thread_id ? ' (#'+tg.thread_id+')' : ''}` : 'OFF'}</div></div>
+          <div class="statbox"><div class="mut">Telegram</div><div class="statval" style="font-size:.9rem">${tg.enabled ? `Алерты ON${tg.thread_id ? ' (#'+tg.thread_id+')' : ''}` : 'Алерты OFF'}<br><span class="mut" style="font-size:.76rem">Клиенты: ${tg.delivery_enabled ? esc(tg.delivery_mode||'full') : 'OFF'}${tg.sticky_via ? ' · ' + esc(tg.sticky_via) : ''}${(tg.open_incidents||[]).length ? ' · ⚠️ инцид.: ' + tg.open_incidents.length : ''}</span></div></div>
         </div>
-        ${tg.last_error ? `<div class="mut" style="margin-top:8px;color:var(--warn)">Telegram: ${esc(tg.last_error)}</div>` : ''}
+        ${(tg.open_incidents||[]).length ? `<div class="mut" style="margin-top:8px;color:var(--warn)">Открытые инциденты TG: ${tg.open_incidents.map(x => `<span class="badge warn">${esc(x.title)}</span>`).join(' ')}</div>` : ''}
+        ${tg.topic_error ? `<div class="mut" style="margin-top:6px;color:var(--warn)">Telegram форум: ${esc(tg.topic_error)}</div>` : ''}
+        ${tg.last_error ? `<div class="mut" style="margin-top:6px;color:var(--warn)">Telegram: ${esc(tg.last_error)}</div>` : ''}
         ${ros.last_error ? `<div class="mut" style="margin-top:4px;color:var(--warn)">RouterOS: ${esc(ros.last_error)}</div>` : ''}`;
     }
 
@@ -2334,11 +2379,28 @@ async function loadSettings() {
     document.getElementById('setTGVia').value = s.tg_via || 'auto';
     document.getElementById('setTGAPI').value = s.tg_api_url || 'https://api.telegram.org';
     document.getElementById('setTGDigest').value = s.tg_daily_digest_hour ?? -1;
+    const tzSel = document.getElementById('setTGDigestTZ');
+    if (tzSel) {
+      const wantTZ = String(s.tg_digest_tz_offset ?? 0);
+      if (![...tzSel.options].some(o => o.value === wantTZ)) {
+        const opt = document.createElement('option');
+        opt.value = wantTZ;
+        opt.textContent = `UTC${Number(wantTZ) >= 0 ? '+' : ''}${(Number(wantTZ)/60).toFixed(1)}`;
+        tzSel.appendChild(opt);
+      }
+      tzSel.value = wantTZ;
+    }
+    document.getElementById('setTGQuietHours').value = s.tg_quiet_hours || '';
     document.getElementById('setTGStart').checked = s.tg_on_start !== false;
     document.getElementById('setTGFailover').checked = s.tg_on_failover !== false;
     document.getElementById('setTGDown').checked = s.tg_on_down !== false;
+    document.getElementById('setTGRecovery').checked = s.tg_on_recovery !== false;
+    document.getElementById('setTGIntegrations').checked = s.tg_on_integrations !== false;
     document.getElementById('setTGConfig').checked = !!s.tg_on_config;
+    document.getElementById('setTGSecurity').checked = !!s.tg_on_security;
+    document.getElementById('setTGSilentInfo').checked = !!s.tg_silent_info;
     document.getElementById('setTGSilent').checked = !!s.tg_silent;
+    document.getElementById('setTGDeliveryMode').value = s.tg_delivery_mode || 'full_vpn';
 
     document.getElementById('setRosMode').value = s.ros_mode || 'gateway';
     document.getElementById('setRosURL').value = s.ros_url || '';
@@ -2597,12 +2659,19 @@ async function saveSettings(btn) {
         tg_node_name: document.getElementById('setTGNode').value.trim(),
         tg_via: document.getElementById('setTGVia').value,
         tg_api_url: document.getElementById('setTGAPI').value.trim(),
+        tg_quiet_hours: document.getElementById('setTGQuietHours').value.trim(),
         tg_daily_digest_hour: (() => { const d = parseInt(document.getElementById('setTGDigest').value, 10); return isNaN(d) ? -1 : d; })(),
+        tg_digest_tz_offset: parseInt(document.getElementById('setTGDigestTZ').value || '0', 10) || 0,
         tg_on_start: document.getElementById('setTGStart').checked,
         tg_on_failover: document.getElementById('setTGFailover').checked,
         tg_on_down: document.getElementById('setTGDown').checked,
+        tg_on_recovery: document.getElementById('setTGRecovery').checked,
+        tg_on_integrations: document.getElementById('setTGIntegrations').checked,
         tg_on_config: document.getElementById('setTGConfig').checked,
+        tg_on_security: document.getElementById('setTGSecurity').checked,
+        tg_silent_info: document.getElementById('setTGSilentInfo').checked,
         tg_silent: document.getElementById('setTGSilent').checked,
+        tg_delivery_mode: document.getElementById('setTGDeliveryMode').value,
 
         ros_mode: document.getElementById('setRosMode').value,
         ros_url: document.getElementById('setRosURL').value.trim(),
@@ -2644,6 +2713,7 @@ async function saveSettings(btn) {
 async function testTelegram(btn) {
   const msg = document.getElementById('tgTestMsg');
   msg.textContent = 'Отправка...';
+  msg.style.color = '';
   await withBusy(btn, async () => {
     try {
       const r = await api('/api/telegram/test', {
@@ -2656,12 +2726,28 @@ async function testTelegram(btn) {
           tg_node_name: document.getElementById('setTGNode').value.trim(),
           tg_api_url: document.getElementById('setTGAPI').value.trim(),
           tg_via: document.getElementById('setTGVia').value,
-          tg_silent: document.getElementById('setTGSilent').checked
+          tg_silent: document.getElementById('setTGSilent').checked,
+          tg_silent_info: document.getElementById('setTGSilentInfo').checked,
+          tg_quiet_hours: document.getElementById('setTGQuietHours').value.trim(),
+          tg_delivery_mode: document.getElementById('setTGDeliveryMode').value,
+          tg_digest_tz_offset: parseInt(document.getElementById('setTGDigestTZ').value || '0', 10) || 0,
+          test_alert_topic: true
         })
       });
-      msg.textContent = `Отправлено (message_id: ${r.message_id})`;
-      toast('Тестовое сообщение отправлено в Telegram');
-    } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+      if (r.alert_error) {
+        msg.style.color = 'var(--warn)';
+        msg.textContent = `Основной ОК (#${r.message_id}), но топик алертов ОШИБКА: ${r.alert_error}`;
+        toast('Основной канал работает, но топик алертов недоступен', 'warn');
+      } else if (r.alert_message_id) {
+        msg.style.color = 'var(--ok)';
+        msg.textContent = `Оба топика ОК (инфо #${r.message_id}, алерты #${r.alert_message_id})`;
+        toast('Тестовые сообщения отправлены в оба топика', 'ok');
+      } else {
+        msg.style.color = 'var(--ok)';
+        msg.textContent = `Отправлено (message_id: ${r.message_id})`;
+        toast('Тестовое сообщение отправлено в Telegram', 'ok');
+      }
+    } catch (e) { msg.style.color = 'var(--bad)'; msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
   });
 }
 
@@ -3170,7 +3256,9 @@ function renderVPSFleet() {
       const label = c.tg_label ? `${esc(c.tg_label)} <span class="mut">(${esc(c.tg_chat_id)}${c.tg_thread_id ? '#' + c.tg_thread_id : ''})</span>`
                                : `<code>${esc(c.tg_chat_id)}${c.tg_thread_id ? '#' + c.tg_thread_id : ''}</code>`;
       let deliveryBadge = '';
-      if (c.last_send_error) {
+      if (c.auto_send_paused) {
+        deliveryBadge = `<span class="badge bad" title="${esc(c.last_send_error || 'Автоотправка приостановлена')}">Пауза ТГ (${c.auto_send_failures || 0})</span>`;
+      } else if (c.last_send_error) {
         deliveryBadge = `<span class="badge bad" title="${esc(c.last_send_error)}">Ошибка ТГ</span>`;
       } else if (c.last_sent_etag && c.last_etag && c.last_sent_etag === c.last_etag) {
         deliveryBadge = `<span class="badge ok">Актуален</span>`;
@@ -3194,7 +3282,8 @@ function renderVPSFleet() {
       <td style="text-align:right">
         <div class="row" style="justify-content:flex-end;gap:4px">
           <button class="sm" onclick="openClientQRModal('${esc(c.vps_id)}','${esc(c.client_name)}', this)">📱 QR</button>
-          ${c.tg_chat_id ? `<button class="sm" onclick="sendClientTG('${esc(c.vps_id)}','${esc(c.client_name)}', this)" title="Отправить свежий конфиг в Telegram">📨</button>` : ''}
+          ${c.tg_chat_id ? `<button class="sm" onclick="sendClientTG('${esc(c.vps_id)}','${esc(c.client_name)}', this)" title="Отправить свежий конфиг в Telegram (и снять паузу)">📨</button>` : ''}
+          ${c.auto_send_paused ? `<button class="sm" onclick="resetClientTG('${esc(c.vps_id)}','${esc(c.client_name)}', this)" title="Сбросить паузу автоотправки в Telegram">🔓</button>` : ''}
           <button class="sm" onclick="openClientModal('${esc(c.vps_id)}','${esc(c.client_name)}')" title="Изменить клиента">✏️</button>
           <button class="sm danger" onclick="deleteVPSClient('${esc(c.vps_id)}','${esc(c.client_name)}', this)" title="Удалить с VPS">🗑</button>
         </div>
@@ -3584,6 +3673,21 @@ async function sendClientTG(vpsID, clientName, btn) {
       toast(`Конфиг ${clientName} отправлен в Telegram`, 'ok');
     } catch (e) {
       await loadVPSFleet();
+      toast(e.message, 'bad');
+    }
+  });
+}
+
+async function resetClientTG(vpsID, clientName, btn) {
+  await withBusy(btn, async () => {
+    try {
+      const res = await api(`/api/vps/${encodeURIComponent(vpsID)}/clients/${encodeURIComponent(clientName)}/reset-tg`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+      });
+      if (res.fleet) vpsFleetData = res.fleet;
+      renderVPSFleet();
+      toast(`Пауза автоотправки для ${clientName} снята`, 'ok');
+    } catch (e) {
       toast(e.message, 'bad');
     }
   });

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -95,13 +96,16 @@ type FleetClient struct {
 	LastETag     string `json:"last_etag,omitempty"`
 
 	// Telegram binding and delivery state (stored locally in the container)
-	TGChatID      string    `json:"tg_chat_id,omitempty"`
-	TGThreadID    int       `json:"tg_thread_id,omitempty"`
-	TGLabel       string    `json:"tg_label,omitempty"`
-	TGAutoSend    bool      `json:"tg_auto_send"`
-	LastSentETag  string    `json:"last_sent_etag,omitempty"`
-	LastSentAt    time.Time `json:"last_sent_at,omitempty"`
-	LastSendError string    `json:"last_send_error,omitempty"`
+	TGChatID          string    `json:"tg_chat_id,omitempty"`
+	TGThreadID        int       `json:"tg_thread_id,omitempty"`
+	TGLabel           string    `json:"tg_label,omitempty"`
+	TGAutoSend        bool      `json:"tg_auto_send"`
+	LastSentETag      string    `json:"last_sent_etag,omitempty"`
+	LastSentAt        time.Time `json:"last_sent_at,omitempty"`
+	LastSendError     string    `json:"last_send_error,omitempty"`
+	AutoSendFailures  int       `json:"auto_send_failures,omitempty"`
+	AutoSendPaused    bool      `json:"auto_send_paused,omitempty"`
+	AutoSendNextRetry time.Time `json:"auto_send_next_retry,omitempty"`
 }
 
 type TGContact struct {
@@ -201,24 +205,26 @@ type VPSFleetManager struct {
 	tg       *TGNotifier
 	logger   *RingLogger
 
-	mu         sync.RWMutex
-	state      vpsFleetDisk
-	presetsMap map[string][]VPSPresetInfo
-	stopCh     chan struct{}
-	stopped    bool
-	syncLocks  sync.Map // per-vpsID mutex to prevent overlapping polls
+	mu           sync.RWMutex
+	state        vpsFleetDisk
+	presetsMap   map[string][]VPSPresetInfo
+	pollFailures map[string]int
+	stopCh       chan struct{}
+	stopped      bool
+	syncLocks    sync.Map // per-vpsID mutex to prevent overlapping polls
 }
 
 func NewVPSFleetManager(srcDir string, settings *SettingsStore, mgr *TunnelManager, subMgr *SubscriptionManager, tg *TGNotifier, logger *RingLogger) *VPSFleetManager {
 	fm := &VPSFleetManager{
-		path:       filepath.Join(srcDir, "vps_fleet.json"),
-		settings:   settings,
-		mgr:        mgr,
-		subMgr:     subMgr,
-		tg:         tg,
-		logger:     logger,
-		presetsMap: make(map[string][]VPSPresetInfo),
-		stopCh:     make(chan struct{}),
+		path:         filepath.Join(srcDir, "vps_fleet.json"),
+		settings:     settings,
+		mgr:          mgr,
+		subMgr:       subMgr,
+		tg:           tg,
+		logger:       logger,
+		presetsMap:   make(map[string][]VPSPresetInfo),
+		pollFailures: make(map[string]int),
+		stopCh:       make(chan struct{}),
 	}
 	_ = fm.load()
 	return fm
@@ -766,26 +772,41 @@ func (fm *VPSFleetManager) getVPSLock(vpsID string) *sync.Mutex {
 }
 
 func (fm *VPSFleetManager) applyServerAndClientsSnapshot(vpsID string, meta *remoteServerMeta, remoteClients []remoteClientItem, reqErr error) (changedClients []FleetClient) {
+	var srvName string
+	var pollFail int
+	var resolvedSrv bool
 	fm.mu.Lock()
-	defer fm.mu.Unlock()
-
 	now := time.Now()
 	srvIdx := -1
 	for i := range fm.state.Servers {
 		if fm.state.Servers[i].ID == vpsID {
 			srvIdx = i
+			srvName = fm.state.Servers[i].Name
 			break
 		}
 	}
 	if srvIdx < 0 {
+		fm.mu.Unlock()
 		return nil
 	}
 	fm.state.Servers[srvIdx].LastCheckedAt = now
 	if reqErr != nil {
 		fm.state.Servers[srvIdx].LastError = reqErr.Error()
+		fm.pollFailures[vpsID]++
+		pollFail = fm.pollFailures[vpsID]
 		_ = fm.saveLocked()
+		fm.mu.Unlock()
+		if pollFail >= 3 && fm.tg != nil {
+			fm.tg.OpenIncident("vps:"+vpsID, TGKindWarn, "VPS-сервер недоступен",
+				fmt.Sprintf("Сервер: <b>%s</b>\nОшибок опроса подряд: %d\n<code>%s</code>",
+					html.EscapeString(srvName), pollFail, html.EscapeString(truncateUTF8(reqErr.Error(), 240))))
+		}
 		return nil
 	}
+	if fm.pollFailures[vpsID] > 0 {
+		resolvedSrv = true
+	}
+	fm.pollFailures[vpsID] = 0
 	fm.state.Servers[srvIdx].LastError = ""
 	if meta != nil {
 		fm.state.Servers[srvIdx].LastServerETag = meta.ServerETag
@@ -800,6 +821,7 @@ func (fm *VPSFleetManager) applyServerAndClientsSnapshot(vpsID string, meta *rem
 		}
 	}
 
+	deliveryEnabled := fm.settings == nil || normalizeTGDeliveryMode(fm.settings.Get().TGDeliveryMode) != "off"
 	if remoteClients != nil {
 		existing := make(map[string]FleetClient)
 		var others []FleetClient
@@ -833,7 +855,10 @@ func (fm *VPSFleetManager) applyServerAndClientsSnapshot(vpsID string, meta *rem
 			cur.TxBytes = rc.TxBytes
 			cur.LastETag = rc.ETag
 
-			if cur.TGAutoSend && strings.TrimSpace(cur.TGChatID) != "" && cur.LastETag != "" && cur.LastETag != cur.LastSentETag {
+			if deliveryEnabled && cur.TGAutoSend && !cur.AutoSendPaused &&
+				strings.TrimSpace(cur.TGChatID) != "" &&
+				cur.LastETag != "" && cur.LastETag != cur.LastSentETag &&
+				(cur.AutoSendNextRetry.IsZero() || !now.Before(cur.AutoSendNextRetry)) {
 				changedClients = append(changedClients, cur)
 			}
 			merged = append(merged, cur)
@@ -842,6 +867,11 @@ func (fm *VPSFleetManager) applyServerAndClientsSnapshot(vpsID string, meta *rem
 	}
 
 	_ = fm.saveLocked()
+	fm.mu.Unlock()
+
+	if resolvedSrv && fm.tg != nil {
+		fm.tg.ResolveIncident("vps:"+vpsID, "VPS-сервер снова доступен", "Сервер: <b>"+html.EscapeString(srvName)+"</b>")
+	}
 	return changedClients
 }
 
@@ -868,6 +898,7 @@ func (fm *VPSFleetManager) RefreshServer(ctx context.Context, vpsID string, useE
 		return 0, err
 	}
 	if status == http.StatusNotModified {
+		var wasDown bool
 		fm.mu.Lock()
 		for i := range fm.state.Servers {
 			if fm.state.Servers[i].ID == vpsID {
@@ -876,8 +907,15 @@ func (fm *VPSFleetManager) RefreshServer(ctx context.Context, vpsID string, useE
 				break
 			}
 		}
+		if fm.pollFailures[vpsID] > 0 {
+			wasDown = true
+			fm.pollFailures[vpsID] = 0
+		}
 		_ = fm.saveLocked()
 		fm.mu.Unlock()
+		if wasDown && fm.tg != nil {
+			fm.tg.ResolveIncident("vps:"+vpsID, "VPS-сервер снова доступен", "Сервер: <b>"+html.EscapeString(srv.Name)+"</b>")
+		}
 		return 0, nil
 	}
 
@@ -900,22 +938,35 @@ func (fm *VPSFleetManager) notifyClientsBatch(ctx context.Context, srv VPSServer
 		return 0
 	}
 	sent := 0
+	var failedLines []string
 	for i, c := range clients {
 		if i > 0 {
 			select {
 			case <-ctx.Done():
 				return sent
-			case <-time.After(150 * time.Millisecond):
+			case <-time.After(50 * time.Millisecond):
 			}
 		}
-		if err := fm.SendClientToTelegram(ctx, srv.ID, c.ClientName, reason); err == nil {
+		if err := fm.sendClientToTelegramInternal(ctx, srv.ID, c.ClientName, reason, false); err == nil {
 			sent++
-		} else if fm.logger != nil {
-			fm.logger.Logf("[vps-fleet] WARN не удалось отправить конфиг %s (%s) в ТГ %s: %v", c.ClientName, srv.Name, c.TGChatID, err)
+		} else {
+			failedLines = append(failedLines, fmt.Sprintf("• <code>%s</code>: %s", html.EscapeString(c.ClientName), html.EscapeString(truncateUTF8(err.Error(), 120))))
+			if fm.logger != nil {
+				fm.logger.Logf("[vps-fleet] WARN не удалось отправить конфиг %s (%s) в ТГ %s: %v", c.ClientName, srv.Name, c.TGChatID, err)
+			}
 		}
 	}
 	if sent > 0 && fm.logger != nil {
 		fm.logger.Logf("[vps-fleet] Разосланы обновлённые конфиги в ТГ: %d клиент(ов) с VPS %s (%s)", sent, srv.Name, reason)
+	}
+	if len(failedLines) > 0 {
+		body := fmt.Sprintf("Сервер: <b>%s</b>\nПричина: %s\nДоставлено: <b>%d/%d</b>\nОшибки:\n%s",
+			html.EscapeString(srv.Name), html.EscapeString(reason), sent, len(clients), strings.Join(failedLines, "\n"))
+		fm.tg.Notify(TGKindWarn, "vps_batch_err:"+srv.ID, "Ошибки массовой рассылки клиентам", body)
+	} else if sent > 0 && len(clients) > 1 {
+		body := fmt.Sprintf("Сервер: <b>%s</b>\nПричина: %s\nДоставлено всем: <b>%d/%d</b>",
+			html.EscapeString(srv.Name), html.EscapeString(reason), sent, len(clients))
+		fm.tg.Notify(TGKindConfig, "vps_batch_ok:"+srv.ID, "Массовая рассылка клиентам выполнена", body)
 	}
 	return sent
 }
@@ -986,7 +1037,66 @@ func (fm *VPSFleetManager) GetClientConfig(ctx context.Context, vpsID, clientNam
 	}, nil
 }
 
+func isFatalTGDeliveryErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	low := strings.ToLower(err.Error())
+	return strings.Contains(low, "нажать /start") ||
+		strings.Contains(low, "chat not found") ||
+		strings.Contains(low, "bot was blocked") ||
+		strings.Contains(low, "user is deactivated") ||
+		strings.Contains(low, "топик")
+}
+
+func (fm *VPSFleetManager) recordClientSendOutcomeLocked(c *FleetClient, etag string, sendErr error) {
+	now := time.Now()
+	if sendErr == nil {
+		c.LastSentETag = etag
+		c.LastSentAt = now
+		c.LastSendError = ""
+		c.AutoSendFailures = 0
+		c.AutoSendPaused = false
+		c.AutoSendNextRetry = time.Time{}
+		return
+	}
+	c.LastSendError = sendErr.Error()
+	c.AutoSendFailures++
+	if isFatalTGDeliveryErr(sendErr) && c.AutoSendFailures >= 3 {
+		c.AutoSendPaused = true
+		c.AutoSendNextRetry = time.Time{}
+	} else if c.AutoSendFailures >= 5 {
+		c.AutoSendPaused = true
+		c.AutoSendNextRetry = time.Time{}
+	} else {
+		backoffMin := 15 * c.AutoSendFailures
+		if backoffMin > 120 {
+			backoffMin = 120
+		}
+		c.AutoSendNextRetry = now.Add(time.Duration(backoffMin) * time.Minute)
+	}
+}
+
+func (fm *VPSFleetManager) ResetClientTGState(vpsID, clientName string) error {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+	for i := range fm.state.Clients {
+		if fm.state.Clients[i].VPSID == vpsID && fm.state.Clients[i].ClientName == clientName {
+			fm.state.Clients[i].AutoSendFailures = 0
+			fm.state.Clients[i].AutoSendPaused = false
+			fm.state.Clients[i].AutoSendNextRetry = time.Time{}
+			fm.state.Clients[i].LastSendError = ""
+			return fm.saveLocked()
+		}
+	}
+	return fmt.Errorf("клиент %s не найден", clientName)
+}
+
 func (fm *VPSFleetManager) SendClientToTelegram(ctx context.Context, vpsID, clientName, reason string) error {
+	return fm.sendClientToTelegramInternal(ctx, vpsID, clientName, reason, true)
+}
+
+func (fm *VPSFleetManager) sendClientToTelegramInternal(ctx context.Context, vpsID, clientName, reason string, isCreation bool) error {
 	if fm.tg == nil {
 		return fmt.Errorf("сервис Telegram недоступен")
 	}
@@ -1003,7 +1113,7 @@ func (fm *VPSFleetManager) SendClientToTelegram(ctx context.Context, vpsID, clie
 		return fmt.Errorf("для клиента '%s' не задан Telegram chat_id", clientName)
 	}
 
-	sendErr := fm.tg.SendClientConfig(
+	sendErr := fm.tg.SendClientConfigWithOptions(
 		ctx,
 		chatID,
 		payload.Client.TGThreadID,
@@ -1013,18 +1123,13 @@ func (fm *VPSFleetManager) SendClientToTelegram(ctx context.Context, vpsID, clie
 		payload.Config,
 		payload.VPNURL,
 		payload.SubURL,
+		isCreation,
 	)
 
 	fm.mu.Lock()
 	for i := range fm.state.Clients {
 		if fm.state.Clients[i].VPSID == vpsID && fm.state.Clients[i].ClientName == clientName {
-			if sendErr != nil {
-				fm.state.Clients[i].LastSendError = sendErr.Error()
-			} else {
-				fm.state.Clients[i].LastSentETag = payload.ETag
-				fm.state.Clients[i].LastSentAt = time.Now()
-				fm.state.Clients[i].LastSendError = ""
-			}
+			fm.recordClientSendOutcomeLocked(&fm.state.Clients[i], payload.ETag, sendErr)
 			break
 		}
 	}
@@ -1109,6 +1214,9 @@ func (fm *VPSFleetManager) CreateClient(ctx context.Context, vpsID string, req C
 		TGLabel:      strings.TrimSpace(req.TGLabel),
 		TGAutoSend:   req.TGAutoSend,
 	}
+	if !req.SendNow && fc.TGChatID != "" && rc.ETag != "" {
+		fc.LastSentETag = rc.ETag
+	}
 
 	fm.mu.Lock()
 	if parsed.Server != nil {
@@ -1144,33 +1252,22 @@ func (fm *VPSFleetManager) CreateClient(ctx context.Context, vpsID string, req C
 	}
 
 	if req.SendNow && fc.TGChatID != "" && fm.tg != nil {
-		if sErr := fm.tg.SendClientConfig(ctx, fc.TGChatID, fc.TGThreadID, srv.Name, rc.Name, "Новый VPN-профиль", rc.Config, rc.VPNURL, res.SubURL); sErr != nil {
+		sErr := fm.tg.SendClientConfigWithOptions(ctx, fc.TGChatID, fc.TGThreadID, srv.Name, rc.Name, "Новый VPN-профиль", rc.Config, rc.VPNURL, res.SubURL, true)
+		if sErr != nil {
 			res.TGError = sErr.Error()
-			fm.mu.Lock()
-			for i := range fm.state.Clients {
-				if fm.state.Clients[i].ID == fc.ID {
-					fm.state.Clients[i].LastSendError = sErr.Error()
-					break
-				}
-			}
-			_ = fm.saveLocked()
-			fm.mu.Unlock()
 		} else {
 			res.TGSent = true
-			now := time.Now()
-			fm.mu.Lock()
-			for i := range fm.state.Clients {
-				if fm.state.Clients[i].ID == fc.ID {
-					fm.state.Clients[i].LastSentETag = rc.ETag
-					fm.state.Clients[i].LastSentAt = now
-					fm.state.Clients[i].LastSendError = ""
-					res.Client = fm.state.Clients[i]
-					break
-				}
-			}
-			_ = fm.saveLocked()
-			fm.mu.Unlock()
 		}
+		fm.mu.Lock()
+		for i := range fm.state.Clients {
+			if fm.state.Clients[i].ID == fc.ID {
+				fm.recordClientSendOutcomeLocked(&fm.state.Clients[i], rc.ETag, sErr)
+				res.Client = fm.state.Clients[i]
+				break
+			}
+		}
+		_ = fm.saveLocked()
+		fm.mu.Unlock()
 	}
 	return res, nil
 }
@@ -1286,17 +1383,37 @@ func (fm *VPSFleetManager) UpdateClient(ctx context.Context, vpsID, clientName s
 		fc.Keepalive = remoteItem.Keepalive
 		fc.LastETag = remoteItem.ETag
 	}
+	tgTargetChanged := false
 	if req.TGChatID != nil {
-		fc.TGChatID = strings.TrimSpace(*req.TGChatID)
+		nextChat := strings.TrimSpace(*req.TGChatID)
+		if nextChat != fc.TGChatID {
+			tgTargetChanged = true
+		}
+		fc.TGChatID = nextChat
 	}
 	if req.TGThreadID != nil {
+		if *req.TGThreadID != fc.TGThreadID {
+			tgTargetChanged = true
+		}
 		fc.TGThreadID = *req.TGThreadID
 	}
 	if req.TGLabel != nil {
 		fc.TGLabel = strings.TrimSpace(*req.TGLabel)
 	}
 	if req.TGAutoSend != nil {
+		if *req.TGAutoSend && !fc.TGAutoSend {
+			tgTargetChanged = true
+		}
 		fc.TGAutoSend = *req.TGAutoSend
+	}
+	if tgTargetChanged {
+		fc.AutoSendFailures = 0
+		fc.AutoSendPaused = false
+		fc.AutoSendNextRetry = time.Time{}
+		fc.LastSendError = ""
+	}
+	if !req.SendNow && !configChanged && fc.TGChatID != "" && fc.LastSentETag == "" && fc.LastETag != "" {
+		fc.LastSentETag = fc.LastETag
 	}
 	if idx >= 0 {
 		fm.state.Clients[idx] = fc
@@ -1322,7 +1439,7 @@ func (fm *VPSFleetManager) UpdateClient(ctx context.Context, vpsID, clientName s
 
 	shouldSend := (req.SendNow || (configChanged && fc.TGAutoSend && res.ETag != "" && res.ETag != fc.LastSentETag)) && fc.TGChatID != ""
 	if shouldSend {
-		if err := fm.SendClientToTelegram(ctx, vpsID, finalName, "Обновление параметров профиля"); err != nil {
+		if err := fm.sendClientToTelegramInternal(ctx, vpsID, finalName, "Обновление параметров профиля", req.SendNow); err != nil {
 			res.TGError = err.Error()
 		} else {
 			res.TGSent = true

@@ -265,6 +265,19 @@ func (w *WebServer) handleVPSSendClientTG(rw http.ResponseWriter, r *http.Reques
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "fleet": w.vpsFleet.View()})
 }
 
+func (w *WebServer) handleVPSResetClientTG(rw http.ResponseWriter, r *http.Request) {
+	if !w.requireVPSFleet(rw) {
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	name := strings.TrimSpace(r.PathValue("name"))
+	if err := w.vpsFleet.ResetClientTGState(id, name); err != nil {
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "fleet": w.vpsFleet.View()})
+}
+
 func (w *WebServer) handleVPSImportClientLocal(rw http.ResponseWriter, r *http.Request) {
 	if !w.requireVPSFleet(rw) {
 		return

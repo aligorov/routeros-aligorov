@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"os"
 	"os/signal"
 	"strings"
@@ -65,11 +66,49 @@ func main() {
 	}
 
 	tg := NewTGNotifier(settingsStore, mgr, logger)
+	rosClient.SetTGNotifier(tg)
 	failover := NewFailoverMonitor(mgr, settingsStore, tg, logger)
 	subMgr := NewSubscriptionManager(settingsStore, mgr, tg, logger)
 	failover.SetSubscriptionManager(subMgr)
 	vpsFleet := NewVPSFleetManager(srcDir, settingsStore, mgr, subMgr, tg, logger)
 	subMgr.SetOnUpdated(vpsFleet.OnLocalSubscriptionUpdated)
+	tg.SetDigestExtrasProvider(func() []string {
+		var out []string
+		foSt := failover.Status()
+		if foSt.Mode != "off" {
+			out = append(out, fmt.Sprintf("🔁 Failover (%s): переключений %d", html.EscapeString(foSt.Mode), foSt.SwitchesTotal))
+		}
+		rosSt := rosClient.Status()
+		if rosSt.Mode != ROSModeGateway && rosSt.Enabled {
+			if rosSt.Mode == ROSModeBGP {
+				out = append(out, fmt.Sprintf("🌐 RouterOS BGP: %s (%d маршрутов)", html.EscapeString(rosSt.BGPState), rosSt.BGPRoutes))
+			} else if rosSt.LastError != "" {
+				out = append(out, fmt.Sprintf("🌐 RouterOS: ОШИБКА (%s)", html.EscapeString(truncateUTF8(rosSt.LastError, 90))))
+			} else {
+				out = append(out, fmt.Sprintf("🌐 RouterOS (%s): OK (статика %d, DNS %d)", html.EscapeString(rosSt.Mode), rosSt.StaticSynced, rosSt.DynSynced))
+			}
+		}
+		fv := vpsFleet.View()
+		if len(fv.Servers) > 0 {
+			okSrv, tgErrCli := 0, 0
+			for _, s := range fv.Servers {
+				if s.LastError == "" {
+					okSrv++
+				}
+			}
+			for _, c := range fv.Clients {
+				if c.LastSendError != "" {
+					tgErrCli++
+				}
+			}
+			line := fmt.Sprintf("📡 VPS Fleet: %d/%d онлайн · %d кл.", okSrv, len(fv.Servers), len(fv.Clients))
+			if tgErrCli > 0 {
+				line += fmt.Sprintf(" (ошибки ТГ: %d)", tgErrCli)
+			}
+			out = append(out, line)
+		}
+		return out
+	})
 	subMgr.Start()
 	vpsFleet.Start()
 
@@ -100,7 +139,7 @@ func main() {
 	if err := mgr.StartAll(); err != nil {
 		logger.Logf("ERROR starting tunnels: %v", err)
 		_ = policy.ApplyRouting()
-		tg.Notify(TGKindDown, "boot:err", "Ошибка запуска туннеля", err.Error())
+		tg.Notify(TGKindDown, "boot:err", "Ошибка запуска туннеля", "<code>"+html.EscapeString(truncateUTF8(err.Error(), 600))+"</code>")
 		if envOr("AWG_EXIT_ON_ERROR", "off") == "on" {
 			os.Exit(1)
 		}
@@ -112,7 +151,7 @@ func main() {
 		if primary := mgr.PrimaryInterface(); primary != "" {
 			cur := settingsStore.Get()
 			tg.Notify(TGKindStart, "boot:ok", "Контейнер запущен", fmt.Sprintf("Основной туннель: <code>%s</code>\nMulti-Tunnel: %v · Failover: %s",
-				primary, cur.MultiTunnel, cur.FailoverMode))
+				html.EscapeString(primary), cur.MultiTunnel, html.EscapeString(cur.FailoverMode)))
 		}
 	}
 

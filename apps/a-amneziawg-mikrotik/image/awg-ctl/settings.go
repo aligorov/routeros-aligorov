@@ -68,9 +68,16 @@ type AppSettings struct {
 	TGOnStart         bool   `json:"tg_on_start"`          // notify on startup / tunnel up
 	TGOnFailover      bool   `json:"tg_on_failover"`       // notify on failover switch / failback
 	TGOnDown          bool   `json:"tg_on_down"`           // notify on tunnel down / error / lost handshake
+	TGOnRecovery      bool   `json:"tg_on_recovery"`       // notify when incident recovers
+	TGOnIntegrations  bool   `json:"tg_on_integrations"`   // notify on subscription / RouterOS / VPS batch errors
 	TGOnConfig        bool   `json:"tg_on_config"`         // notify on config / rules / settings changes
-	TGSilent          bool   `json:"tg_silent"`            // disable_notification=true
-	TGDailyDigestHour int    `json:"tg_daily_digest_hour"` // -1 = off, 0..23 = UTC/local container hour
+	TGOnSecurity      bool   `json:"tg_on_security"`       // notify on WebUI brute-force lockout events
+	TGSilent          bool   `json:"tg_silent"`            // disable_notification=true for everything
+	TGSilentInfo      bool   `json:"tg_silent_info"`       // disable_notification=true only for non-critical events (start, recovery, digest, config)
+	TGQuietHours      string `json:"tg_quiet_hours"`       // optional quiet window "HH:MM-HH:MM" for non-critical notifications
+	TGDailyDigestHour int    `json:"tg_daily_digest_hour"` // -1 = off, 0..23 hour in configured TZ offset
+	TGDigestTZOffset  int    `json:"tg_digest_tz_offset"`  // minutes from UTC (-720..840)
+	TGDeliveryMode    string `json:"tg_delivery_mode"`     // "full_vpn" | "full" | "compact" | "notify_only" | "off"
 
 	ROSURL               string `json:"ros_url"`
 	ROSUser              string `json:"ros_user"`
@@ -203,9 +210,16 @@ func defaultSettingsFromEnv() AppSettings {
 		TGOnStart:         true,
 		TGOnFailover:      true,
 		TGOnDown:          true,
+		TGOnRecovery:      true,
+		TGOnIntegrations:  true,
 		TGOnConfig:        false,
+		TGOnSecurity:      false,
 		TGSilent:          false,
+		TGSilentInfo:      false,
+		TGQuietHours:      "",
 		TGDailyDigestHour: -1,
+		TGDigestTZOffset:  0,
+		TGDeliveryMode:    "full_vpn",
 
 		ROSURL:               normalizeROSBaseURL(os.Getenv("ROS_URL")),
 		ROSUser:              strings.TrimSpace(os.Getenv("ROS_USER")),
@@ -287,6 +301,12 @@ func NewSettingsStore(cfgDir string) (*SettingsStore, error) {
 				}
 				if _, ok := rawKeys["ros_sync_policy_cidrs"]; !ok {
 					loaded.ROSSyncPolicyCIDRs = st.val.ROSSyncPolicyCIDRs
+				}
+				if _, ok := rawKeys["tg_on_recovery"]; !ok {
+					loaded.TGOnRecovery = true
+				}
+				if _, ok := rawKeys["tg_on_integrations"]; !ok {
+					loaded.TGOnIntegrations = true
 				}
 			}
 			st.val = normalizeSettings(loaded, st.val)
@@ -411,6 +431,11 @@ func normalizeSettings(s, fallback AppSettings) AppSettings {
 	if s.TGDailyDigestHour < -1 || s.TGDailyDigestHour > 23 {
 		s.TGDailyDigestHour = -1
 	}
+	if s.TGDigestTZOffset < -720 || s.TGDigestTZOffset > 840 {
+		s.TGDigestTZOffset = 0
+	}
+	s.TGQuietHours = normalizeTGQuietHours(s.TGQuietHours)
+	s.TGDeliveryMode = normalizeTGDeliveryMode(s.TGDeliveryMode)
 
 	s.ROSURL = normalizeROSBaseURL(s.ROSURL)
 	s.ROSUser = strings.TrimSpace(s.ROSUser)
@@ -470,6 +495,52 @@ func normalizeSettings(s, fallback AppSettings) AppSettings {
 		}
 	}
 	return s
+}
+
+func normalizeTGDeliveryMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "off", "disabled", "none":
+		return "off"
+	case "notify_only", "notify":
+		return "notify_only"
+	case "compact":
+		return "compact"
+	case "full":
+		return "full"
+	case "full_vpn", "":
+		return "full_vpn"
+	default:
+		return "full_vpn"
+	}
+}
+
+func normalizeTGQuietHours(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	parts := strings.Split(s, "-")
+	if len(parts) != 2 {
+		return ""
+	}
+	parseHM := func(v string) (int, int, bool) {
+		hm := strings.Split(strings.TrimSpace(v), ":")
+		if len(hm) != 2 {
+			return 0, 0, false
+		}
+		h, err1 := strconv.Atoi(hm[0])
+		m, err2 := strconv.Atoi(hm[1])
+		if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+			return 0, 0, false
+		}
+		return h, m, true
+	}
+	h1, m1, ok1 := parseHM(parts[0])
+	h2, m2, ok2 := parseHM(parts[1])
+	if !ok1 || !ok2 || (h1 == h2 && m1 == m2) {
+		return ""
+	}
+	return fmt.Sprintf("%02d:%02d-%02d:%02d", h1, m1, h2, m2)
 }
 
 func normalizeROSMode(raw string) string {

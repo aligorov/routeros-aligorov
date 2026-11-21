@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -26,6 +27,7 @@ type SubscriptionManager struct {
 	stopCh        chan struct{}
 	stopped       bool
 	lastFailCheck map[string]time.Time
+	failCount     map[string]int
 	onUpdated     func(cfgName, remoteHost string)
 }
 
@@ -46,6 +48,7 @@ func NewSubscriptionManager(settings *SettingsStore, mgr *TunnelManager, tg *TGN
 		},
 		stopCh:        make(chan struct{}),
 		lastFailCheck: make(map[string]time.Time),
+		failCount:     make(map[string]int),
 	}
 }
 
@@ -327,6 +330,22 @@ func (sm *SubscriptionManager) SyncForce(ctx context.Context, cfgName string) er
 	return sm.syncInternal(ctx, cfgName, true)
 }
 
+func (sm *SubscriptionManager) recordSyncOutcome(cfgName string, err error) {
+	if err == nil {
+		sm.failCount[cfgName] = 0
+		if sm.tg != nil {
+			sm.tg.ResolveIncident("sub_err:"+cfgName, "Подписка восстановлена", "Профиль: <b>"+html.EscapeString(cfgName)+"</b>")
+		}
+		return
+	}
+	sm.failCount[cfgName]++
+	if sm.failCount[cfgName] >= 3 && sm.tg != nil {
+		sm.tg.OpenIncident("sub_err:"+cfgName, TGKindWarn, "Сбой автообновления подписки",
+			fmt.Sprintf("Профиль: <b>%s</b>\nОшибок подряд: %d\n<code>%s</code>",
+				html.EscapeString(cfgName), sm.failCount[cfgName], html.EscapeString(truncateUTF8(err.Error(), 240))))
+	}
+}
+
 func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string, force bool) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -343,6 +362,7 @@ func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string,
 		sub.LastSync = time.Now()
 		sub.LastStatus = "error: " + err.Error()
 		_, _ = sm.settings.SetSubscription(cfgName, sub)
+		sm.recordSyncOutcome(cfgName, err)
 		return err
 	}
 
@@ -355,6 +375,7 @@ func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string,
 		sub.LastSync = time.Now()
 		sub.LastStatus = "error: " + err.Error()
 		_, _ = sm.settings.SetSubscription(cfgName, sub)
+		sm.recordSyncOutcome(cfgName, err)
 		return err
 	}
 
@@ -362,6 +383,7 @@ func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string,
 		sub.LastSync = time.Now()
 		sub.LastStatus = "not_modified"
 		_, _ = sm.settings.SetSubscription(cfgName, sub)
+		sm.recordSyncOutcome(cfgName, nil)
 		sm.logger.Logf("[subscription] %s: 304 Not Modified (ETag: %s)", cfgName, sub.LastETag)
 		return nil
 	}
@@ -370,6 +392,7 @@ func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string,
 		sub.LastSync = time.Now()
 		sub.LastStatus = "invalid config: " + err.Error()
 		_, _ = sm.settings.SetSubscription(cfgName, sub)
+		sm.recordSyncOutcome(cfgName, err)
 		return fmt.Errorf("полученный конфиг не прошёл валидацию: %w", err)
 	}
 
@@ -382,6 +405,7 @@ func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string,
 			}
 			sub.LastStatus = "not_modified"
 			_, _ = sm.settings.SetSubscription(cfgName, sub)
+			sm.recordSyncOutcome(cfgName, nil)
 			sm.logger.Logf("[subscription] %s: конфиг уже актуален (ETag: %s)", cfgName, sub.LastETag)
 			return nil
 		}
@@ -391,6 +415,7 @@ func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string,
 		sub.LastSync = time.Now()
 		sub.LastStatus = "save error: " + err.Error()
 		_, _ = sm.settings.SetSubscription(cfgName, sub)
+		sm.recordSyncOutcome(cfgName, err)
 		return fmt.Errorf("ошибка сохранения конфига %s: %w", cfgName, err)
 	}
 
@@ -399,6 +424,7 @@ func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string,
 		sub.LastSync = time.Now()
 		sub.LastStatus = "apply error: " + err.Error()
 		_, _ = sm.settings.SetSubscription(cfgName, sub)
+		sm.recordSyncOutcome(cfgName, err)
 		return fmt.Errorf("ошибка применения конфига %s: %w", cfgName, err)
 	}
 
@@ -406,11 +432,12 @@ func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string,
 	sub.LastETag = newETag
 	sub.LastStatus = "ok"
 	_, _ = sm.settings.SetSubscription(cfgName, sub)
+	sm.recordSyncOutcome(cfgName, nil)
 
 	sm.logger.Logf("[subscription] SUCCESS: %s обновлён из подписки (ETag: %s)", cfgName, newETag)
 	if sm.tg != nil {
 		sm.tg.Notify(TGKindConfig, "sub:"+cfgName, "Профиль обновлён из подписки",
-			fmt.Sprintf("Профиль <b>%s</b> успешно обновлён через Subscription API (ETag: <code>%s</code>).", cfgName, newETag))
+			fmt.Sprintf("Профиль <b>%s</b> обновлён (ETag: <code>%s</code>).", html.EscapeString(cfgName), html.EscapeString(newETag)))
 	}
 	if sm.onUpdated != nil {
 		sm.onUpdated(cfgName, cleanHost(targetURL))

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -165,6 +166,7 @@ type ROSClient struct {
 	policy     *PolicyEngine
 	mgr        *TunnelManager
 	dns        *DNSForwarder
+	tg         *TGNotifier
 
 	resolveSeedFn func(ctx context.Context, domain string) []netip.Addr
 
@@ -177,10 +179,17 @@ type ROSClient struct {
 	lastFingerprint     string
 	lastFullSyncAt      time.Time
 	consecutiveFailures int
+	bgpDownStreak       int
 	nextRetryAt         time.Time
 	lastLoggedErr       string
 	lastLoggedErrAt     time.Time
 	hadSuccess          bool
+}
+
+func (c *ROSClient) SetTGNotifier(tg *TGNotifier) {
+	c.mu.Lock()
+	c.tg = tg
+	c.mu.Unlock()
 }
 
 // NewROSClient builds a RouterOS client initialized from environment variables.
@@ -817,6 +826,28 @@ func (c *ROSClient) syncLocked(mgr *TunnelManager, isPeriodic bool) error {
 		c.refreshBGPDesiredPrefixes()
 		st := c.bgpSpeaker.Status()
 		c.recordModeSuccess(conn, "bgp", 0, 0, c.status.StaticSynced, st.DesiredRoutes-c.status.StaticSynced, c.status.DroppedByLimit, "bgp", isPeriodic)
+		c.mu.Lock()
+		tg := c.tg
+		if st.State == "established" {
+			c.bgpDownStreak = 0
+			c.mu.Unlock()
+			if tg != nil {
+				tg.ResolveIncident("ros:bgp", "BGP-сессия с RouterOS установлена",
+					fmt.Sprintf("Peer: <code>%s</code> · маршрутов: %d", html.EscapeString(st.Peer), st.AnnouncedRoutes))
+			}
+		} else if isPeriodic && (st.LastError != "" || st.Peer != "") {
+			c.bgpDownStreak++
+			streak := c.bgpDownStreak
+			c.mu.Unlock()
+			if streak >= 3 && tg != nil {
+				tg.OpenIncident("ros:bgp", TGKindWarn, "BGP-сессия с RouterOS не установлена",
+					fmt.Sprintf("Peer: <code>%s</code> · Состояние: <code>%s</code>\n<code>%s</code>",
+						html.EscapeString(st.Peer), html.EscapeString(st.State), html.EscapeString(truncateUTF8(st.LastError, 240))))
+			}
+		} else {
+			c.bgpDownStreak = 0
+			c.mu.Unlock()
+		}
 		return nil
 	}
 
@@ -918,6 +949,9 @@ func (c *ROSClient) recordFailure(errText string, applyBackoff, isPeriodic bool)
 	now := time.Now()
 	shouldLog := false
 
+	var failCount int
+	var tg *TGNotifier
+	var modeStr string
 	c.mu.Lock()
 	c.status.LastSync = now.UTC().Format(time.RFC3339)
 	c.status.LastError = errText
@@ -925,6 +959,9 @@ func (c *ROSClient) recordFailure(errText string, applyBackoff, isPeriodic bool)
 		c.consecutiveFailures++
 		c.nextRetryAt = now.Add(rosBackoffDuration(c.consecutiveFailures))
 	}
+	failCount = c.consecutiveFailures
+	tg = c.tg
+	modeStr = c.rosMode
 	c.refreshStatusLocked()
 	if !isPeriodic || errText != c.lastLoggedErr || now.Sub(c.lastLoggedErrAt) >= rosErrorLogRepeat {
 		c.lastLoggedErr = errText
@@ -933,6 +970,11 @@ func (c *ROSClient) recordFailure(errText string, applyBackoff, isPeriodic bool)
 	}
 	c.mu.Unlock()
 
+	if failCount >= 3 && tg != nil {
+		tg.OpenIncident("ros:sync", TGKindWarn, "Потеряна связь с MikroTik RouterOS",
+			fmt.Sprintf("Режим: <code>%s</code> · Ошибок подряд: %d\n<code>%s</code>",
+				html.EscapeString(modeStr), failCount, html.EscapeString(truncateUTF8(errText, 240))))
+	}
 	if shouldLog && c.logger != nil {
 		c.logger.Logf("ROS sync error: %s", errText)
 	}
@@ -941,6 +983,7 @@ func (c *ROSClient) recordFailure(errText string, applyBackoff, isPeriodic bool)
 func (c *ROSClient) recordModeSuccess(conn rosConnConfig, fp string, routesCount, domainsCount, staticSynced, dynSynced, dropped int, transport string, isPeriodic bool) {
 	now := time.Now()
 	c.mu.Lock()
+	tg := c.tg
 	prevRoutes := c.status.Routes
 	prevDomains := c.status.Domains
 	prevStatic := c.status.StaticSynced
@@ -969,6 +1012,13 @@ func (c *ROSClient) recordModeSuccess(conn rosConnConfig, fp string, routesCount
 	c.hadSuccess = true
 	c.refreshStatusLocked()
 	c.mu.Unlock()
+
+	if tg != nil {
+		tg.ResolveIncident("ros:sync", "Связь с MikroTik RouterOS восстановлена", "Режим: <code>"+html.EscapeString(conn.mode)+"</code>")
+		if conn.mode != ROSModeBGP {
+			tg.ResolveIncident("ros:bgp", "Режим BGP отключён", "")
+		}
+	}
 
 	if c.logger == nil {
 		return

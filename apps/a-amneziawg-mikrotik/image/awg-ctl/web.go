@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -187,6 +188,7 @@ func (w *WebServer) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/vps/{id}/clients/{name}", w.withAuth(w.handleVPSUpdateClient))
 	mux.HandleFunc("DELETE /api/vps/{id}/clients/{name}", w.withAuth(w.handleVPSDeleteClient))
 	mux.HandleFunc("POST /api/vps/{id}/clients/{name}/send-tg", w.withAuth(w.handleVPSSendClientTG))
+	mux.HandleFunc("POST /api/vps/{id}/clients/{name}/reset-tg", w.withAuth(w.handleVPSResetClientTG))
 	mux.HandleFunc("POST /api/vps/{id}/clients/{name}/import-local", w.withAuth(w.handleVPSImportClientLocal))
 	mux.HandleFunc("POST /api/tg/contacts", w.withAuth(w.handleTGContactUpsert))
 	mux.HandleFunc("DELETE /api/tg/contacts/{id}", w.withAuth(w.handleTGContactDelete))
@@ -667,6 +669,10 @@ func (w *WebServer) handleAuthLogin(rw http.ResponseWriter, r *http.Request) {
 	if !valid {
 		blocked, retryAfter := w.recordAuthFailure(ip)
 		if blocked {
+			if w.tg != nil {
+				w.tg.Notify(TGKindSecurity, "sec:lock:"+ip, "Временная блокировка входа в WebUI",
+					fmt.Sprintf("IP: <code>%s</code>\nБлокировка на %d сек", html.EscapeString(ip), retryAfter))
+			}
 			rw.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 			writeJSON(rw, http.StatusTooManyRequests, map[string]any{
 				"error":       fmt.Sprintf("неверный логин или пароль; IP временно заблокирован на %d сек", retryAfter),
@@ -732,6 +738,10 @@ func (w *WebServer) handleAuthPassword(rw http.ResponseWriter, r *http.Request) 
 	if !VerifyPasswordHash(passHash, body.CurrentPassword) {
 		blocked, retryAfter := w.recordAuthFailure(ip)
 		if blocked {
+			if w.tg != nil {
+				w.tg.Notify(TGKindSecurity, "sec:lock:"+ip, "Временная блокировка входа в WebUI",
+					fmt.Sprintf("IP: <code>%s</code>\nБлокировка на %d сек", html.EscapeString(ip), retryAfter))
+			}
 			rw.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 			writeJSON(rw, http.StatusTooManyRequests, map[string]any{
 				"error":       fmt.Sprintf("неверный текущий пароль; повторите через %d сек", retryAfter),
@@ -765,6 +775,10 @@ func (w *WebServer) handleAuthPassword(rw http.ResponseWriter, r *http.Request) 
 		_ = w.issueSessionCookie(rw, r, saved.UIUser)
 	}
 	w.logger.Logf("WebUI password updated for user %q", saved.UIUser)
+	if w.tg != nil {
+		w.tg.Notify(TGKindSecurity, "sec:pw:"+saved.UIUser, "Обновлён пароль WebUI",
+			"Пользователь: <code>"+html.EscapeString(saved.UIUser)+"</code> · IP: <code>"+html.EscapeString(ip)+"</code>")
+	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "user": saved.UIUser})
 }
 
@@ -976,7 +990,7 @@ func (w *WebServer) handleSaveConfig(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if w.tg != nil {
-		w.tg.Notify(TGKindConfig, "cfg:"+name, "Профиль обновлён", "Профиль: <b>"+name+"</b>")
+		w.tg.Notify(TGKindConfig, "cfg:"+name, "Профиль обновлён", "Профиль: <b>"+html.EscapeString(name)+"</b>")
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
 }
@@ -988,7 +1002,7 @@ func (w *WebServer) handleActivateConfig(rw http.ResponseWriter, r *http.Request
 		return
 	}
 	if w.tg != nil {
-		w.tg.Notify(TGKindFailover, "act:"+name, "Активный профиль изменён", "Выбран: <b>"+name+"</b>")
+		w.tg.Notify(TGKindConfig, "act:"+name, "Основной профиль переключён вручную", "Выбран Primary: <b>"+html.EscapeString(name)+"</b>")
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
 }
@@ -1038,7 +1052,7 @@ func (w *WebServer) handleDeleteConfig(rw http.ResponseWriter, r *http.Request) 
 		_, _ = w.settings.DeleteSubscription(name)
 	}
 	if w.tg != nil {
-		w.tg.Notify(TGKindConfig, "del:"+name, "Профиль удалён", "Удалён: <b>"+name+"</b>")
+		w.tg.Notify(TGKindConfig, "del:"+name, "Профиль удалён", "Удалён: <b>"+html.EscapeString(name)+"</b>")
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
 }
@@ -1246,7 +1260,7 @@ func (w *WebServer) handleTunnelUp(rw http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	if w.tg != nil {
-		w.tg.Notify(TGKindStart, "up", "Туннели подняты", "Основной: <code>"+w.mgr.PrimaryInterface()+"</code>")
+		w.tg.Notify(TGKindStart, "up", "Туннели подняты", "Основной: <code>"+html.EscapeString(w.mgr.PrimaryInterface())+"</code>")
 	}
 	if w.failover != nil {
 		w.failover.Wake()
@@ -1268,7 +1282,7 @@ func (w *WebServer) handleTunnelRestart(rw http.ResponseWriter, _ *http.Request)
 		return
 	}
 	if w.tg != nil {
-		w.tg.Notify(TGKindStart, "restart", "Туннели перезапущены", "Основной: <code>"+w.mgr.PrimaryInterface()+"</code>")
+		w.tg.Notify(TGKindStart, "restart", "Туннели перезапущены", "Основной: <code>"+html.EscapeString(w.mgr.PrimaryInterface())+"</code>")
 	}
 	if w.failover != nil {
 		w.failover.Wake()
@@ -1338,19 +1352,25 @@ func (w *WebServer) handleTelegramTest(rw http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var body struct {
-		TGBotToken      string `json:"tg_bot_token"`
-		TGChatID        string `json:"tg_chat_id"`
-		TGThreadID      int    `json:"tg_thread_id"`
-		TGAlertThreadID int    `json:"tg_alert_thread_id"`
-		TGNodeName      string `json:"tg_node_name"`
-		TGAPIURL        string `json:"tg_api_url"`
-		TGVia           string `json:"tg_via"`
-		TGSilent        bool   `json:"tg_silent"`
+		TGBotToken       string `json:"tg_bot_token"`
+		TGChatID         string `json:"tg_chat_id"`
+		TGThreadID       int    `json:"tg_thread_id"`
+		TGAlertThreadID  int    `json:"tg_alert_thread_id"`
+		TGNodeName       string `json:"tg_node_name"`
+		TGAPIURL         string `json:"tg_api_url"`
+		TGVia            string `json:"tg_via"`
+		TGSilent         bool   `json:"tg_silent"`
+		TGSilentInfo     bool   `json:"tg_silent_info"`
+		TGQuietHours     string `json:"tg_quiet_hours"`
+		TGDeliveryMode   string `json:"tg_delivery_mode"`
+		TGDigestTZOffset *int   `json:"tg_digest_tz_offset"`
+		TestAlertTopic   bool   `json:"test_alert_topic"`
 	}
 	var override *AppSettings
 	usedToken := ""
 	if r.Body != nil {
-		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err == nil && (body.TGChatID != "" || body.TGBotToken != "" || body.TGAPIURL != "") {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err == nil &&
+			(body.TGChatID != "" || body.TGBotToken != "" || body.TGAPIURL != "" || body.TGDeliveryMode != "" || body.TestAlertTopic) {
 			cur := w.settings.Get()
 			newTok := strings.TrimSpace(body.TGBotToken)
 			if newTok != "" {
@@ -1389,6 +1409,14 @@ func (w *WebServer) handleTelegramTest(rw http.ResponseWriter, r *http.Request) 
 				cur.TGVia = strings.TrimSpace(body.TGVia)
 			}
 			cur.TGSilent = body.TGSilent
+			cur.TGSilentInfo = body.TGSilentInfo
+			cur.TGQuietHours = normalizeTGQuietHours(body.TGQuietHours)
+			if strings.TrimSpace(body.TGDeliveryMode) != "" {
+				cur.TGDeliveryMode = normalizeTGDeliveryMode(body.TGDeliveryMode)
+			}
+			if body.TGDigestTZOffset != nil {
+				cur.TGDigestTZOffset = *body.TGDigestTZOffset
+			}
 			usedToken = cur.TGBotToken
 			override = &cur
 		}
@@ -1396,12 +1424,13 @@ func (w *WebServer) handleTelegramTest(rw http.ResponseWriter, r *http.Request) 
 	if usedToken == "" && w.settings != nil {
 		usedToken = w.settings.Get().TGBotToken
 	}
-	msgID, err := w.tg.SendTest(override)
-	if err != nil {
-		writeJSON(rw, http.StatusBadRequest, map[string]any{"ok": false, "error": redactTelegramSecrets(err.Error(), usedToken), "tg": w.tg.Status()})
+	res := w.tg.SendTestSuite(override, body.TestAlertTopic)
+	res.Error = redactTelegramSecrets(res.Error, usedToken)
+	if !res.OK {
+		writeJSON(rw, http.StatusBadRequest, res)
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "message_id": msgID, "tg": w.tg.Status()})
+	writeJSON(rw, http.StatusOK, res)
 }
 
 func (w *WebServer) handleKeygen(rw http.ResponseWriter, _ *http.Request) {
@@ -1751,7 +1780,9 @@ func (w *WebServer) handleSaveSettings(rw http.ResponseWriter, r *http.Request) 
 		w.failover.Wake()
 	}
 	if w.tg != nil {
-		w.tg.Notify(TGKindConfig, "settings", "Настройки сохранены", "failover="+next.FailoverMode+", multi="+strconv.FormatBool(next.MultiTunnel))
+		w.tg.Notify(TGKindConfig, "settings", "Настройки сохранены",
+			fmt.Sprintf("policy=<code>%s</code>, failover=<code>%s</code>, multi=%v, ros=<code>%s</code>",
+				html.EscapeString(next.DefaultPolicy), html.EscapeString(next.FailoverMode), next.MultiTunnel, html.EscapeString(next.ROSMode)))
 	}
 	w.logger.Logf("Settings updated (default_policy=%s, ros_mode=%s, auto_route=%v, kill_switch=%v, multi=%v, failover=%s/%s)",
 		next.DefaultPolicy, next.ROSMode, next.AutoRoute, next.KillSwitch, next.MultiTunnel, next.FailoverMode, next.FailoverTrigger)

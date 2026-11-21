@@ -55,17 +55,20 @@ type FailoverMonitor struct {
 	stopCh chan struct{}
 	wakeCh chan struct{}
 
-	mu               sync.Mutex
-	failStreak       map[string]int
-	failbackStreak   map[string]int
-	cooldownUntil    map[string]time.Time
-	lastTX           map[string]uint64
-	lastRX           map[string]uint64
-	health           map[string]TunnelHealth
-	lastOrder        []string
-	lastSwitchAt     int64
-	lastSwitchReason string
-	switchesTotal    int
+	mu                  sync.Mutex
+	failStreak          map[string]int
+	healthyStreak       map[string]int
+	failbackStreak      map[string]int
+	cooldownUntil       map[string]time.Time
+	lastTX              map[string]uint64
+	lastRX              map[string]uint64
+	health              map[string]TunnelHealth
+	lastOrder           []string
+	lastSwitchAt        int64
+	lastSwitchReason    string
+	switchesTotal       int
+	switchTimes         []time.Time
+	flapSuppressedUntil time.Time
 
 	// Injectable hooks for deterministic unit tests
 	nowFn       func() time.Time
@@ -93,6 +96,7 @@ func NewFailoverMonitor(mgr *TunnelManager, settings *SettingsStore, tg *TGNotif
 		stopCh:         make(chan struct{}),
 		wakeCh:         make(chan struct{}, 1),
 		failStreak:     map[string]int{},
+		healthyStreak:  map[string]int{},
 		failbackStreak: map[string]int{},
 		cooldownUntil:  map[string]time.Time{},
 		lastTX:         map[string]uint64{},
@@ -263,25 +267,59 @@ func (f *FailoverMonitor) SwitchTo(target string, reason string) error {
 	if reason == "" {
 		reason = "ручное переключение"
 	}
-	nowUnix := f.nowFn().Unix()
+	now := f.nowFn()
+	nowUnix := now.Unix()
+	isAuto := reason != "" && reason != "ручное переключение"
+	var suppressTG, sendFlapWarn bool
+	var recentCount int
+
 	f.mu.Lock()
 	f.failStreak[target] = 0
 	f.lastSwitchAt = nowUnix
 	f.lastSwitchReason = fmt.Sprintf("%s → %s (%s)", currentPrimary, target, reason)
 	f.switchesTotal++
+	if isAuto {
+		kept := f.switchTimes[:0]
+		for _, ts := range f.switchTimes {
+			if now.Sub(ts) < 5*time.Minute {
+				kept = append(kept, ts)
+			}
+		}
+		kept = append(kept, now)
+		f.switchTimes = kept
+		recentCount = len(kept)
+		if !now.After(f.flapSuppressedUntil) {
+			suppressTG = true
+		} else if recentCount >= 3 {
+			f.flapSuppressedUntil = now.Add(15 * time.Minute)
+			sendFlapWarn = true
+			suppressTG = true
+		}
+	}
 	f.mu.Unlock()
 
 	if f.logger != nil {
 		f.logger.Logf("Failover: switched %s -> %s (%s)", currentPrimary, target, reason)
 	}
 	if f.tg != nil {
-		f.tg.Notify(
-			TGKindFailover,
-			"switch:"+currentPrimary+"->"+target,
-			"Переключение туннеля",
-			fmt.Sprintf("<b>%s</b> → <b>%s</b>\nПричина: %s",
-				html.EscapeString(currentPrimary), html.EscapeString(target), html.EscapeString(reason)),
-		)
+		f.tg.ResolveIncident("blackout", "VPN-связь восстановлена", fmt.Sprintf("Переключено на <b>%s</b>", html.EscapeString(target)))
+		if sendFlapWarn {
+			f.tg.Notify(
+				TGKindWarn,
+				"flap",
+				"Обнаружен флаппинг маршрута",
+				fmt.Sprintf("%d переключений за 5 мин (последнее: <b>%s</b> → <b>%s</b>).\nУведомления о переключениях приглушены на 15 мин.",
+					recentCount, html.EscapeString(currentPrimary), html.EscapeString(target)),
+			)
+		} else if !suppressTG {
+			f.tg.Notify(
+				TGKindFailover,
+				"switch:"+currentPrimary+"->"+target,
+				"Переключение туннеля",
+				fmt.Sprintf("<b>%s</b> → <b>%s</b>\nПричина: %s",
+					html.EscapeString(currentPrimary), html.EscapeString(target), html.EscapeString(reason)),
+			)
+		}
 	}
 	return nil
 }
@@ -527,9 +565,11 @@ func (f *FailoverMonitor) CheckNow(forceProbe bool) FailoverStatus {
 			}
 		}
 
+		var resolvedHealthy bool
 		f.mu.Lock()
 		if h.State == "unhealthy" {
 			f.failStreak[c.Name] = prevStreak + 1
+			f.healthyStreak[c.Name] = 0
 			h.FailStreak = f.failStreak[c.Name]
 			if f.subMgr != nil {
 				f.subMgr.OnTunnelFailure(c.Name)
@@ -540,6 +580,10 @@ func (f *FailoverMonitor) CheckNow(forceProbe bool) FailoverStatus {
 		} else {
 			if h.State == "healthy" {
 				f.failStreak[c.Name] = 0
+				f.healthyStreak[c.Name]++
+				if f.healthyStreak[c.Name] >= 2 {
+					resolvedHealthy = true
+				}
 				if inCD {
 					// Keep cooldown active so flaky tunnels don't flap before cooldown expires
 					h.State = "cooldown"
@@ -548,10 +592,25 @@ func (f *FailoverMonitor) CheckNow(forceProbe bool) FailoverStatus {
 					delete(f.cooldownUntil, c.Name)
 					h.CooldownLeftSec = 0
 				}
+			} else {
+				f.healthyStreak[c.Name] = 0
 			}
 			h.FailStreak = f.failStreak[c.Name]
 		}
 		f.mu.Unlock()
+
+		if f.tg != nil && st.FailoverMode != "off" {
+			if resolvedHealthy {
+				f.tg.ResolveIncident("down:"+c.Name, "Туннель восстановлен", "Профиль: <b>"+html.EscapeString(c.Name)+"</b>")
+				f.tg.ResolveIncident("reserve:"+c.Name, "Резервный туннель восстановлен", "Профиль: <b>"+html.EscapeString(c.Name)+"</b>")
+				if h.Primary {
+					f.tg.ResolveIncident("blackout", "VPN-связь восстановлена", "Основной профиль: <b>"+html.EscapeString(c.Name)+"</b>")
+				}
+			} else if !h.Primary && len(enabled) >= 2 && h.FailStreak >= st.FailoverThreshold && h.State == "unhealthy" && !inCD {
+				f.tg.OpenIncident("reserve:"+c.Name, TGKindWarn, "Резервный туннель не отвечает",
+					fmt.Sprintf("Профиль: <b>%s</b>\nПричина: %s", html.EscapeString(c.Name), html.EscapeString(h.Reason)))
+			}
+		}
 
 		if h.Primary && h.FailStreak >= st.FailoverThreshold && h.State == "unhealthy" {
 			unhealthyPrimary = true
@@ -573,9 +632,9 @@ func (f *FailoverMonitor) CheckNow(forceProbe bool) FailoverStatus {
 	if unhealthyPrimary && primaryCfg != nil {
 		if len(enabled) < 2 {
 			if f.tg != nil {
-				f.tg.Notify(
-					TGKindDown,
+				f.tg.OpenIncident(
 					"down:"+primaryCfg.Name,
+					TGKindDown,
 					"Туннель не отвечает",
 					fmt.Sprintf("Профиль: <b>%s</b>\nПричина: %s\nРезервных конфигов нет.",
 						html.EscapeString(primaryCfg.Name), html.EscapeString(failedPrimaryReason)),
@@ -591,6 +650,14 @@ func (f *FailoverMonitor) CheckNow(forceProbe bool) FailoverStatus {
 
 		if candidate != "" && candidate != primaryCfg.Name {
 			_ = f.SwitchTo(candidate, failedPrimaryReason)
+		} else if f.tg != nil {
+			f.tg.OpenIncident(
+				"blackout",
+				TGKindDown,
+				"Все VPN-туннели недоступны",
+				fmt.Sprintf("Основной: <b>%s</b>\nПричина: %s\nНет доступных резервных профилей.",
+					html.EscapeString(primaryCfg.Name), html.EscapeString(failedPrimaryReason)),
+			)
 		}
 		return f.Status()
 	}
