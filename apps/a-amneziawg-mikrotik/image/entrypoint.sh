@@ -39,6 +39,15 @@ fix_ip_rules() {
     done
     ip -4 rule show | grep -q 'from all lookup main' || ip -4 rule add lookup main priority 32766 || true
     ip -4 rule show | grep -q 'from all lookup default' || ip -4 rule add lookup default priority 32767 || true
+
+    ip -6 rule show 2>/dev/null | awk '
+        /from all lookup main$/ && $1+0 < 32766 {gsub(":", "", $1); print $1}
+        /from all lookup default$/ && $1+0 < 32767 {gsub(":", "", $1); print $1}
+    ' | while read -r prio; do
+        [ -n "$prio" ] && ip -6 rule del priority "$prio" 2>/dev/null || true
+    done
+    ip -6 rule show 2>/dev/null | grep -q 'from all lookup main' || ip -6 rule add lookup main priority 32766 2>/dev/null || true
+    ip -6 rule show 2>/dev/null | grep -q 'from all lookup default' || ip -6 rule add lookup default priority 32767 2>/dev/null || true
 }
 
 detect_lan_iface() {
@@ -56,8 +65,11 @@ detect_lan_iface() {
 ensure_tun
 fix_resolvconf
 sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || printf '[entrypoint] WARN: could not set net.ipv4.ip_forward=1\n'
-if [ "${AWG_ENABLE_IPV6:-off}" = "on" ]; then
+if [ "${AWG_ENABLE_IPV6:-on}" = "on" ]; then
     sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1 || true
+    sysctl -w net.ipv6.conf.default.forwarding=1 >/dev/null 2>&1 || true
+    sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null 2>&1 || true
+    sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null 2>&1 || true
 else
     sysctl -w net.ipv6.conf.all.forwarding=0 >/dev/null 2>&1 || true
     sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true

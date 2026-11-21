@@ -902,6 +902,10 @@ func (m *TunnelManager) injectAutoRoute(text string, table string, primary bool)
 		"PostDown = iptables -t nat -D POSTROUTING -o %i -j MASQUERADE || true",
 		"PostUp = iptables -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
 		"PostDown = iptables -D FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu || true",
+		"PostUp = ip6tables -t nat -C POSTROUTING -o %i -j MASQUERADE 2>/dev/null || ip6tables -t nat -A POSTROUTING -o %i -j MASQUERADE 2>/dev/null || true",
+		"PostDown = ip6tables -t nat -D POSTROUTING -o %i -j MASQUERADE 2>/dev/null || true",
+		"PostUp = ip6tables -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || ip6tables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true",
+		"PostDown = ip6tables -D FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true",
 	)
 	if table != "" {
 		lines = append(lines, "Table = "+table)
@@ -910,10 +914,13 @@ func (m *TunnelManager) injectAutoRoute(text string, table string, primary bool)
 		lines = append(lines,
 			fmt.Sprintf("PostUp = ip rule add priority 300 from all iif %s lookup %s || true", m.lanIface, table),
 			fmt.Sprintf("PostDown = ip rule del priority 300 from all iif %s lookup %s || true", m.lanIface, table),
+			fmt.Sprintf("PostUp = ip -6 rule add priority 300 from all iif %s lookup %s 2>/dev/null || true", m.lanIface, table),
+			fmt.Sprintf("PostDown = ip -6 rule del priority 300 from all iif %s lookup %s 2>/dev/null || true", m.lanIface, table),
 		)
 		if m.killSwitch {
 			lines = append(lines,
 				fmt.Sprintf("PostUp = ip route show table %s | grep -q \"blackhole\" || ip route add blackhole default table %s metric 254 || true", table, table),
+				fmt.Sprintf("PostUp = ip -6 route show table %s 2>/dev/null | grep -q \"blackhole\" || ip -6 route add blackhole default table %s metric 254 2>/dev/null || true", table, table),
 			)
 		}
 	}
