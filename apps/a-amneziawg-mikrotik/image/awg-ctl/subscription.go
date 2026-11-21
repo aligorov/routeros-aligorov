@@ -26,6 +26,13 @@ type SubscriptionManager struct {
 	stopCh        chan struct{}
 	stopped       bool
 	lastFailCheck map[string]time.Time
+	onUpdated     func(cfgName, remoteHost string)
+}
+
+func (sm *SubscriptionManager) SetOnUpdated(fn func(cfgName, remoteHost string)) {
+	sm.mu.Lock()
+	sm.onUpdated = fn
+	sm.mu.Unlock()
 }
 
 func NewSubscriptionManager(settings *SettingsStore, mgr *TunnelManager, tg *TGNotifier, logger *RingLogger) *SubscriptionManager {
@@ -404,6 +411,9 @@ func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string,
 	if sm.tg != nil {
 		sm.tg.Notify(TGKindConfig, "sub:"+cfgName, "Профиль обновлён из подписки",
 			fmt.Sprintf("Профиль <b>%s</b> успешно обновлён через Subscription API (ETag: <code>%s</code>).", cfgName, newETag))
+	}
+	if sm.onUpdated != nil {
+		sm.onUpdated(cfgName, cleanHost(targetURL))
 	}
 
 	return nil

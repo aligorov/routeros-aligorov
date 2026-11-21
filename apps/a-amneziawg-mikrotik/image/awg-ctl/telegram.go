@@ -8,12 +8,16 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 var reTGBotURLToken = regexp.MustCompile(`/bot[0-9]{4,}:[A-Za-z0-9_-]{8,}`)
@@ -72,7 +76,8 @@ type TGNotifier struct {
 	lastDedup     map[string]time.Time
 
 	// Injectable for tests
-	sendHTTPFn func(ctx context.Context, via, apiURL, token string, payload []byte) (int, []byte, error)
+	sendHTTPFn   func(ctx context.Context, via, apiURL, token string, payload []byte) (int, []byte, error)
+	sendMethodFn func(ctx context.Context, via, apiURL, token, method, contentType string, payload []byte) (int, []byte, error)
 }
 
 func NewTGNotifier(settings *SettingsStore, mgr *TunnelManager, logger *RingLogger) *TGNotifier {
@@ -85,6 +90,7 @@ func NewTGNotifier(settings *SettingsStore, mgr *TunnelManager, logger *RingLogg
 		lastDedup: map[string]time.Time{},
 	}
 	n.sendHTTPFn = n.defaultSendHTTP
+	n.sendMethodFn = n.callMethodHTTP
 	go n.worker()
 	return n
 }
@@ -372,23 +378,27 @@ func (n *TGNotifier) recordResult(err error) {
 }
 
 func (n *TGNotifier) defaultSendHTTP(ctx context.Context, via, apiURL, token string, payload []byte) (int, []byte, error) {
+	return n.callMethodHTTP(ctx, via, apiURL, token, "sendMessage", "application/json", payload)
+}
+
+func (n *TGNotifier) callMethodHTTP(ctx context.Context, via, apiURL, token, method, contentType string, payload []byte) (int, []byte, error) {
 	if apiURL == "" {
 		apiURL = DefaultTelegramAPI
 	}
 	if err := validateHTTPURL(apiURL); err != nil {
 		return 0, nil, fmt.Errorf("некорректный tg_api_url: %w", err)
 	}
-	endpoint := strings.TrimRight(apiURL, "/") + "/bot" + token + "/sendMessage"
+	endpoint := strings.TrimRight(apiURL, "/") + "/bot" + token + "/" + strings.TrimLeft(method, "/")
 
 	doPost := func(dialer netDialFunc) (int, []byte, error) {
 		tr := &http.Transport{DialContext: dialer}
 		defer tr.CloseIdleConnections()
-		cli := &http.Client{Transport: tr, Timeout: 8 * time.Second}
+		cli := &http.Client{Transport: tr, Timeout: 15 * time.Second}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 		if err != nil {
 			return 0, nil, errors.New(redactTelegramSecrets(err.Error(), token))
 		}
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
 		resp, err := cli.Do(req)
 		if err != nil {
 			return 0, nil, errors.New(redactTelegramSecrets(err.Error(), token))
@@ -418,6 +428,192 @@ func (n *TGNotifier) defaultSendHTTP(ctx context.Context, via, apiURL, token str
 		}
 		return st, b, err
 	}
+}
+
+func checkTGAPIResponse(status int, respBody []byte) error {
+	var apiResp struct {
+		OK          bool   `json:"ok"`
+		Description string `json:"description"`
+		ErrorCode   int    `json:"error_code"`
+	}
+	_ = json.Unmarshal(respBody, &apiResp)
+	if status >= 400 || !apiResp.OK {
+		msg := apiResp.Description
+		if msg == "" {
+			msg = strings.TrimSpace(string(respBody))
+		}
+		if msg == "" {
+			msg = fmt.Sprintf("HTTP %d", status)
+		}
+		lower := strings.ToLower(msg)
+		if strings.Contains(lower, "chat not found") || strings.Contains(lower, "bot was blocked") || strings.Contains(lower, "can't initiate") {
+			return fmt.Errorf("telegram (%d): %s — пользователь должен сначала нажать /start у бота", status, msg)
+		}
+		return fmt.Errorf("telegram (%d): %s", status, msg)
+	}
+	return nil
+}
+
+func buildTGMultipart(fields map[string]string, fileField, fileName string, fileData []byte) (string, []byte, error) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		if err := w.WriteField(k, v); err != nil {
+			return "", nil, err
+		}
+	}
+	part, err := w.CreateFormFile(fileField, fileName)
+	if err != nil {
+		return "", nil, err
+	}
+	if _, err := part.Write(fileData); err != nil {
+		return "", nil, err
+	}
+	if err := w.Close(); err != nil {
+		return "", nil, err
+	}
+	return w.FormDataContentType(), buf.Bytes(), nil
+}
+
+// SendClientConfig delivers updated VPN config (QR PNG + .conf file + vpn:// / subscription links)
+// to a specific Telegram chat/user/topic using the container's configured Telegram bot and routing.
+func (n *TGNotifier) SendClientConfig(ctx context.Context, chatID string, threadID int, vpsName, clientName, reason, confText, vpnURL, subURL string) error {
+	if n.settings == nil {
+		return fmt.Errorf("settings unavailable")
+	}
+	st := n.settings.Get()
+	token := strings.TrimSpace(st.TGBotToken)
+	if token == "" {
+		return fmt.Errorf("не задан Bot Token в Настройки → Telegram")
+	}
+	chatID = strings.TrimSpace(chatID)
+	if chatID == "" {
+		return fmt.Errorf("не указан Telegram chat_id получателя")
+	}
+	if strings.TrimSpace(confText) == "" {
+		return fmt.Errorf("пустой текст конфигурации")
+	}
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+	}
+
+	callFn := n.sendMethodFn
+	if callFn == nil {
+		callFn = n.callMethodHTTP
+	}
+
+	// Extract Endpoint for summary caption
+	epLine := ""
+	for _, ln := range strings.Split(confText, "\n") {
+		tr := strings.TrimSpace(ln)
+		if strings.HasPrefix(tr, "Endpoint") && strings.Contains(tr, "=") {
+			epLine = strings.TrimSpace(strings.SplitN(tr, "=", 2)[1])
+			break
+		}
+	}
+
+	reasonTxt := strings.TrimSpace(reason)
+	if reasonTxt == "" {
+		reasonTxt = "Обновление конфигурации"
+	}
+
+	// 1. Render QR PNG and sendPhoto
+	qrPNG, err := qrcode.Encode(confText, qrcode.Medium, 320)
+	if err != nil {
+		qrPNG, err = qrcode.Encode(confText, qrcode.Low, 320)
+	}
+	if err == nil && len(qrPNG) > 0 {
+		capLines := []string{
+			fmt.Sprintf("🔐 <b>AmneziaWG 3.1 — %s</b>", html.EscapeString(clientName)),
+			fmt.Sprintf("📡 Сервер: <code>%s</code>", html.EscapeString(vpsName)),
+		}
+		if epLine != "" {
+			capLines = append(capLines, fmt.Sprintf("🌐 Endpoint: <code>%s</code>", html.EscapeString(epLine)))
+		}
+		capLines = append(capLines, fmt.Sprintf("ℹ️ %s", html.EscapeString(reasonTxt)))
+		capLines = append(capLines, "\nСканируйте QR в приложении <b>AmneziaWG / AmneziaVPN</b> или импортируйте файл ниже.")
+
+		fields := map[string]string{
+			"chat_id":    chatID,
+			"caption":    strings.Join(capLines, "\n"),
+			"parse_mode": "HTML",
+		}
+		if threadID > 0 {
+			fields["message_thread_id"] = strconv.Itoa(threadID)
+		}
+		if st.TGSilent {
+			fields["disable_notification"] = "true"
+		}
+		ct, body, mErr := buildTGMultipart(fields, "photo", clientName+".png", qrPNG)
+		if mErr != nil {
+			return mErr
+		}
+		status, respBody, reqErr := callFn(ctx, st.TGVia, st.TGAPIURL, token, "sendPhoto", ct, body)
+		if reqErr != nil {
+			cleanErr := errors.New(redactTelegramSecrets(reqErr.Error(), token))
+			n.recordResult(cleanErr)
+			return cleanErr
+		}
+		if apiErr := checkTGAPIResponse(status, respBody); apiErr != nil {
+			n.recordResult(apiErr)
+			return apiErr
+		}
+	}
+
+	// 2. Send .conf file via sendDocument
+	docCap := fmt.Sprintf("📄 <b>%s.conf</b> (%s)", html.EscapeString(clientName), html.EscapeString(vpsName))
+	if subURL != "" {
+		docCap += fmt.Sprintf("\n🔗 Подписка: <code>%s</code>", html.EscapeString(subURL))
+	}
+	docFields := map[string]string{
+		"chat_id":    chatID,
+		"caption":    docCap,
+		"parse_mode": "HTML",
+	}
+	if threadID > 0 {
+		docFields["message_thread_id"] = strconv.Itoa(threadID)
+	}
+	if st.TGSilent {
+		docFields["disable_notification"] = "true"
+	}
+	ctDoc, bodyDoc, err := buildTGMultipart(docFields, "document", clientName+".conf", []byte(confText))
+	if err != nil {
+		return err
+	}
+	status, respBody, reqErr := callFn(ctx, st.TGVia, st.TGAPIURL, token, "sendDocument", ctDoc, bodyDoc)
+	if reqErr != nil {
+		cleanErr := errors.New(redactTelegramSecrets(reqErr.Error(), token))
+		n.recordResult(cleanErr)
+		return cleanErr
+	}
+	if apiErr := checkTGAPIResponse(status, respBody); apiErr != nil {
+		n.recordResult(apiErr)
+		return apiErr
+	}
+
+	// 3. Optionally send vpn:// link as a separate message if it fits Telegram's 4096-char limit
+	if vpnURL != "" && len(vpnURL) < 3800 {
+		msgObj := map[string]any{
+			"chat_id":                  chatID,
+			"text":                     fmt.Sprintf("⚡ <b>Ссылка AmneziaVPN (<code>%s</code>):</b>\n<code>%s</code>", html.EscapeString(clientName), html.EscapeString(vpnURL)),
+			"parse_mode":               "HTML",
+			"disable_web_page_preview": true,
+		}
+		if threadID > 0 {
+			msgObj["message_thread_id"] = threadID
+		}
+		if st.TGSilent {
+			msgObj["disable_notification"] = true
+		}
+		if msgBody, mErr := json.Marshal(msgObj); mErr == nil {
+			_, _, _ = callFn(ctx, st.TGVia, st.TGAPIURL, token, "sendMessage", "application/json", msgBody)
+		}
+	}
+
+	n.recordResult(nil)
+	return nil
 }
 
 type netDialFunc = func(ctx context.Context, network, addr string) (net.Conn, error)

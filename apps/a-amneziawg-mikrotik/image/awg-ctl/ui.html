@@ -200,31 +200,87 @@
     </div>
   </div>
 
-  <!-- KEYGEN -->
+  <!-- KEYGEN & VPS CLIENT MANAGER -->
   <div id="tab-keygen" class="tab-pane hide">
+    <!-- 1. VPS SERVERS FLEET -->
     <div class="card">
-      <h2>Генератор ключей и параметров AWG 3.1</h2>
-      <div class="grid" style="margin-bottom:10px">
-        <div><label class="mut">Endpoint (IP/домен:порт)</label><input id="kgEndpoint" value="my-router.example.com:51821"></div>
-        <div><label class="mut">IP сервера</label><input id="kgSrvIP" value="10.8.0.1/24"></div>
-        <div><label class="mut">IP клиента</label><input id="kgCliIP" value="10.8.0.2/24"></div>
-        <div><label class="mut">ListenPort сервера</label><input id="kgPort" value="51820"></div>
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <div>
+          <h2 style="margin:0">Серверы VPS (awg-manager)</h2>
+          <div class="mut">Управление клиентами, маскировкой (UDP-протоколы), Endpoint (IPv4/IPv6) и авто-рассылкой новых конфигов в Telegram</div>
+        </div>
+        <div class="row">
+          <button class="primary sm" onclick="openVPSModal()">+ Добавить VPS</button>
+          <button class="sm" onclick="refreshAllVPS(false, this)">↻ Обновить все</button>
+          <button class="sm" onclick="openTGContactsModal()">📇 Контакты ТГ</button>
+        </div>
       </div>
-      <button class="primary" onclick="generatePair(this)">Сгенерировать</button>
-      <div class="grid" style="margin-top:12px">
+      <div id="vpsCandidatesBox" class="hide" style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:var(--sub);border:1px dashed var(--bd)"></div>
+      <div id="vpsServersList" class="mut">Загрузка списка VPS...</div>
+    </div>
+
+    <!-- 2. UNIFIED CLIENTS TABLE ACROSS ALL VPS -->
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
         <div>
-          <div class="mut" style="margin-bottom:4px">Сервер (server.conf)</div>
-          <textarea id="kgSrvOut"></textarea>
-          <button style="margin-top:6px" onclick="applyGeneratedServer(this)">Сохранить server.conf и активировать</button>
+          <h2 style="margin:0">Клиенты на серверах VPS и рассылка в Telegram</h2>
+          <div class="mut">При ротации, смене маскировки или Endpoint на VPS обновлённые конфиги (QR + .conf + vpn://) автоматически отправляются пользователям в ТГ</div>
         </div>
-        <div>
-          <div class="mut" style="margin-bottom:4px">Клиент</div>
-          <textarea id="kgCliOut"></textarea>
-          <button style="margin-top:6px" onclick="showQRForText(document.getElementById('kgCliOut').value, 'kgQR')">Показать QR</button>
-          <div id="kgQR" style="margin-top:8px"></div>
+        <div class="row">
+          <button class="primary sm" onclick="openClientModal()">+ Новый клиент</button>
+          <button class="sm" onclick="refreshAllVPS(true, this)" title="Опросить все VPS и разослать в ТГ клиентам, у которых сменился конфиг">📨 Проверить и разослать</button>
         </div>
+      </div>
+      <div class="row" style="margin-bottom:10px">
+        <select id="vpsFilterSelect" style="max-width:240px" onchange="renderVPSFleet()">
+          <option value="">Все серверы VPS</option>
+        </select>
+        <input id="vpsClientSearch" style="max-width:260px" placeholder="Поиск по имени клиента, IP или ТГ..." oninput="renderVPSFleet()">
+        <span class="mut" id="vpsFleetStats"></span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Клиент / VPS</th>
+              <th>Сеть / Endpoint</th>
+              <th>Telegram (рассылка)</th>
+              <th style="text-align:right">Действия</th>
+            </tr>
+          </thead>
+          <tbody id="vpsClientsTbody">
+            <tr><td colspan="4" class="mut">Загрузка...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
+
+    <!-- 3. LOCAL SERVER MODE KEYGEN (COLLAPSIBLE) -->
+    <details class="card">
+      <summary style="cursor:pointer;font-weight:600;font-size:.94rem;color:#d8e1ec">Локальный генератор ключей и параметров AWG 3.1 (Server Mode на роутере)</summary>
+      <div style="margin-top:12px">
+        <div class="grid" style="margin-bottom:10px">
+          <div><label class="mut">Endpoint (IP/домен:порт)</label><input id="kgEndpoint" value="my-router.example.com:51821"></div>
+          <div><label class="mut">IP сервера</label><input id="kgSrvIP" value="10.8.0.1/24"></div>
+          <div><label class="mut">IP клиента</label><input id="kgCliIP" value="10.8.0.2/24"></div>
+          <div><label class="mut">ListenPort сервера</label><input id="kgPort" value="51820"></div>
+        </div>
+        <button class="primary" onclick="generatePair(this)">Сгенерировать</button>
+        <div class="grid" style="margin-top:12px">
+          <div>
+            <div class="mut" style="margin-bottom:4px">Сервер (server.conf)</div>
+            <textarea id="kgSrvOut"></textarea>
+            <button style="margin-top:6px" onclick="applyGeneratedServer(this)">Сохранить server.conf и активировать</button>
+          </div>
+          <div>
+            <div class="mut" style="margin-bottom:4px">Клиент</div>
+            <textarea id="kgCliOut"></textarea>
+            <button style="margin-top:6px" onclick="showQRForText(document.getElementById('kgCliOut').value, 'kgQR')">Показать QR</button>
+            <div id="kgQR" style="margin-top:8px"></div>
+          </div>
+        </div>
+      </div>
+    </details>
   </div>
 
   <!-- RULES & GEO -->
@@ -664,6 +720,203 @@
     </div>
   </div>
 </div>
+
+<!-- VPS ADD/EDIT MODAL -->
+<div id="vpsModal" class="sub-overlay hide">
+  <div class="sub-box" style="max-width:520px">
+    <h2 id="vpsModalTitle">Добавить сервер VPS</h2>
+    <div class="mut" style="margin-bottom:12px">Получить Admin-токен на VPS: <code>sudo awg-manager admin-token</code></div>
+    <input type="hidden" id="vpsEditID">
+    <div class="grid" style="margin-bottom:8px">
+      <div><label class="mut">Название сервера</label><input id="vpsName" placeholder="dom25 / nid / HK"></div>
+      <div><label class="mut">IP или домен VPS</label><input id="vpsHost" placeholder="194.28.224.231"></div>
+    </div>
+    <div class="grid" style="margin-bottom:8px">
+      <div><label class="mut">Порт API (по умолч. 8443)</label><input id="vpsPort" type="number" value="8443"></div>
+      <div><label class="mut">Авто-проверка ротации (мин)</label><input id="vpsPoll" type="number" value="15"></div>
+    </div>
+    <div style="margin-bottom:8px">
+      <label class="mut">Admin-токен управления (<code>awg_adm_...</code>)</label>
+      <input id="vpsAdminTok" type="password" placeholder="awg_adm_... (оставьте пустым, чтобы не менять)">
+    </div>
+    <div style="margin-bottom:8px">
+      <label class="mut">TLS SHA256 отпечаток (опционально, 64 hex)</label>
+      <input id="vpsTLSPin" placeholder="Опционально — из вывода awg-manager admin-token">
+    </div>
+    <div class="row" style="margin-bottom:14px">
+      <label class="chk"><input type="checkbox" id="vpsHTTPS" checked> HTTPS (dual-mode TLS на :8443)</label>
+      <label class="chk"><input type="checkbox" id="vpsTLSInsecure" checked> Принимать self-signed TLS</label>
+    </div>
+    <div class="row" style="justify-content:flex-end">
+      <button onclick="closeModal('vpsModal')">Отмена</button>
+      <button class="primary" onclick="saveVPSServer(this)">Сохранить и подключиться</button>
+    </div>
+  </div>
+</div>
+
+<!-- VPS STEALTH / ENDPOINT / ROTATE MODAL -->
+<div id="vpsStealthModal" class="sub-overlay hide">
+  <div class="sub-box" style="max-width:560px">
+    <h2 id="vpsStealthTitle">Маскировка и Endpoint сервера</h2>
+    <input type="hidden" id="vpsStealthID">
+    <div id="vpsStealthMeta" class="mut" style="margin-bottom:12px"></div>
+
+    <div class="peer" style="margin-top:0;margin-bottom:12px;padding:12px">
+      <div style="font-weight:600;margin-bottom:6px">🌐 Внешний Endpoint (IPv4 / IPv6 / Домен)</div>
+      <div class="row" style="margin-bottom:8px">
+        <button class="sm" id="btnEpIPv4" onclick="applyVPSEndpoint('ipv4', this)">Переключить на IPv4</button>
+        <button class="sm" id="btnEpIPv6" onclick="applyVPSEndpoint('ipv6', this)">Переключить на IPv6</button>
+      </div>
+      <div class="row" style="margin-bottom:6px">
+        <input id="vpsCustomEpInput" placeholder="Свой домен или IP (напр. de-e1.ligam.org)" style="flex:1">
+        <button class="sm primary" onclick="applyVPSEndpoint(document.getElementById('vpsCustomEpInput').value, this)">Применить</button>
+      </div>
+      <label class="chk mut"><input type="checkbox" id="vpsEpResetAll"> Также сбросить индивидуальные Endpoint-переопределения у всех клиентов</label>
+    </div>
+
+    <div class="peer" style="margin-top:0;margin-bottom:12px;padding:12px">
+      <div style="font-weight:600;margin-bottom:6px">🎭 Профиль маскировки (UDP-протоколы AWG 3.1)</div>
+      <select id="vpsPresetSelect" onchange="toggleCustomPresetFields()" style="margin-bottom:8px"></select>
+      <div id="vpsCustomPresetBox" class="grid hide" style="margin-bottom:8px">
+        <div><label class="mut">Порт UDP (1-65535)</label><input id="vpsCustomPort" placeholder="443 или 20000-59999"></div>
+        <div><label class="mut">CPS I1 байткод</label><input id="vpsCustomI1" placeholder="<b 0x...>"></div>
+      </div>
+      <div class="row">
+        <button class="primary sm" onclick="applyVPSPreset(this)">Применить маскировку</button>
+        <button class="sm" onclick="rotateVPSServer(this)">🔄 Полная ротация (порт + ключи + I1)</button>
+      </div>
+    </div>
+
+    <div class="mut" style="margin-bottom:12px">После изменения локальные туннели роутера к этому VPS синхронизируются автоматически, а клиенты с включённой авто-рассылкой получат свежие QR и .conf в Telegram.</div>
+    <div class="row" style="justify-content:flex-end">
+      <button onclick="closeModal('vpsStealthModal')">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- VPS CLIENT CREATE / EDIT MODAL -->
+<div id="vpsClientModal" class="sub-overlay hide">
+  <div class="sub-box" style="max-width:560px;max-height:92vh;overflow-y:auto">
+    <h2 id="cliModalTitle">Новый клиент на VPS</h2>
+    <input type="hidden" id="cliEditMode">
+    <input type="hidden" id="cliOrigName">
+    <input type="hidden" id="cliOrigVPSID">
+
+    <div class="grid" style="margin-bottom:8px">
+      <div>
+        <label class="mut">Сервер VPS</label>
+        <select id="cliVPSSelect"></select>
+      </div>
+      <div>
+        <label class="mut">Имя клиента (латиница/цифры/_/-)</label>
+        <input id="cliName" placeholder="iphone_alex">
+      </div>
+    </div>
+
+    <div class="grid" style="margin-bottom:8px">
+      <div>
+        <label class="mut">Endpoint клиента (IPv4 / IPv6)</label>
+        <select id="cliEpMode" onchange="toggleCliEpCustom()">
+          <option value="server">Как на сервере (по умолчанию)</option>
+          <option value="ipv4">Внешний IPv4 сервера</option>
+          <option value="ipv6">Внешний IPv6 сервера</option>
+          <option value="custom">Свой домен / IP</option>
+        </select>
+      </div>
+      <div id="cliEpCustomWrap" class="hide">
+        <label class="mut">Свой хост Endpoint</label>
+        <input id="cliEpCustom" placeholder="de-e1.ligam.org">
+      </div>
+    </div>
+
+    <div class="grid" style="margin-bottom:8px">
+      <div><label class="mut">DNS (пусто = по умолчанию VPS)</label><input id="cliDNS" placeholder="1.1.1.1, 1.0.0.1"></div>
+      <div><label class="mut">MTU (пусто = 1280)</label><input id="cliMTU" placeholder="1280"></div>
+    </div>
+    <div style="margin-bottom:8px">
+      <label class="mut">AllowedIPs (пусто = 0.0.0.0/0, ::/0)</label>
+      <input id="cliAllowed" placeholder="0.0.0.0/0, ::/0">
+    </div>
+
+    <div id="cliEditExtraBox" class="row hide" style="margin-bottom:10px;padding:8px;border-radius:8px;background:var(--sub);border:1px solid var(--bd)">
+      <label class="chk"><input type="checkbox" id="cliRekey"> Перевыпустить ключи (rekey)</label>
+      <label class="chk"><input type="checkbox" id="cliRotTok"> Сменить токен подписки</label>
+    </div>
+
+    <div class="peer" style="margin-top:0;margin-bottom:12px;padding:12px">
+      <div style="font-weight:600;margin-bottom:6px">📨 Пользователь Telegram (доставка конфига через бота роутера)</div>
+      <div style="margin-bottom:8px">
+        <label class="mut">Быстрый выбор из адресной книги</label>
+        <select id="cliTGContactPick" onchange="pickTGContactForClient(this.value)">
+          <option value="">— Выбрать сохранённый контакт или ввести вручную —</option>
+        </select>
+      </div>
+      <div class="grid" style="margin-bottom:8px">
+        <div><label class="mut">Telegram chat_id (число или -100...)</label><input id="cliTGChat" placeholder="123456789"></div>
+        <div><label class="mut">ID топика (0 = ЛС / общий чат)</label><input id="cliTGThread" type="number" value="0"></div>
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="mut">Подпись / @username (для таблицы)</label>
+        <input id="cliTGLabel" placeholder="@ivan / iPhone жены">
+      </div>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="cliTGAuto" checked> Авто-рассылка при ротации / смене маскировки / Endpoint</label>
+        <label class="chk"><input type="checkbox" id="cliTGSendNow" checked> Отправить новый конфиг в ТГ сразу</label>
+      </div>
+    </div>
+
+    <div class="row" style="justify-content:flex-end">
+      <button onclick="closeModal('vpsClientModal')">Отмена</button>
+      <button class="primary" onclick="submitClientModal(this)">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- VPS CLIENT QR & CONFIG MODAL -->
+<div id="vpsQRModal" class="sub-overlay hide">
+  <div class="sub-box" style="max-width:600px;max-height:92vh;overflow-y:auto">
+    <h2 id="vpsQRTitle">Конфигурация клиента</h2>
+    <div id="vpsQRMeta" class="mut" style="margin-bottom:10px"></div>
+    <div class="row" style="align-items:flex-start;gap:14px;margin-bottom:10px">
+      <div id="vpsQRImgBox" style="min-width:220px;min-height:220px;display:flex;align-items:center;justify-content:center;background:var(--sub);border:1px solid var(--bd);border-radius:10px;padding:8px">
+        <span class="mut">Загрузка QR...</span>
+      </div>
+      <div style="flex:1;min-width:220px;display:grid;gap:8px">
+        <button class="primary sm" onclick="downloadCurrentVPSConf()">⬇ Скачать .conf</button>
+        <button class="sm" onclick="copyText(currentQRData.config, 'Конфиг скопирован')">📋 Копировать .conf</button>
+        <button class="sm" onclick="copyText(currentQRData.vpn_url, 'Ссылка vpn:// скопирована')">⚡ Копировать vpn:// (Amnezia)</button>
+        <button class="sm" onclick="copyText(currentQRData.sub_url, 'Ссылка подписки скопирована')">🔗 Копировать /sub/ токен</button>
+        <button class="sm" id="btnQRSendTG" onclick="sendCurrentQRToTG(this)">📨 Отправить в Telegram</button>
+        <button class="sm" onclick="importCurrentClientToRouter(this)">📥 Подключить на этот роутер</button>
+      </div>
+    </div>
+    <textarea id="vpsQRConfText" readonly style="min-height:170px"></textarea>
+    <div class="row" style="justify-content:flex-end;margin-top:10px">
+      <button onclick="closeModal('vpsQRModal')">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- TELEGRAM CONTACTS MODAL -->
+<div id="tgContactsModal" class="sub-overlay hide">
+  <div class="sub-box" style="max-width:540px;max-height:90vh;overflow-y:auto">
+    <h2>Адресная книга Telegram (получатели конфигов)</h2>
+    <div class="mut" style="margin-bottom:10px">Пользователь должен хотя бы раз нажать <code>/start</code> у бота, настроенного в «Настройки → Telegram».</div>
+    <div class="grid" style="margin-bottom:8px">
+      <div><label class="mut">Имя / @username</label><input id="tgcName" placeholder="@alexey"></div>
+      <div><label class="mut">Telegram chat_id</label><input id="tgcChat" placeholder="123456789 или -100..."></div>
+      <div><label class="mut">Топик (0 = ЛС)</label><input id="tgcThread" type="number" value="0"></div>
+    </div>
+    <div class="row" style="margin-bottom:12px">
+      <button class="primary sm" onclick="addTGContact(this)">+ Сохранить контакт</button>
+    </div>
+    <div id="tgContactsList" class="mut">Нет контактов</div>
+    <div class="row" style="justify-content:flex-end;margin-top:12px">
+      <button onclick="closeModal('tgContactsModal')">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <div id="authOverlay" class="auth-overlay hide">
   <div class="auth-box">
     <h2 id="authTitle">Вход в AmneziaWG</h2>
@@ -718,6 +971,7 @@ function showTab(id, btn) {
   if (tbtn) tbtn.classList.add('active');
   document.body.classList.toggle('fullpane', id === 'logs' || id === 'term');
   if (id === 'configs') reloadActiveEditorIfClean();
+  if (id === 'keygen') loadVPSFleet();
   if (id === 'rules') { loadRules(); loadDomains(); loadSettingsIntoGeo(); }
   if (id === 'settings') loadSettings();
   if (id === 'logs') scrollLogsBottom();
@@ -2590,6 +2844,639 @@ function pickDoHFromCatalog(inputId, sel, appendId) {
   const cur = (inp.value || '').split(',').map(x => x.trim()).filter(Boolean);
   if (!cur.includes(url)) cur.push(url);
   inp.value = cur.join(',');
+}
+
+// --- VPS Fleet & Client Manager ---
+let vpsFleetData = { servers: [], clients: [], contacts: [], candidates: [], presets: [] };
+let currentQRData = { vps_id: '', client_name: '', config: '', vpn_url: '', sub_url: '', tg_chat_id: '' };
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('hide');
+}
+
+function copyText(txt, okMsg = 'Скопировано') {
+  if (!txt) { toast('Пусто для копирования', 'bad'); return; }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(() => toast(okMsg, 'ok')).catch(() => fallbackCopy(txt, okMsg));
+  } else {
+    fallbackCopy(txt, okMsg);
+  }
+}
+function fallbackCopy(txt, okMsg) {
+  const ta = document.createElement('textarea');
+  ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); toast(okMsg, 'ok'); } catch (e) { toast('Не удалось скопировать', 'bad'); }
+  document.body.removeChild(ta);
+}
+
+async function loadVPSFleet() {
+  try {
+    vpsFleetData = await api('/api/vps');
+    renderVPSFleet();
+  } catch (e) {
+    const box = document.getElementById('vpsServersList');
+    if (box) box.innerHTML = `<span style="color:var(--bad)">Ошибка загрузки VPS: ${esc(e.message)}</span>`;
+  }
+}
+
+function presetLabelByID(id, srv) {
+  const list = (srv && srv.presets && srv.presets.length ? srv.presets : vpsFleetData.presets) || [];
+  const found = list.find(p => p.id === id);
+  return found ? found.label : (id || '—');
+}
+
+function renderVPSFleet() {
+  const servers = vpsFleetData.servers || [];
+  const clients = vpsFleetData.clients || [];
+  const candidates = (vpsFleetData.candidates || []).filter(c => !c.already_set);
+
+  // Candidates banner
+  const candBox = document.getElementById('vpsCandidatesBox');
+  if (candidates.length > 0) {
+    candBox.classList.remove('hide');
+    candBox.innerHTML = `<div class="row"><span class="mut">Найдены VPS из ваших туннелей:</span>` +
+      candidates.map(c => `<button class="sm" onclick="openVPSModalPrefill('${esc(c.name)}','${esc(c.api_host)}',${Number(c.api_port)||8443})">+ ${esc(c.name)} (${esc(c.api_host)})</button>`).join('') +
+      `</div>`;
+  } else {
+    candBox.classList.add('hide');
+  }
+
+  // Filter select
+  const sel = document.getElementById('vpsFilterSelect');
+  const prevFilter = sel ? sel.value : '';
+  if (sel) {
+    sel.innerHTML = `<option value="">Все серверы VPS (${servers.length})</option>` +
+      servers.map(s => `<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.api_host)}) — ${s.client_count||0} кл.</option>`).join('');
+    sel.value = servers.some(s => s.id === prevFilter) ? prevFilter : '';
+  }
+
+  // Servers list
+  const srvBox = document.getElementById('vpsServersList');
+  if (servers.length === 0) {
+    srvBox.innerHTML = `<div class="mut">Нет добавленных VPS. Нажмите «+ Добавить VPS» или выберите сервер из подсказки выше и вставьте Admin-токен (<code>sudo awg-manager admin-token</code>).</div>`;
+  } else {
+    srvBox.innerHTML = servers.map(s => {
+      const activeSel = sel && sel.value === s.id;
+      const statusBadge = s.last_error
+        ? `<span class="badge bad" title="${esc(s.last_error)}">Ошибка</span>`
+        : (s.admin_token_set ? `<span class="badge ok">Подключён</span>` : `<span class="badge warn">Нет токена</span>`);
+      const maskBadge = s.last_preset
+        ? `<span class="badge purp">🎭 ${esc(presetLabelByID(s.last_preset, s))}${s.last_port ? ' · :' + s.last_port : ''}</span>` : '';
+      const epBadge = s.last_endpoint
+        ? `<span class="badge info">🌐 ${esc(s.last_endpoint)} (${esc(s.last_endpoint_mode || 'ipv4')})</span>` : '';
+      return `<div class="prof-row ${activeSel ? 'is-primary' : ''}">
+        <div style="display:grid;gap:4px">
+          <div class="row" style="gap:6px">
+            <strong>${esc(s.name)}</strong>
+            <span class="mut">${esc(s.api_host)}:${s.api_port || 8443}</span>
+            ${statusBadge} ${maskBadge} ${epBadge}
+            <span class="badge dim">Клиентов: ${s.client_count || 0}</span>
+          </div>
+          ${s.last_error ? `<div style="color:var(--bad);font-size:.78rem">${esc(s.last_error)}</div>` : ''}
+        </div>
+        <div class="row">
+          <button class="sm" onclick="filterByVPS('${esc(s.id)}')">Клиенты</button>
+          <button class="sm" onclick="openVPSStealthModal('${esc(s.id)}')">🎭 Маскировка / Endpoint</button>
+          <button class="sm" onclick="refreshOneVPS('${esc(s.id)}', false, this)">↻ Обновить</button>
+          <button class="sm" onclick="openVPSModal('${esc(s.id)}')" title="Настройки сервера">⚙️</button>
+          <button class="sm danger" onclick="deleteVPSServer('${esc(s.id)}','${esc(s.name)}', this)" title="Удалить из списка">🗑</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Clients table
+  const filterID = sel ? sel.value : '';
+  const q = (document.getElementById('vpsClientSearch')?.value || '').trim().toLowerCase();
+  const filtered = clients.filter(c => {
+    if (filterID && c.vps_id !== filterID) return false;
+    if (q) {
+      const hay = `${c.client_name} ${c.vps_name} ${c.ipv4} ${c.endpoint} ${c.tg_label} ${c.tg_chat_id}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const statsEl = document.getElementById('vpsFleetStats');
+  if (statsEl) {
+    const withTG = filtered.filter(c => c.tg_chat_id).length;
+    statsEl.textContent = `Показано: ${filtered.length} из ${clients.length} · с ТГ: ${withTG}`;
+  }
+
+  const tbody = document.getElementById('vpsClientsTbody');
+  if (!tbody) return;
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="mut">${servers.length ? 'Клиенты не найдены. Нажмите «+ Новый клиент» или «↻ Обновить» на сервере VPS.' : 'Сначала добавьте хотя бы один VPS.'}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(c => {
+    const onlineBadge = c.is_online
+      ? `<span class="badge ok">Online</span>`
+      : `<span class="badge dim">Offline</span>`;
+    const traffic = `↓${fmtBytes(c.tx_bytes || 0)} / ↑${fmtBytes(c.rx_bytes || 0)}`;
+    const epTag = c.endpoint_mode && c.endpoint_mode !== 'server'
+      ? `<span class="badge warn" style="margin-left:4px">${esc(c.endpoint_mode)}</span>` : '';
+
+    let tgHtml = `<span class="mut">не привязан</span>`;
+    if (c.tg_chat_id) {
+      const label = c.tg_label ? `${esc(c.tg_label)} <span class="mut">(${esc(c.tg_chat_id)}${c.tg_thread_id ? '#' + c.tg_thread_id : ''})</span>`
+                               : `<code>${esc(c.tg_chat_id)}${c.tg_thread_id ? '#' + c.tg_thread_id : ''}</code>`;
+      let deliveryBadge = '';
+      if (c.last_send_error) {
+        deliveryBadge = `<span class="badge bad" title="${esc(c.last_send_error)}">Ошибка ТГ</span>`;
+      } else if (c.last_sent_etag && c.last_etag && c.last_sent_etag === c.last_etag) {
+        deliveryBadge = `<span class="badge ok">Актуален</span>`;
+      } else if (c.last_etag) {
+        deliveryBadge = `<span class="badge warn">Есть обновление</span>`;
+      }
+      const autoBadge = c.tg_auto_send ? `<span class="badge info">Авто</span>` : '';
+      tgHtml = `<div style="display:grid;gap:3px"><div>${label}</div><div class="row" style="gap:4px">${autoBadge} ${deliveryBadge}</div></div>`;
+    }
+
+    return `<tr>
+      <td>
+        <div class="row" style="gap:6px"><strong>${esc(c.client_name)}</strong> <span class="badge info">${esc(c.vps_name || c.vps_id)}</span> ${onlineBadge}</div>
+        <div class="mut">${traffic}</div>
+      </td>
+      <td>
+        <div><code>${esc(c.ipv4 || '—')}</code>${c.ipv6 ? ` <span class="mut">+ IPv6</span>` : ''}</div>
+        <div class="mut">${esc(c.endpoint || '—')}${epTag}</div>
+      </td>
+      <td>${tgHtml}</td>
+      <td style="text-align:right">
+        <div class="row" style="justify-content:flex-end;gap:4px">
+          <button class="sm" onclick="openClientQRModal('${esc(c.vps_id)}','${esc(c.client_name)}', this)">📱 QR</button>
+          ${c.tg_chat_id ? `<button class="sm" onclick="sendClientTG('${esc(c.vps_id)}','${esc(c.client_name)}', this)" title="Отправить свежий конфиг в Telegram">📨</button>` : ''}
+          <button class="sm" onclick="openClientModal('${esc(c.vps_id)}','${esc(c.client_name)}')" title="Изменить клиента">✏️</button>
+          <button class="sm danger" onclick="deleteVPSClient('${esc(c.vps_id)}','${esc(c.client_name)}', this)" title="Удалить с VPS">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterByVPS(vpsID) {
+  const sel = document.getElementById('vpsFilterSelect');
+  if (sel) sel.value = (sel.value === vpsID) ? '' : vpsID;
+  renderVPSFleet();
+}
+
+function openVPSModal(vpsID = '') {
+  const srv = vpsID ? (vpsFleetData.servers || []).find(s => s.id === vpsID) : null;
+  document.getElementById('vpsModalTitle').textContent = srv ? `Настройки VPS: ${srv.name}` : 'Добавить сервер VPS';
+  document.getElementById('vpsEditID').value = srv ? srv.id : '';
+  document.getElementById('vpsName').value = srv ? srv.name : '';
+  document.getElementById('vpsHost').value = srv ? srv.api_host : '';
+  document.getElementById('vpsPort').value = srv ? (srv.api_port || 8443) : 8443;
+  document.getElementById('vpsPoll').value = srv ? (srv.poll_interval_min || 15) : 15;
+  document.getElementById('vpsAdminTok').value = '';
+  document.getElementById('vpsAdminTok').placeholder = srv && srv.admin_token_set ? 'Токен сохранён (введите новый для замены)' : 'awg_adm_...';
+  document.getElementById('vpsTLSPin').value = srv ? (srv.tls_pin_sha256 || '') : '';
+  document.getElementById('vpsHTTPS').checked = srv ? !!srv.use_https : true;
+  document.getElementById('vpsTLSInsecure').checked = srv ? !!srv.tls_insecure : true;
+  document.getElementById('vpsModal').classList.remove('hide');
+}
+
+function openVPSModalPrefill(name, host, port) {
+  openVPSModal('');
+  document.getElementById('vpsName').value = name;
+  document.getElementById('vpsHost').value = host;
+  document.getElementById('vpsPort').value = port || 8443;
+  setTimeout(() => document.getElementById('vpsAdminTok').focus(), 40);
+}
+
+async function saveVPSServer(btn) {
+  const payload = {
+    id: document.getElementById('vpsEditID').value.trim(),
+    name: document.getElementById('vpsName').value.trim(),
+    api_host: document.getElementById('vpsHost').value.trim(),
+    api_port: parseInt(document.getElementById('vpsPort').value, 10) || 8443,
+    poll_interval_min: parseInt(document.getElementById('vpsPoll').value, 10) || 15,
+    admin_token: document.getElementById('vpsAdminTok').value.trim(),
+    tls_pin_sha256: document.getElementById('vpsTLSPin').value.trim(),
+    use_https: document.getElementById('vpsHTTPS').checked,
+    tls_insecure: document.getElementById('vpsTLSInsecure').checked,
+  };
+  await withBusy(btn, async () => {
+    try {
+      const res = await api('/api/vps', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+      if (res.fleet) vpsFleetData = res.fleet;
+      renderVPSFleet();
+      closeModal('vpsModal');
+      if (res.refresh_error) toast('VPS сохранён, но опрос не удался: ' + res.refresh_error, 'bad');
+      else toast('VPS сохранён и синхронизирован', 'ok');
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+async function deleteVPSServer(vpsID, name, btn) {
+  if (!confirm(`Удалить VPS "${name}" из списка роутера? (Сам сервер и его клиенты затронуты не будут)`)) return;
+  await withBusy(btn, async () => {
+    try {
+      const res = await api('/api/vps/' + encodeURIComponent(vpsID), {method:'DELETE'});
+      if (res.fleet) vpsFleetData = res.fleet;
+      renderVPSFleet();
+      toast(`VPS ${name} удалён из списка`, 'ok');
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+async function refreshOneVPS(vpsID, notifyChanges, btn) {
+  await withBusy(btn, async () => {
+    try {
+      const res = await api(`/api/vps/${encodeURIComponent(vpsID)}/refresh`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({notify_changes: !!notifyChanges})
+      });
+      if (res.fleet) vpsFleetData = res.fleet;
+      renderVPSFleet();
+      toast(res.notified_tg ? `Обновлено, разослано в ТГ: ${res.notified_tg}` : 'Список клиентов обновлён', 'ok');
+    } catch (e) {
+      await loadVPSFleet();
+      toast(e.message, 'bad');
+    }
+  });
+}
+
+async function refreshAllVPS(notifyChanges, btn) {
+  const servers = vpsFleetData.servers || [];
+  if (!servers.length) { toast('Нет добавленных VPS', 'bad'); return; }
+  await withBusy(btn, async () => {
+    let totalSent = 0, errs = 0;
+    for (const s of servers) {
+      try {
+        const res = await api(`/api/vps/${encodeURIComponent(s.id)}/refresh`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({notify_changes: !!notifyChanges})
+        });
+        totalSent += (res.notified_tg || 0);
+        if (res.fleet) vpsFleetData = res.fleet;
+      } catch (e) { errs++; }
+    }
+    renderVPSFleet();
+    toast(`Опрошено VPS: ${servers.length - errs}/${servers.length}` + (notifyChanges ? ` · отправлено в ТГ: ${totalSent}` : ''), errs ? 'bad' : 'ok');
+  });
+}
+
+function openVPSStealthModal(vpsID) {
+  const srv = (vpsFleetData.servers || []).find(s => s.id === vpsID);
+  if (!srv) return;
+  document.getElementById('vpsStealthID').value = srv.id;
+  document.getElementById('vpsStealthTitle').textContent = `Маскировка и Endpoint: ${srv.name}`;
+  document.getElementById('vpsStealthMeta').innerHTML =
+    `Текущий профиль: <strong>${esc(presetLabelByID(srv.last_preset, srv))}</strong> (порт <code>${srv.last_port || '?'}</code>) · ` +
+    `Endpoint: <code>${esc(srv.last_endpoint || '—')}</code> (${esc(srv.last_endpoint_mode || 'ipv4')})`;
+  document.getElementById('btnEpIPv4').textContent = `IPv4${srv.last_public_ipv4 ? ' (' + srv.last_public_ipv4 + ')' : ''}`;
+  document.getElementById('btnEpIPv6').textContent = `IPv6${srv.last_public_ipv6 ? ' (' + srv.last_public_ipv6 + ')' : ''}`;
+  document.getElementById('vpsCustomEpInput').value = '';
+  document.getElementById('vpsEpResetAll').checked = false;
+
+  const presets = (srv.presets && srv.presets.length ? srv.presets : vpsFleetData.presets) || [];
+  const sel = document.getElementById('vpsPresetSelect');
+  sel.innerHTML = presets.map(p =>
+    `<option value="${esc(p.id)}">${esc(p.label)}${p.default_port ? ' — ' + p.default_port + '/udp' : ''} (${esc(p.desc)})</option>`
+  ).join('');
+  if (srv.last_preset && presets.some(p => p.id === srv.last_preset)) sel.value = srv.last_preset;
+  toggleCustomPresetFields();
+  document.getElementById('vpsStealthModal').classList.remove('hide');
+}
+
+function toggleCustomPresetFields() {
+  const isCust = document.getElementById('vpsPresetSelect').value === 'custom';
+  document.getElementById('vpsCustomPresetBox').classList.toggle('hide', !isCust);
+}
+
+async function applyVPSEndpoint(target, btn) {
+  target = (target || '').trim();
+  if (!target) { toast('Укажите IPv4, IPv6 или домен', 'bad'); return; }
+  const vpsID = document.getElementById('vpsStealthID').value;
+  const resetOverrides = document.getElementById('vpsEpResetAll').checked;
+  await withBusy(btn, async () => {
+    try {
+      const res = await api(`/api/vps/${encodeURIComponent(vpsID)}/endpoint`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({target, reset_overrides: resetOverrides})
+      });
+      if (res.fleet) vpsFleetData = res.fleet;
+      renderVPSFleet();
+      openVPSStealthModal(vpsID);
+      const sent = res.result?.notified_tg || 0;
+      toast(`Endpoint переключён на ${target}. Разослано в ТГ: ${sent}`, 'ok');
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+async function applyVPSPreset(btn) {
+  const vpsID = document.getElementById('vpsStealthID').value;
+  const preset = document.getElementById('vpsPresetSelect').value;
+  const port = document.getElementById('vpsCustomPort').value.trim();
+  const i1 = document.getElementById('vpsCustomI1').value.trim();
+  await withBusy(btn, async () => {
+    try {
+      const res = await api(`/api/vps/${encodeURIComponent(vpsID)}/preset`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({preset, port, i1})
+      });
+      if (res.fleet) vpsFleetData = res.fleet;
+      renderVPSFleet();
+      openVPSStealthModal(vpsID);
+      const sent = res.result?.notified_tg || 0;
+      toast(`Маскировка ${preset} применена. Разослано в ТГ: ${sent}`, 'ok');
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+async function rotateVPSServer(btn) {
+  const vpsID = document.getElementById('vpsStealthID').value;
+  if (!confirm('Выполнить полную ротацию сервера (новый порт, ключи и параметры обфускации)?')) return;
+  await withBusy(btn, async () => {
+    try {
+      const res = await api(`/api/vps/${encodeURIComponent(vpsID)}/rotate`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({})
+      });
+      if (res.fleet) vpsFleetData = res.fleet;
+      renderVPSFleet();
+      openVPSStealthModal(vpsID);
+      const sent = res.result?.notified_tg || 0;
+      toast(`Ротация выполнена (новый порт: ${res.result?.server?.listen_port || '?'}). Разослано в ТГ: ${sent}`, 'ok');
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+function toggleCliEpCustom() {
+  const isCust = document.getElementById('cliEpMode').value === 'custom';
+  document.getElementById('cliEpCustomWrap').classList.toggle('hide', !isCust);
+}
+
+function populateContactSelect() {
+  const sel = document.getElementById('cliTGContactPick');
+  if (!sel) return;
+  const contacts = vpsFleetData.contacts || [];
+  sel.innerHTML = `<option value="">— Выбрать контакт (${contacts.length}) или ввести вручную —</option>` +
+    contacts.map(c => `<option value="${esc(c.id)}">${esc(c.name)} (${esc(c.chat_id)}${c.thread_id ? '#' + c.thread_id : ''})</option>`).join('');
+}
+
+function pickTGContactForClient(id) {
+  const c = (vpsFleetData.contacts || []).find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('cliTGChat').value = c.chat_id;
+  document.getElementById('cliTGThread').value = c.thread_id || 0;
+  document.getElementById('cliTGLabel').value = c.name;
+}
+
+function openClientModal(vpsID = '', clientName = '') {
+  const servers = vpsFleetData.servers || [];
+  if (!servers.length) { toast('Сначала добавьте хотя бы один VPS', 'bad'); return; }
+  const isEdit = !!(vpsID && clientName);
+  const existing = isEdit ? (vpsFleetData.clients || []).find(c => c.vps_id === vpsID && c.client_name === clientName) : null;
+
+  document.getElementById('cliModalTitle').textContent = isEdit ? `Изменить клиента: ${clientName}` : 'Создать нового клиента на VPS';
+  document.getElementById('cliEditMode').value = isEdit ? 'edit' : 'create';
+  document.getElementById('cliOrigName').value = clientName;
+  document.getElementById('cliOrigVPSID').value = vpsID;
+
+  const vSel = document.getElementById('cliVPSSelect');
+  vSel.innerHTML = servers.map(s => `<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.api_host)})</option>`).join('');
+  const curFilter = document.getElementById('vpsFilterSelect')?.value || '';
+  vSel.value = isEdit ? vpsID : (curFilter || servers[0].id);
+  vSel.disabled = isEdit;
+
+  document.getElementById('cliName').value = existing ? existing.client_name : '';
+  document.getElementById('cliDNS').value = existing ? (existing.dns || '') : '';
+  document.getElementById('cliMTU').value = existing ? (existing.mtu || '') : '';
+  document.getElementById('cliAllowed').value = existing ? (existing.allowed_ips || '') : '';
+  document.getElementById('cliEpMode').value = existing ? (existing.endpoint_mode || 'server') : 'server';
+  document.getElementById('cliEpCustom').value = existing ? (existing.endpoint_host || '') : '';
+  toggleCliEpCustom();
+
+  document.getElementById('cliEditExtraBox').classList.toggle('hide', !isEdit);
+  document.getElementById('cliRekey').checked = false;
+  document.getElementById('cliRotTok').checked = false;
+
+  populateContactSelect();
+  document.getElementById('cliTGChat').value = existing ? (existing.tg_chat_id || '') : '';
+  document.getElementById('cliTGThread').value = existing ? (existing.tg_thread_id || 0) : 0;
+  document.getElementById('cliTGLabel').value = existing ? (existing.tg_label || '') : '';
+  document.getElementById('cliTGAuto').checked = existing ? !!existing.tg_auto_send : true;
+  document.getElementById('cliTGSendNow').checked = !isEdit;
+
+  document.getElementById('vpsClientModal').classList.remove('hide');
+}
+
+async function submitClientModal(btn) {
+  const mode = document.getElementById('cliEditMode').value;
+  const vpsID = document.getElementById('cliVPSSelect').value;
+  const name = document.getElementById('cliName').value.trim();
+  if (!name) { toast('Укажите имя клиента', 'bad'); return; }
+
+  const epMode = document.getElementById('cliEpMode').value;
+  const epVal = epMode === 'custom' ? document.getElementById('cliEpCustom').value.trim() : epMode;
+  if (epMode === 'custom' && !epVal) { toast('Укажите свой домен/IP для Endpoint', 'bad'); return; }
+
+  const tgChat = document.getElementById('cliTGChat').value.trim();
+  const tgThread = parseInt(document.getElementById('cliTGThread').value, 10) || 0;
+  const tgLabel = document.getElementById('cliTGLabel').value.trim();
+  const tgAuto = document.getElementById('cliTGAuto').checked;
+  const sendNow = document.getElementById('cliTGSendNow').checked;
+
+  await withBusy(btn, async () => {
+    try {
+      if (mode === 'create') {
+        const payload = {
+          name,
+          dns: document.getElementById('cliDNS').value.trim(),
+          mtu: document.getElementById('cliMTU').value.trim(),
+          allowed_ips: document.getElementById('cliAllowed').value.trim(),
+          endpoint: epVal,
+          tg_chat_id: tgChat,
+          tg_thread_id: tgThread,
+          tg_label: tgLabel,
+          tg_auto_send: tgAuto,
+          send_now: sendNow,
+        };
+        const res = await api(`/api/vps/${encodeURIComponent(vpsID)}/clients`, {
+          method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+        });
+        if (res.fleet) vpsFleetData = res.fleet;
+        renderVPSFleet();
+        closeModal('vpsClientModal');
+        const tgNote = res.data?.tg_error ? ` (ошибка ТГ: ${res.data.tg_error})` : (res.data?.tg_sent ? ' + отправлен в ТГ' : '');
+        toast(`Клиент ${name} создан${tgNote}`, res.data?.tg_error ? 'bad' : 'ok');
+        if (res.data) showVPSQRModalWithData(vpsID, res.data);
+      } else {
+        const origName = document.getElementById('cliOrigName').value;
+        const origVPS = document.getElementById('cliOrigVPSID').value;
+        const existing = (vpsFleetData.clients || []).find(c => c.vps_id === origVPS && c.client_name === origName) || {};
+        const payload = {
+          tg_chat_id: tgChat,
+          tg_thread_id: tgThread,
+          tg_label: tgLabel,
+          tg_auto_send: tgAuto,
+          send_now: sendNow,
+        };
+        if (name !== origName) payload.rename = name;
+        const newDNS = document.getElementById('cliDNS').value.trim();
+        const newMTU = document.getElementById('cliMTU').value.trim();
+        const newAlw = document.getElementById('cliAllowed').value.trim();
+        if (newDNS !== (existing.dns || '')) payload.dns = newDNS;
+        if (newMTU !== (existing.mtu || '')) payload.mtu = newMTU;
+        if (newAlw !== (existing.allowed_ips || '')) payload.allowed_ips = newAlw;
+        const origEpVal = existing.endpoint_mode === 'custom' ? (existing.endpoint_host || '') : (existing.endpoint_mode || 'server');
+        if (epVal !== origEpVal) payload.endpoint = epVal;
+        if (document.getElementById('cliRekey').checked) payload.rekey = true;
+        if (document.getElementById('cliRotTok').checked) payload.rotate_token = true;
+
+        const res = await api(`/api/vps/${encodeURIComponent(origVPS)}/clients/${encodeURIComponent(origName)}`, {
+          method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+        });
+        if (res.fleet) vpsFleetData = res.fleet;
+        renderVPSFleet();
+        closeModal('vpsClientModal');
+        const tgNote = res.data?.tg_error ? ` (ошибка ТГ: ${res.data.tg_error})` : (res.data?.tg_sent ? ' + отправлен в ТГ' : '');
+        toast(`Клиент ${name} обновлён${tgNote}`, res.data?.tg_error ? 'bad' : 'ok');
+      }
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+async function deleteVPSClient(vpsID, clientName, btn) {
+  if (!confirm(`Удалить клиента "${clientName}" с VPS? Доступ по этому ключу и токену сразу прекратится.`)) return;
+  await withBusy(btn, async () => {
+    try {
+      const res = await api(`/api/vps/${encodeURIComponent(vpsID)}/clients/${encodeURIComponent(clientName)}`, {method:'DELETE'});
+      if (res.fleet) vpsFleetData = res.fleet;
+      renderVPSFleet();
+      toast(`Клиент ${clientName} удалён`, 'ok');
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+async function sendClientTG(vpsID, clientName, btn) {
+  await withBusy(btn, async () => {
+    try {
+      const res = await api(`/api/vps/${encodeURIComponent(vpsID)}/clients/${encodeURIComponent(clientName)}/send-tg`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({reason:'Отправка актуального конфига'})
+      });
+      if (res.fleet) vpsFleetData = res.fleet;
+      renderVPSFleet();
+      toast(`Конфиг ${clientName} отправлен в Telegram`, 'ok');
+    } catch (e) {
+      await loadVPSFleet();
+      toast(e.message, 'bad');
+    }
+  });
+}
+
+async function openClientQRModal(vpsID, clientName, btn) {
+  await withBusy(btn, async () => {
+    try {
+      const data = await api(`/api/vps/${encodeURIComponent(vpsID)}/clients/${encodeURIComponent(clientName)}`);
+      showVPSQRModalWithData(vpsID, data);
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+function showVPSQRModalWithData(vpsID, data) {
+  const c = data.client || {};
+  currentQRData = {
+    vps_id: vpsID,
+    client_name: c.client_name || '',
+    config: data.config || '',
+    vpn_url: data.vpn_url || '',
+    sub_url: data.sub_url || '',
+    tg_chat_id: c.tg_chat_id || '',
+  };
+  document.getElementById('vpsQRTitle').textContent = `Конфигурация: ${c.client_name} (${c.vps_name || vpsID})`;
+  document.getElementById('vpsQRMeta').innerHTML =
+    `Endpoint: <code>${esc(c.endpoint || '—')}</code> · IP: <code>${esc(c.ipv4 || '—')}</code> · ETag: <code>${esc(data.etag || '—')}</code>`;
+  document.getElementById('vpsQRConfText').value = data.config || '';
+  document.getElementById('btnQRSendTG').disabled = !c.tg_chat_id;
+  document.getElementById('btnQRSendTG').title = c.tg_chat_id ? `Отправить в ${c.tg_label || c.tg_chat_id}` : 'Сначала привяжите Telegram в редактировании клиента';
+  document.getElementById('vpsQRModal').classList.remove('hide');
+  showQRForText(data.config || '', 'vpsQRImgBox');
+}
+
+function downloadCurrentVPSConf() {
+  if (!currentQRData.config) return;
+  const blob = new Blob([currentQRData.config], {type: 'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (currentQRData.client_name || 'client') + '.conf';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function sendCurrentQRToTG(btn) {
+  await sendClientTG(currentQRData.vps_id, currentQRData.client_name, btn);
+}
+
+async function importCurrentClientToRouter(btn) {
+  const localName = prompt('Имя локального профиля на этом роутере (.conf):', currentQRData.client_name);
+  if (!localName) return;
+  await withBusy(btn, async () => {
+    try {
+      const res = await api(`/api/vps/${encodeURIComponent(currentQRData.vps_id)}/clients/${encodeURIComponent(currentQRData.client_name)}/import-local`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({local_name: localName, activate: false})
+      });
+      toast(`Профиль ${res.name} сохранён на роутере с привязанной подпиской`, 'ok');
+      await refresh(true);
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+function openTGContactsModal() {
+  renderTGContacts();
+  document.getElementById('tgContactsModal').classList.remove('hide');
+}
+
+function renderTGContacts() {
+  const box = document.getElementById('tgContactsList');
+  const contacts = vpsFleetData.contacts || [];
+  if (!contacts.length) {
+    box.innerHTML = `<div class="mut">Адресная книга пуста.</div>`;
+    return;
+  }
+  box.innerHTML = contacts.map(c => `<div class="prof-row">
+    <div><strong>${esc(c.name)}</strong> · <code>${esc(c.chat_id)}${c.thread_id ? '#' + c.thread_id : ''}</code></div>
+    <button class="sm danger" onclick="deleteTGContact('${esc(c.id)}', this)">Удалить</button>
+  </div>`).join('');
+}
+
+async function addTGContact(btn) {
+  const name = document.getElementById('tgcName').value.trim();
+  const chat_id = document.getElementById('tgcChat').value.trim();
+  const thread_id = parseInt(document.getElementById('tgcThread').value, 10) || 0;
+  if (!name || !chat_id) { toast('Укажите имя и Telegram chat_id', 'bad'); return; }
+  await withBusy(btn, async () => {
+    try {
+      const res = await api('/api/tg/contacts', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name, chat_id, thread_id})
+      });
+      if (res.fleet) vpsFleetData = res.fleet;
+      document.getElementById('tgcName').value = '';
+      document.getElementById('tgcChat').value = '';
+      document.getElementById('tgcThread').value = '0';
+      renderTGContacts();
+      toast('Контакт сохранён', 'ok');
+    } catch (e) { toast(e.message, 'bad'); }
+  });
+}
+
+async function deleteTGContact(id, btn) {
+  await withBusy(btn, async () => {
+    try {
+      const res = await api('/api/tg/contacts/' + encodeURIComponent(id), {method:'DELETE'});
+      if (res.fleet) vpsFleetData = res.fleet;
+      renderTGContacts();
+      toast('Контакт удалён', 'ok');
+    } catch (e) { toast(e.message, 'bad'); }
+  });
 }
 
 initDoHCatalog();

@@ -68,7 +68,10 @@ func main() {
 	failover := NewFailoverMonitor(mgr, settingsStore, tg, logger)
 	subMgr := NewSubscriptionManager(settingsStore, mgr, tg, logger)
 	failover.SetSubscriptionManager(subMgr)
+	vpsFleet := NewVPSFleetManager(srcDir, settingsStore, mgr, subMgr, tg, logger)
+	subMgr.SetOnUpdated(vpsFleet.OnLocalSubscriptionUpdated)
 	subMgr.Start()
+	vpsFleet.Start()
 
 	mgr.onChange = func() {
 		if dnsFwd != nil {
@@ -86,6 +89,7 @@ func main() {
 	web := NewWebServer(envOr("UI_LISTEN", ":8080"), mgr, dnsFwd, rosClient, settingsStore, geoStore, policy, logger)
 	web.SetIntegrations(failover, tg)
 	web.SetSubscriptionManager(subMgr)
+	web.SetVPSFleet(vpsFleet)
 	go func() {
 		if err := web.Start(); err != nil {
 			logger.Logf("ERROR WebUI server: %v", err)
@@ -141,6 +145,8 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	sig := <-sigCh
 	logger.Logf("Received signal %s, shutting down...", sig)
+	vpsFleet.Stop()
+	subMgr.Stop()
 	failover.Stop()
 	tg.Stop()
 	rosClient.Close()

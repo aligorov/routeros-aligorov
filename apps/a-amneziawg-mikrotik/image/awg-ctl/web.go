@@ -79,6 +79,7 @@ type WebServer struct {
 	failover   *FailoverMonitor
 	tg         *TGNotifier
 	subMgr     *SubscriptionManager
+	vpsFleet   *VPSFleetManager
 	logger     *RingLogger
 
 	sessMu   sync.Mutex
@@ -96,6 +97,10 @@ func (w *WebServer) SetIntegrations(fo *FailoverMonitor, tg *TGNotifier) {
 
 func (w *WebServer) SetSubscriptionManager(sm *SubscriptionManager) {
 	w.subMgr = sm
+}
+
+func (w *WebServer) SetVPSFleet(vf *VPSFleetManager) {
+	w.vpsFleet = vf
 }
 
 func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros *ROSClient, settings *SettingsStore, geo *GeoStore, policy *PolicyEngine, logger *RingLogger) *WebServer {
@@ -170,6 +175,21 @@ func (w *WebServer) Handler() http.Handler {
 	mux.HandleFunc("POST /api/ros/mode", w.withAuth(w.handleROSMode))
 	mux.HandleFunc("POST /api/term/exec", w.withAuth(w.handleTermExec))
 	mux.HandleFunc("POST /api/term/kill", w.withAuth(w.handleTermKill))
+	mux.HandleFunc("GET /api/vps", w.withAuth(w.handleVPSFleetView))
+	mux.HandleFunc("POST /api/vps", w.withAuth(w.handleVPSUpsert))
+	mux.HandleFunc("DELETE /api/vps/{id}", w.withAuth(w.handleVPSDelete))
+	mux.HandleFunc("POST /api/vps/{id}/refresh", w.withAuth(w.handleVPSRefresh))
+	mux.HandleFunc("POST /api/vps/{id}/endpoint", w.withAuth(w.handleVPSEndpoint))
+	mux.HandleFunc("POST /api/vps/{id}/preset", w.withAuth(w.handleVPSPreset))
+	mux.HandleFunc("POST /api/vps/{id}/rotate", w.withAuth(w.handleVPSRotate))
+	mux.HandleFunc("POST /api/vps/{id}/clients", w.withAuth(w.handleVPSCreateClient))
+	mux.HandleFunc("GET /api/vps/{id}/clients/{name}", w.withAuth(w.handleVPSGetClient))
+	mux.HandleFunc("PATCH /api/vps/{id}/clients/{name}", w.withAuth(w.handleVPSUpdateClient))
+	mux.HandleFunc("DELETE /api/vps/{id}/clients/{name}", w.withAuth(w.handleVPSDeleteClient))
+	mux.HandleFunc("POST /api/vps/{id}/clients/{name}/send-tg", w.withAuth(w.handleVPSSendClientTG))
+	mux.HandleFunc("POST /api/vps/{id}/clients/{name}/import-local", w.withAuth(w.handleVPSImportClientLocal))
+	mux.HandleFunc("POST /api/tg/contacts", w.withAuth(w.handleTGContactUpsert))
+	mux.HandleFunc("DELETE /api/tg/contacts/{id}", w.withAuth(w.handleTGContactDelete))
 	return w.buildHTTPHandler(mux)
 }
 
