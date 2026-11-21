@@ -99,6 +99,12 @@
   .auth-box { width:100%; max-width:400px; background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:22px; box-shadow:0 18px 48px rgba(0,0,0,.6); }
   .auth-box h2 { margin-top:0; margin-bottom:6px; font-size:1.1rem; }
 
+  /* Subscription modal overlay */
+  .sub-overlay { position:fixed; inset:0; z-index:115; background:rgba(7,10,16,.85); backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; padding:16px; }
+  .sub-overlay.hide { display:none !important; }
+  .sub-box { width:100%; max-width:480px; background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:20px; box-shadow:0 18px 48px rgba(0,0,0,.6); }
+  .sub-box h2 { margin-top:0; margin-bottom:8px; font-size:1.15rem; }
+
   @media (max-width:640px) {
     .wrap { padding:10px; }
     .tab { padding:6px 8px; font-size:.79rem; flex:1 1 auto; text-align:center; }
@@ -425,6 +431,14 @@
       </div>
     </div>
 
+    <div class="card" id="subsCard">
+      <h2>Синхронизация и график ротации серверов AWG</h2>
+      <p class="mut" style="margin-top:-6px;margin-bottom:12px">
+        Для каждого подключения укажите токен с VPS (порт API по умолчанию <strong>8443</strong>) и график автоматической ротации. При смене порта, ключей или параметров обфускации на сервере клиент подтянет новый конфиг без разрыва связи.
+      </p>
+      <div id="subsSettingsList" style="display:flex;flex-direction:column;gap:12px"></div>
+    </div>
+
     <div class="card">
       <h2>Telegram уведомления (ЛС / Группа / Топик форума)</h2>
       <div class="row" style="gap:16px;margin-bottom:12px">
@@ -593,6 +607,59 @@
         </div>
       </div>
       <pre id="logsBox"></pre>
+    </div>
+  </div>
+</div>
+<div id="subOverlay" class="sub-overlay hide">
+  <div class="sub-box">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <h2 id="subModalTitle" style="margin:0">Ротация сервера и подписка</h2>
+      <button class="sm" onclick="closeSubModal()">✕</button>
+    </div>
+    <input type="hidden" id="subModalCfgName">
+    <div style="margin-bottom:10px">
+      <label class="mut" style="display:block;margin-bottom:4px">Токен клиента (с сервера AWG):</label>
+      <input id="subModalToken" placeholder="awg_tok_0123456789abcdef..." style="font-family:monospace">
+    </div>
+    <div class="row" style="gap:10px;margin-bottom:10px">
+      <div style="flex:1">
+        <label class="mut" style="display:block;margin-bottom:4px">Порт API сервера:</label>
+        <input id="subModalPort" type="number" value="8443" placeholder="8443">
+      </div>
+      <div style="flex:1.5">
+        <label class="mut" style="display:block;margin-bottom:4px">Кастомный IP/хост (опц.):</label>
+        <input id="subModalHost" placeholder="из Endpoint">
+      </div>
+    </div>
+    <div style="margin-bottom:10px">
+      <label class="mut" style="display:block;margin-bottom:4px">Или прямой URL / vpn://:</label>
+      <input id="subModalURL" placeholder="http://ip:8443/sub/awg_tok_... или vpn://...">
+    </div>
+    <div style="margin-bottom:10px">
+      <label class="mut" style="display:block;margin-bottom:4px">График автоматической ротации:</label>
+      <select id="subModalInterval">
+        <option value="15">Каждые 15 минут</option>
+        <option value="30">Каждые 30 минут (рекомендуется)</option>
+        <option value="60">Каждый 1 час</option>
+        <option value="180">Каждые 3 часа</option>
+        <option value="360">Каждые 6 часов</option>
+        <option value="720">Каждые 12 часов</option>
+        <option value="1440">Каждые 24 часа (раз в сутки)</option>
+        <option value="4320">Каждые 3 дня (график сервера 3days)</option>
+        <option value="10080">Раз в неделю (график сервера weekly)</option>
+      </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+      <label class="chk"><input type="checkbox" id="subModalAuto" checked> Включить автоматическое обновление по графику</label>
+      <label class="chk"><input type="checkbox" id="subModalOnFail" checked> Немедленный опрос при UNHEALTHY / потере handshake</label>
+    </div>
+    <div id="subModalStatus" class="mut" style="margin-bottom:12px;font-size:.82rem"></div>
+    <div class="row" style="justify-content:space-between">
+      <div class="row" style="gap:6px">
+        <button class="primary" onclick="saveSubModal(true, this)">Сохранить и обновить</button>
+        <button onclick="saveSubModal(false, this)">Сохранить</button>
+      </div>
+      <button class="danger sm" onclick="deleteSubModal(this)">Удалить</button>
     </div>
   </div>
 </div>
@@ -1018,6 +1085,26 @@ async function refresh(manual = false) {
                   <div class="mut">Endpoint: ${esc(p.endpoint)} · AllowedIPs: ${esc(p.allowed_ips)}</div>
                   <div>Handshake: ${p.handshake_age_sec >= 0 ? `<span style="color:var(--ok)">${p.handshake_age_sec}s назад</span>` : '<span style="color:var(--warn)">нет рукопожатия</span>'} · RX ${fmtBytes(p.rx_bytes)} / TX ${fmtBytes(p.tx_bytes)}</div>
                 </div>`).join('')}
+              ${(() => {
+                const cfgKey = c ? c.name : (i.name + '.conf');
+                const sub = (st.subscriptions || {})[cfgKey] || {};
+                const tokenDisplay = sub.token ? (sub.token.length > 22 ? sub.token.substring(0, 10) + '...' + sub.token.slice(-6) : sub.token) : (sub.url ? 'URL' : '');
+                const portDisplay = sub.api_port || 8443;
+                return `
+                <div class="row" style="margin-top:8px;padding:6px 10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:6px;gap:8px;align-items:center;flex-wrap:wrap">
+                  <span style="font-size:.82rem;font-weight:600">🔑 Токен:</span>
+                  ${tokenDisplay ? `
+                    <code style="font-size:.8rem;color:var(--ok)">${esc(tokenDisplay)}</code>
+                    <span class="mut" style="font-size:.8rem">Порт API: <strong>${portDisplay}</strong></span>
+                    ${sub.last_status === 'ok' ? '<span class="badge ok" style="font-size:.7rem">SYNC OK</span>' : (sub.last_status === 'not_modified' ? '<span class="badge info" style="font-size:.7rem">304 OK</span>' : (sub.last_status ? '<span class="badge bad" style="font-size:.7rem" title="' + esc(sub.last_status) + '">ERR</span>' : ''))}
+                    ${sub.last_sync ? `<span class="mut" style="font-size:.75rem">(${fmtTimeAgo(sub.last_sync)})</span>` : ''}
+                    <button class="sm" title="Синхронизировать сейчас" onclick="syncSubscription('${esc(cfgKey)}', this)">↻ Обновить</button>
+                  ` : `
+                    <span class="mut" style="font-size:.8rem">Порт API: <strong>8443</strong> · не привязан</span>
+                  `}
+                  <button class="sm" style="margin-left:auto" onclick="openSubModal('${esc(cfgKey)}')">${tokenDisplay ? 'Настроить ротацию' : '+ Задать токен'}</button>
+                </div>`;
+              })()}
             </div>`;
           }).join('');
     }
@@ -1135,6 +1222,7 @@ async function refresh(manual = false) {
       snap.profs = profKey;
       document.getElementById('profList').innerHTML = cfgs.length ? cfgs.map((c, idx) => {
         const h = healthByName[c.name];
+        const sub = (st.subscriptions || {})[c.name] || {};
         return `
         <div class="prof-row ${c.primary ? 'is-primary' : ''}">
           <div class="row" style="gap:8px;flex:1;min-width:220px">
@@ -1146,8 +1234,11 @@ async function refresh(manual = false) {
             ${h ? stateBadge(h) : ''}
             ${c.table ? `<span class="badge dim">tbl ${esc(c.table)}</span>` : ''}
             <span class="mut">${esc(c.endpoint || c.address || '')}</span>
+            ${sub && (sub.token || sub.url) ? `<span class="badge ok" title="Токен: ${esc(sub.token || '')} (порт ${sub.api_port || 8443})">🔑 :${sub.api_port || 8443}</span>` : ''}
           </div>
           <div class="row" style="gap:4px">
+            ${sub && (sub.token || sub.url) ? `<button class="sm" title="Синхронизировать сейчас" onclick="syncSubscription('${esc(c.name)}', this)">↻</button>` : ''}
+            <button class="sm" title="Настроить токен и график ротации" onclick="openSubModal('${esc(c.name)}')">🔑 Токен</button>
             <button class="sm" title="Выше" ${idx === 0 ? 'disabled' : ''} onclick="moveConfigOrder(${idx}, -1)">↑</button>
             <button class="sm" title="Ниже" ${idx === cfgs.length-1 ? 'disabled' : ''} onclick="moveConfigOrder(${idx}, 1)">↓</button>
             <button class="sm" onclick="document.getElementById('cfgSelect').value='${esc(c.name)}';editingNew=false;loadSelectedConfig()">Ред.</button>
@@ -1795,7 +1886,209 @@ async function loadSettings() {
     document.getElementById('setRosClearPass').checked = false;
     onSettingsROSModeChange();
     updateRosGWWarning(autoRosIP);
+    renderSettingsSubs(s.subscriptions);
   } catch (e) { document.getElementById('setMsg').textContent = 'Ошибка: ' + e.message; }
+}
+
+function fmtTimeAgo(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (isNaN(diff) || diff < 0) return '';
+  if (diff < 60) return diff + 's назад';
+  if (diff < 3600) return Math.floor(diff / 60) + 'м назад';
+  return Math.floor(diff / 3600) + 'ч назад';
+}
+
+function renderSettingsSubs(subs) {
+  const container = document.getElementById('subsSettingsList');
+  if (!container) return;
+  const cfgs = (lastStatus && lastStatus.configs) || [];
+  if (!cfgs.length) {
+    container.innerHTML = '<span class="mut">Нет доступных подключений для настройки подписок.</span>';
+    return;
+  }
+  const sMap = subs || (lastStatus && lastStatus.subscriptions) || {};
+  container.innerHTML = cfgs.map(c => {
+    const sub = sMap[c.name] || {};
+    const intVal = sub.interval_min || 30;
+    return `
+    <div class="card" style="margin-bottom:0;background:rgba(255,255,255,.02);border:1px solid var(--bd)">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <div class="row" style="gap:8px">
+          <strong>${esc(c.name)}</strong>
+          ${c.primary ? '<span class="badge info">PRIMARY</span>' : ''}
+          <span class="mut">${esc(c.endpoint || '')}</span>
+        </div>
+        <div class="row" style="gap:6px">
+          ${sub.last_status ? `<span class="badge ${sub.last_status === 'ok' || sub.last_status === 'not_modified' ? 'ok' : 'bad'}">${esc(sub.last_status)}</span>` : ''}
+          ${sub.last_etag ? `<span class="mut" style="font-size:.76rem">ETag: ${esc(sub.last_etag)}</span>` : ''}
+        </div>
+      </div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;margin-bottom:8px">
+        <div>
+          <label class="mut">Токен клиента</label>
+          <input id="subTok_${esc(c.name)}" value="${esc(sub.token || '')}" placeholder="awg_tok_0123456789abcdef..." style="font-family:monospace;font-size:.85rem">
+        </div>
+        <div>
+          <label class="mut">Порт API (по умолч. 8443)</label>
+          <input id="subPort_${esc(c.name)}" type="number" value="${sub.api_port || 8443}" placeholder="8443">
+        </div>
+        <div>
+          <label class="mut">График ротации</label>
+          <select id="subInt_${esc(c.name)}">
+            <option value="15" ${intVal === 15 ? 'selected' : ''}>Каждые 15 минут</option>
+            <option value="30" ${intVal === 30 ? 'selected' : ''}>Каждые 30 минут (рекомендуется)</option>
+            <option value="60" ${intVal === 60 ? 'selected' : ''}>Каждый 1 час</option>
+            <option value="180" ${intVal === 180 ? 'selected' : ''}>Каждые 3 часа</option>
+            <option value="360" ${intVal === 360 ? 'selected' : ''}>Каждые 6 часов</option>
+            <option value="720" ${intVal === 720 ? 'selected' : ''}>Каждые 12 часов</option>
+            <option value="1440" ${intVal === 1440 ? 'selected' : ''}>Каждые 24 часа (раз в сутки)</option>
+            <option value="4320" ${intVal === 4320 ? 'selected' : ''}>Каждые 3 дня (сервер 3days)</option>
+            <option value="10080" ${intVal === 10080 ? 'selected' : ''}>Раз в неделю (сервер weekly)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:8px">
+        <div class="row" style="gap:14px">
+          <label class="chk"><input type="checkbox" id="subAuto_${esc(c.name)}" ${sub.auto_update !== false ? 'checked' : ''}> Авто-обновление</label>
+          <label class="chk"><input type="checkbox" id="subOnFail_${esc(c.name)}" ${sub.sync_on_failure !== false ? 'checked' : ''}> Опрос при сбое / UNHEALTHY</label>
+        </div>
+        <div class="row" style="gap:6px">
+          <button class="sm primary" onclick="saveSubInline('${esc(c.name)}', false, this)">Сохранить</button>
+          <button class="sm" onclick="saveSubInline('${esc(c.name)}', true, this)">↻ Обновить сейчас</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openSubModal(cfgName) {
+  const sub = (lastStatus && lastStatus.subscriptions && lastStatus.subscriptions[cfgName]) || {};
+  document.getElementById('subModalCfgName').value = cfgName;
+  document.getElementById('subModalTitle').textContent = 'Ротация сервера: ' + cfgName;
+  document.getElementById('subModalToken').value = sub.token || '';
+  document.getElementById('subModalPort').value = sub.api_port || 8443;
+  document.getElementById('subModalHost').value = sub.api_host || '';
+  document.getElementById('subModalURL').value = sub.url || '';
+  document.getElementById('subModalInterval').value = sub.interval_min || 30;
+  document.getElementById('subModalAuto').checked = sub.auto_update !== false;
+  document.getElementById('subModalOnFail').checked = sub.sync_on_failure !== false;
+  let statusText = '';
+  if (sub.last_sync) {
+    statusText = `Последняя синхронизация: ${new Date(sub.last_sync).toLocaleString()} (${fmtTimeAgo(sub.last_sync)})`;
+    if (sub.last_status) statusText += ` · Статус: ${sub.last_status}`;
+    if (sub.last_etag) statusText += ` · ETag: ${sub.last_etag}`;
+  }
+  document.getElementById('subModalStatus').textContent = statusText;
+  document.getElementById('subOverlay').classList.remove('hide');
+}
+
+function closeSubModal() {
+  document.getElementById('subOverlay').classList.add('hide');
+}
+
+async function saveSubModal(syncNow, btn) {
+  const cfgName = document.getElementById('subModalCfgName').value;
+  if (!cfgName) return;
+  const payload = {
+    token: document.getElementById('subModalToken').value.trim(),
+    api_port: parseInt(document.getElementById('subModalPort').value, 10) || 8443,
+    api_host: document.getElementById('subModalHost').value.trim(),
+    url: document.getElementById('subModalURL').value.trim(),
+    interval_min: parseInt(document.getElementById('subModalInterval').value, 10) || 30,
+    auto_update: document.getElementById('subModalAuto').checked,
+    sync_on_failure: document.getElementById('subModalOnFail').checked,
+    sync_now: syncNow
+  };
+  await withBusy(btn, async () => {
+    try {
+      const res = await api('/api/subscriptions/' + encodeURIComponent(cfgName), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.warning) {
+        toast(res.warning, 'warn');
+      } else {
+        toast('Подписка и график сохранены', 'ok');
+      }
+      closeSubModal();
+      await refresh(true);
+    } catch (e) {
+      toast('Ошибка: ' + e.message, 'bad');
+    }
+  });
+}
+
+async function deleteSubModal(btn) {
+  const cfgName = document.getElementById('subModalCfgName').value;
+  if (!cfgName) return;
+  if (!confirm('Удалить настройки подписки для ' + cfgName + '?')) return;
+  await withBusy(btn, async () => {
+    try {
+      await api('/api/subscriptions/' + encodeURIComponent(cfgName), { method: 'DELETE' });
+      toast('Подписка удалена', 'ok');
+      closeSubModal();
+      await refresh(true);
+    } catch (e) {
+      toast('Ошибка: ' + e.message, 'bad');
+    }
+  });
+}
+
+async function saveSubInline(cfgName, syncNow, btn) {
+  const tokEl = document.getElementById('subTok_' + cfgName);
+  const portEl = document.getElementById('subPort_' + cfgName);
+  const intEl = document.getElementById('subInt_' + cfgName);
+  const autoEl = document.getElementById('subAuto_' + cfgName);
+  const failEl = document.getElementById('subOnFail_' + cfgName);
+  if (!tokEl) return;
+  const payload = {
+    token: tokEl.value.trim(),
+    api_port: parseInt(portEl.value, 10) || 8443,
+    interval_min: parseInt(intEl.value, 10) || 30,
+    auto_update: autoEl.checked,
+    sync_on_failure: failEl.checked,
+    sync_now: syncNow
+  };
+  await withBusy(btn, async () => {
+    try {
+      const res = await api('/api/subscriptions/' + encodeURIComponent(cfgName), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.warning) {
+        toast(res.warning, 'warn');
+      } else {
+        toast(syncNow ? 'Обновлено из подписки' : 'Сохранено', 'ok');
+      }
+      await refresh(true);
+      if (document.getElementById('tab-settings').classList.contains('active')) {
+        loadSettings();
+      }
+    } catch (e) {
+      toast('Ошибка: ' + e.message, 'bad');
+    }
+  });
+}
+
+async function syncSubscription(cfgName, btn) {
+  await withBusy(btn, async () => {
+    try {
+      const res = await api('/api/subscriptions/' + encodeURIComponent(cfgName) + '/sync', { method: 'POST' });
+      if (res.sub && res.sub.last_status === 'not_modified') {
+        toast('304 Not Modified: конфиг на сервере не менялся', 'ok');
+      } else {
+        toast('Конфиг ' + cfgName + ' успешно обновлён из подписки!', 'ok');
+      }
+      await refresh(true);
+    } catch (e) {
+      toast('Ошибка синхронизации: ' + e.message, 'bad');
+    }
+  });
+}
 }
 
 async function saveSettings(btn) {

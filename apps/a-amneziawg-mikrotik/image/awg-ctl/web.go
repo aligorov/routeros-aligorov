@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -77,6 +78,7 @@ type WebServer struct {
 	term       *TermRunner
 	failover   *FailoverMonitor
 	tg         *TGNotifier
+	subMgr     *SubscriptionManager
 	logger     *RingLogger
 
 	sessMu   sync.Mutex
@@ -90,6 +92,10 @@ type WebServer struct {
 func (w *WebServer) SetIntegrations(fo *FailoverMonitor, tg *TGNotifier) {
 	w.failover = fo
 	w.tg = tg
+}
+
+func (w *WebServer) SetSubscriptionManager(sm *SubscriptionManager) {
+	w.subMgr = sm
 }
 
 func NewWebServer(listenAddr string, mgr *TunnelManager, dns *DNSForwarder, ros *ROSClient, settings *SettingsStore, geo *GeoStore, policy *PolicyEngine, logger *RingLogger) *WebServer {
@@ -132,6 +138,11 @@ func (w *WebServer) Handler() http.Handler {
 	mux.HandleFunc("POST /api/configs/{name}", w.withAuth(w.handleSaveConfig))
 	mux.HandleFunc("DELETE /api/configs/{name}", w.withAuth(w.handleDeleteConfig))
 	mux.HandleFunc("POST /api/configs/{name}/activate", w.withAuth(w.handleActivateConfig))
+	mux.HandleFunc("GET /api/subscriptions", w.withAuth(w.handleGetSubscriptions))
+	mux.HandleFunc("POST /api/subscriptions/{name}", w.withAuth(w.handleSaveSubscription))
+	mux.HandleFunc("DELETE /api/subscriptions/{name}", w.withAuth(w.handleDeleteSubscription))
+	mux.HandleFunc("POST /api/subscriptions/{name}/sync", w.withAuth(w.handleSyncSubscription))
+	mux.HandleFunc("POST /api/subscriptions/import", w.withAuth(w.handleImportSubscription))
 	mux.HandleFunc("POST /api/tunnel/up", w.withAuth(w.handleTunnelUp))
 	mux.HandleFunc("POST /api/tunnel/down", w.withAuth(w.handleTunnelDown))
 	mux.HandleFunc("POST /api/tunnel/restart", w.withAuth(w.handleTunnelRestart))
@@ -985,10 +996,177 @@ func (w *WebServer) handleDeleteConfig(rw http.ResponseWriter, r *http.Request) 
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	if w.settings != nil {
+		_, _ = w.settings.DeleteSubscription(name)
+	}
 	if w.tg != nil {
 		w.tg.Notify(TGKindConfig, "del:"+name, "Профиль удалён", "Удалён: <b>"+name+"</b>")
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (w *WebServer) handleGetSubscriptions(rw http.ResponseWriter, _ *http.Request) {
+	if w.settings == nil {
+		writeJSON(rw, http.StatusOK, map[string]any{})
+		return
+	}
+	writeJSON(rw, http.StatusOK, w.settings.Get().Subscriptions)
+}
+
+func (w *WebServer) handleSaveSubscription(rw http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	if name == "" {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "имя конфига обязательно"})
+		return
+	}
+	var req struct {
+		Token         string `json:"token"`
+		APIPort       int    `json:"api_port"`
+		APIHost       string `json:"api_host"`
+		URL           string `json:"url"`
+		AutoUpdate    *bool  `json:"auto_update"`
+		IntervalMin   int    `json:"interval_min"`
+		SyncOnFailure *bool  `json:"sync_on_failure"`
+		SyncNow       bool   `json:"sync_now"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "некорректный JSON"})
+		return
+	}
+
+	st := w.settings.Get()
+	existing := st.Subscriptions[name]
+	if req.Token != "" {
+		existing.Token = strings.TrimSpace(req.Token)
+	}
+	if req.APIPort > 0 {
+		existing.APIPort = req.APIPort
+	} else if existing.APIPort <= 0 {
+		existing.APIPort = 8443
+	}
+	if req.APIHost != "" {
+		existing.APIHost = strings.TrimSpace(req.APIHost)
+	}
+	if req.URL != "" {
+		existing.URL = strings.TrimSpace(req.URL)
+	}
+	if req.AutoUpdate != nil {
+		existing.AutoUpdate = *req.AutoUpdate
+	} else {
+		existing.AutoUpdate = true
+	}
+	if req.SyncOnFailure != nil {
+		existing.SyncOnFailure = *req.SyncOnFailure
+	} else {
+		existing.SyncOnFailure = true
+	}
+	if req.IntervalMin > 0 {
+		existing.IntervalMin = req.IntervalMin
+	} else if existing.IntervalMin <= 0 {
+		existing.IntervalMin = 30
+	}
+
+	if existing.Token == "" && existing.URL == "" {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "укажите токен клиента или URL подписки"})
+		return
+	}
+
+	if _, err := w.settings.SetSubscription(name, existing); err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if req.SyncNow && w.subMgr != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+		defer cancel()
+		if err := w.subMgr.Sync(ctx, name); err != nil {
+			writeJSON(rw, http.StatusOK, map[string]any{
+				"ok":      true,
+				"name":    name,
+				"warning": "Сохранено, но ошибка синхронизации: " + err.Error(),
+				"sub":     w.settings.Get().Subscriptions[name],
+			})
+			return
+		}
+	}
+
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":   true,
+		"name": name,
+		"sub":  w.settings.Get().Subscriptions[name],
+	})
+}
+
+func (w *WebServer) handleDeleteSubscription(rw http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	if name == "" {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "имя конфига обязательно"})
+		return
+	}
+	if _, err := w.settings.DeleteSubscription(name); err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (w *WebServer) handleSyncSubscription(rw http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	if name == "" {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "имя конфига обязательно"})
+		return
+	}
+	if w.subMgr == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "сервис подписок недоступен"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+	if err := w.subMgr.Sync(ctx, name); err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":   true,
+		"name": name,
+		"sub":  w.settings.Get().Subscriptions[name],
+	})
+}
+
+func (w *WebServer) handleImportSubscription(rw http.ResponseWriter, r *http.Request) {
+	if w.subMgr == nil {
+		writeJSON(rw, http.StatusServiceUnavailable, map[string]string{"error": "сервис подписок недоступен"})
+		return
+	}
+	var req struct {
+		URL      string `json:"url"`
+		Name     string `json:"name"`
+		Activate bool   `json:"activate"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "некорректный JSON"})
+		return
+	}
+	subURL := strings.TrimSpace(req.URL)
+	if subURL == "" {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "URL подписки не может быть пустым"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	createdName, err := w.subMgr.ImportSubscription(ctx, subURL, req.Name, req.Activate)
+	if err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":   true,
+		"name": createdName,
+		"sub":  w.settings.Get().Subscriptions[createdName],
+	})
 }
 
 func (w *WebServer) handleTunnelUp(rw http.ResponseWriter, _ *http.Request) {

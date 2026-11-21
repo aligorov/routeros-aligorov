@@ -98,6 +98,21 @@ type AppSettings struct {
 	TermEnabled      bool   `json:"term_enabled"`               // enable WebUI shell terminal (/api/term/*)
 	UIUser           string `json:"ui_user,omitempty"`          // WebUI username (first-run setup / override)
 	UIPassHash       string `json:"ui_password_hash,omitempty"` // PBKDF2-HMAC-SHA256 WebUI password hash (never returned in View)
+
+	Subscriptions map[string]SubscriptionConfig `json:"subscriptions,omitempty"`
+}
+
+type SubscriptionConfig struct {
+	Token         string    `json:"token"`                     // Токен клиента awg_tok_...
+	APIPort       int       `json:"api_port"`                  // Порт API сервера (стандартный 8443)
+	APIHost       string    `json:"api_host,omitempty"`        // Кастомный IP/хост сервера (если пустой, берётся из Endpoint)
+	URL           string    `json:"url,omitempty"`             // Полный URL или vpn://
+	AutoUpdate    bool      `json:"auto_update"`               // Автоматическое обновление по графику
+	IntervalMin   int       `json:"interval_min,omitempty"`    // График проверки в минутах (по умолчанию 30)
+	SyncOnFailure bool      `json:"sync_on_failure"`           // Опрос при сбое handshake / UNHEALTHY
+	LastSync      time.Time `json:"last_sync,omitempty"`       // Время последней синхронизации
+	LastStatus    string    `json:"last_status,omitempty"`     // "ok", "not_modified", "error: ..."
+	LastETag      string    `json:"last_etag,omitempty"`       // ETag ответа сервера
 }
 
 type SettingsView struct {
@@ -217,6 +232,7 @@ func defaultSettingsFromEnv() AppSettings {
 		AllowConfigHooks: envOr("AWG_ALLOW_HOOKS", "off") == "on",
 		TermEnabled:      termEnvFlag() == "on",
 		UIUser:           envOr("UI_USER", "admin"),
+		Subscriptions:    make(map[string]SubscriptionConfig),
 	}
 }
 
@@ -444,6 +460,13 @@ func normalizeSettings(s, fallback AppSettings) AppSettings {
 		s.UIUser = fallback.UIUser
 		if s.UIUser == "" {
 			s.UIUser = "admin"
+		}
+	}
+	if s.Subscriptions == nil {
+		if fallback.Subscriptions != nil {
+			s.Subscriptions = fallback.Subscriptions
+		} else {
+			s.Subscriptions = make(map[string]SubscriptionConfig)
 		}
 	}
 	return s
@@ -753,3 +776,25 @@ func (s *SettingsStore) UpdateTunnelPlan(order, disabled []string) (AppSettings,
 	next = normalizeSettings(next, defaultSettingsFromEnv())
 	return s.saveLocked(next)
 }
+
+func (s *SettingsStore) SetSubscription(cfgName string, sub SubscriptionConfig) (AppSettings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.val
+	if next.Subscriptions == nil {
+		next.Subscriptions = make(map[string]SubscriptionConfig)
+	}
+	next.Subscriptions[cfgName] = sub
+	return s.saveLocked(next)
+}
+
+func (s *SettingsStore) DeleteSubscription(cfgName string) (AppSettings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.val
+	if next.Subscriptions != nil {
+		delete(next.Subscriptions, cfgName)
+	}
+	return s.saveLocked(next)
+}
+

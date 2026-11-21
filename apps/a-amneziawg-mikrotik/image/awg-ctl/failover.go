@@ -77,6 +77,11 @@ type FailoverMonitor struct {
 	startedAtFn func(iface string) time.Time
 	markFn      func(iface string) int
 	switchFn    func(target string, standbyFast bool) error
+	subMgr      *SubscriptionManager
+}
+
+func (f *FailoverMonitor) SetSubscriptionManager(sm *SubscriptionManager) {
+	f.subMgr = sm
 }
 
 func NewFailoverMonitor(mgr *TunnelManager, settings *SettingsStore, tg *TGNotifier, logger *RingLogger) *FailoverMonitor {
@@ -526,6 +531,9 @@ func (f *FailoverMonitor) CheckNow(forceProbe bool) FailoverStatus {
 		if h.State == "unhealthy" {
 			f.failStreak[c.Name] = prevStreak + 1
 			h.FailStreak = f.failStreak[c.Name]
+			if f.subMgr != nil {
+				f.subMgr.OnTunnelFailure(c.Name)
+			}
 			if st.FailoverMode != "off" && h.FailStreak < st.FailoverThreshold {
 				h.State = "degraded"
 			}
