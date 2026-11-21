@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const AppVersion = "1.5.1"
+const AppVersion = "1.6.0"
 
 const (
 	ROSModeGateway     = "gateway"
