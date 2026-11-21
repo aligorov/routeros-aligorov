@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -293,5 +294,135 @@ func TestWebHealthReadyVsTunnelHealth(t *testing.T) {
 	ws.handleReady(rwTun, reqTun)
 	if rwTun.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected /health?tunnel=1 503 when no awg interfaces are active, got %d", rwTun.Code)
+	}
+}
+
+func TestRunIPBatchLargeTableSafeFlushAndDiffSync(t *testing.T) {
+	// 1. Large script (>100 routes) must NOT emit "route flush table 210" directly;
+	//    it must query `ip route show` and delete existing routes in <=150 chunks with force=true.
+	var sb strings.Builder
+	sb.WriteString("route flush table 210\n")
+	var showOut strings.Builder
+	for i := 0; i < 450; i++ {
+		cidr := fmt.Sprintf("10.%d.%d.0/24", i/250, i%250)
+		fmt.Fprintf(&sb, "route replace %s via 172.19.0.1 dev veth0 table 210\n", cidr)
+		fmt.Fprintf(&showOut, "%s via 172.19.0.1 dev veth0 proto boot\n", cidr)
+	}
+	showOut.WriteString("blackhole default metric 254\n")
+
+	type batchCall struct {
+		script string
+		force  bool
+		lines  int
+	}
+	var calls []batchCall
+	err := runIPBatchWithHooks(
+		sb.String(),
+		func(tableID string) (string, error) {
+			if tableID != "210" {
+				t.Fatalf("unexpected tableID %s", tableID)
+			}
+			return showOut.String(), nil
+		},
+		func(chunk string, force bool) error {
+			if strings.Contains(chunk, "route flush ") {
+				t.Fatalf("large flush should not send route flush command: %s", chunk)
+			}
+			lines := 0
+			for _, l := range strings.Split(strings.TrimSpace(chunk), "\n") {
+				if strings.TrimSpace(l) != "" {
+					lines++
+				}
+			}
+			calls = append(calls, batchCall{script: chunk, force: force, lines: lines})
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("runIPBatchWithHooks large failed: %v", err)
+	}
+	if len(calls) < 6 {
+		t.Fatalf("expected chunked deletes + chunked replaces, got %d calls", len(calls))
+	}
+	if !calls[0].force || !strings.Contains(calls[0].script, "route del 10.0.0.0/24 table 210") {
+		t.Fatalf("expected first calls to force-delete existing routes, got force=%v: %s", calls[0].force, calls[0].script)
+	}
+	for _, c := range calls {
+		if c.force && c.lines > ipDeleteBatchChunkLines {
+			t.Fatalf("delete chunk exceeded limit: %d > %d", c.lines, ipDeleteBatchChunkLines)
+		}
+		if !c.force && c.lines > ipBatchChunkLines {
+			t.Fatalf("replace chunk exceeded limit: %d > %d", c.lines, ipBatchChunkLines)
+		}
+	}
+
+	// 2. Small script fallback if "route flush table 210" hits ENOBUFS
+	var smallCalls []string
+	err = runIPBatchWithHooks(
+		"route flush table 210\nroute replace default dev awg0 metric 10 table 210\n",
+		func(_ string) (string, error) {
+			return "default dev oldwg scope link metric 10\n", nil
+		},
+		func(chunk string, force bool) error {
+			if strings.Contains(chunk, "route flush ") {
+				return fmt.Errorf("ip -batch: Failed to send flush request: No buffer space available")
+			}
+			smallCalls = append(smallCalls, fmt.Sprintf("force=%v:%s", force, strings.TrimSpace(chunk)))
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("small fallback failed: %v", err)
+	}
+	if len(smallCalls) != 2 || !strings.Contains(smallCalls[0], "route del default metric 10 table 210") {
+		t.Fatalf("unexpected fallback calls: %#v", smallCalls)
+	}
+
+	// 3. Diff-sync on ApplyRouting when switching tunnels avoids re-sending 300+ unchanged DIRECT routes
+	dir := t.TempDir()
+	st, _ := NewSettingsStore(dir)
+	gs := NewGeoStore(dir, NewRingLogger(20))
+	mgr := NewTunnelManager(dir, filepath.Join(dir, "run"), "veth0", true, true, NewRingLogger(20))
+	pe := NewPolicyEngine(dir, st, gs, mgr, NewRingLogger(20))
+
+	var rulesTxt strings.Builder
+	for i := 0; i < 300; i++ {
+		fmt.Fprintf(&rulesTxt, "DIRECT,10.%d.%d.0/24\n", i/200, i%200)
+	}
+	rulesTxt.WriteString("PROXY,1.1.1.0/24\n")
+	pe.detectRouteFn = func(string) (string, []netip.Prefix) {
+		return "172.19.0.1", nil
+	}
+	pe.runCmdFn = func(string, ...string) error { return nil }
+	var appliedBatches []string
+	pe.runBatchFn = func(script string) error {
+		appliedBatches = append(appliedBatches, script)
+		return nil
+	}
+	curTun := "awg0"
+	pe.activeTunFn = func() string { return curTun }
+	if _, err := pe.SaveRules(rulesTxt.String()); err != nil {
+		t.Fatalf("SaveRules: %v", err)
+	}
+	if len(appliedBatches) != 1 || !strings.Contains(appliedBatches[0], "route flush table 210") {
+		t.Fatalf("first apply should send full script, got %d batches", len(appliedBatches))
+	}
+
+	// Switch tunnel awg0 -> awg1 and re-apply
+	appliedBatches = nil
+	curTun = "awg1"
+	if err := pe.ApplyRouting(); err != nil {
+		t.Fatalf("second ApplyRouting failed: %v", err)
+	}
+	if len(appliedBatches) != 1 {
+		t.Fatalf("expected 1 diff batch, got %d", len(appliedBatches))
+	}
+	diffLines := strings.Count(strings.TrimSpace(appliedBatches[0]), "\n") + 1
+	if diffLines > 5 {
+		t.Fatalf("expected tiny diff batch (<=5 lines) instead of re-sending 300 routes, got %d lines:\n%s", diffLines, appliedBatches[0])
+	}
+	if !strings.Contains(appliedBatches[0], "route replace 1.1.1.0/24 dev awg1 table 210") ||
+		!strings.Contains(appliedBatches[0], "route replace default dev awg1 metric 10 table 210") {
+		t.Fatalf("diff batch missing updated awg1 routes:\n%s", appliedBatches[0])
 	}
 }

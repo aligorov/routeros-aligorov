@@ -108,10 +108,12 @@ type PolicyEngine struct {
 	learnedOrder []netip.Addr
 	recentDNS    map[string]recentDNSEntry
 	recentOrder  []string
-	lastGateway  string
-	lastTunIface string
-	staticCount  int
-	lastApplyErr string
+	lastGateway   string
+	lastTunIface  string
+	staticCount   int
+	lastApplyErr  string
+	appliedValid  bool
+	appliedRoutes map[string]string
 
 	queriesTotal  atomic.Uint64
 	matchedProxy  atomic.Uint64
@@ -122,6 +124,7 @@ type PolicyEngine struct {
 	detectRouteFn func(lanIface string) (gw string, connected []netip.Prefix)
 	runBatchFn    func(script string) error
 	runCmdFn      func(name string, args ...string) error
+	activeTunFn   func() string
 }
 
 const defaultRulesTemplate = `# Правила маршрутизации AmneziaWG (сверху вниз, первое совпадение побеждает)
@@ -557,6 +560,7 @@ func (p *PolicyEngine) RecordResolvedIPsForTarget(domain string, action PolicyAc
 	}
 
 	var batchLines []string
+	var newAppliedEntries [][2]string
 	for _, addr := range addrs {
 		if !addr.Is4() || addr.IsLoopback() || addr.IsMulticast() || addr.IsUnspecified() {
 			continue
@@ -584,9 +588,13 @@ func (p *PolicyEngine) RecordResolvedIPsForTarget(domain string, action PolicyAc
 		}
 		if lanIface != "" {
 			if target == "blackhole" {
-				batchLines = append(batchLines, fmt.Sprintf("route replace blackhole %s/32 metric 254 table %s", addr.String(), PolicyTableID))
+				line := fmt.Sprintf("route replace blackhole %s/32 metric 254 table %s", addr.String(), PolicyTableID)
+				batchLines = append(batchLines, line)
+				newAppliedEntries = append(newAppliedEntries, [2]string{"blackhole " + addr.String() + "/32 metric 254", line})
 			} else if routeTarget != "" {
-				batchLines = append(batchLines, fmt.Sprintf("route replace %s/32 %s table %s", addr.String(), routeTarget, PolicyTableID))
+				line := fmt.Sprintf("route replace %s/32 %s table %s", addr.String(), routeTarget, PolicyTableID)
+				batchLines = append(batchLines, line)
+				newAppliedEntries = append(newAppliedEntries, [2]string{addr.String() + "/32", line})
 			}
 		}
 	}
@@ -595,6 +603,14 @@ func (p *PolicyEngine) RecordResolvedIPsForTarget(domain string, action PolicyAc
 	if len(batchLines) > 0 && lanIface != "" {
 		if err := p.runBatchFn(strings.Join(batchLines, "\n") + "\n"); err != nil {
 			p.logger.Logf("WARN policy dynamic /32 batch: %v", err)
+		} else {
+			p.mu.Lock()
+			if p.appliedValid && p.appliedRoutes != nil {
+				for _, kv := range newAppliedEntries {
+					p.appliedRoutes[kv[0]] = kv[1]
+				}
+			}
+			p.mu.Unlock()
 		}
 	}
 }
@@ -1179,6 +1195,9 @@ func (p *PolicyEngine) RouterOSSeedDomains(maxTotal int) []string {
 }
 
 func (p *PolicyEngine) activeTunnelIface() string {
+	if p.activeTunFn != nil {
+		return p.activeTunFn()
+	}
 	if p.mgr == nil {
 		return ""
 	}
@@ -1221,15 +1240,36 @@ func (p *PolicyEngine) ApplyRouting() error {
 	for k, v := range p.learned {
 		learnedSnap[k] = v
 	}
+	prevValid := p.appliedValid
+	prevRoutes := make(map[string]string, len(p.appliedRoutes))
+	for k, v := range p.appliedRoutes {
+		prevRoutes[k] = v
+	}
+	prevTun := p.lastTunIface
 	p.mu.RUnlock()
 
 	script, staticCount := p.BuildBatchScript(lanIface, gw, tunIface, defAction, killSwitch, connected, rules, learnedSnap)
+	desiredOrder, desiredRoutes := parseBatchRouteMap(script)
 
-	// Install table 210 routes
+	// Install table 210 routes (use incremental diff when table is already populated to avoid 13k+ flushes)
 	var applyErr error
-	if err := p.runBatchFn(script); err != nil {
-		applyErr = err
-		p.logger.Logf("WARN policy batch error: %v", err)
+	usedDiff := false
+	if prevValid && len(prevRoutes) > 0 {
+		diffLines := buildDiffBatchLines(prevRoutes, desiredOrder, desiredRoutes, prevTun, tunIface, PolicyTableID)
+		usedDiff = true
+		if len(diffLines) > 0 {
+			if err := p.runBatchFn(strings.Join(diffLines, "\n") + "\n"); err != nil {
+				// Fallback to full table reset if incremental diff fails
+				usedDiff = false
+				prevValid = false
+			}
+		}
+	}
+	if !usedDiff {
+		if err := p.runBatchFn(script); err != nil {
+			applyErr = err
+			p.logger.Logf("WARN policy batch error: %v", err)
+		}
 	}
 
 	// Ensure ip rule priority 250 (iif <lanIface> lookup 210)
@@ -1269,8 +1309,12 @@ func (p *PolicyEngine) ApplyRouting() error {
 	p.staticCount = staticCount
 	if applyErr != nil {
 		p.lastApplyErr = applyErr.Error()
+		p.appliedValid = false
+		p.appliedRoutes = nil
 	} else {
 		p.lastApplyErr = ""
+		p.appliedValid = true
+		p.appliedRoutes = desiredRoutes
 	}
 	p.mu.Unlock()
 
@@ -1392,7 +1436,93 @@ func (p *PolicyEngine) BuildBatchScript(
 	return b.String(), staticCount
 }
 
-const ipBatchChunkLines = 500
+const (
+	ipBatchChunkLines       = 200
+	ipDeleteBatchChunkLines = 150
+)
+
+func extractRouteKey(tokens []string) string {
+	if len(tokens) == 0 {
+		return ""
+	}
+	idx := 0
+	var keyParts []string
+	switch tokens[0] {
+	case "blackhole", "unreachable", "prohibit", "throw":
+		if len(tokens) < 2 {
+			return ""
+		}
+		keyParts = append(keyParts, tokens[0], tokens[1])
+		idx = 2
+	default:
+		keyParts = append(keyParts, tokens[0])
+		idx = 1
+	}
+	for i := idx; i+1 < len(tokens); i++ {
+		if tokens[i] == "metric" {
+			keyParts = append(keyParts, "metric", tokens[i+1])
+			break
+		}
+	}
+	return strings.Join(keyParts, " ")
+}
+
+func parseBatchRouteMap(script string) ([]string, map[string]string) {
+	var order []string
+	routes := make(map[string]string)
+	for _, raw := range strings.Split(script, "\n") {
+		line := strings.TrimSpace(raw)
+		if !strings.HasPrefix(line, "route replace ") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		key := extractRouteKey(fields[2:])
+		if key == "" {
+			continue
+		}
+		if _, exists := routes[key]; !exists {
+			order = append(order, key)
+		}
+		routes[key] = line
+	}
+	return order, routes
+}
+
+func buildDiffBatchLines(prevRoutes map[string]string, desiredOrder []string, desiredRoutes map[string]string, prevTun, tunIface, tableID string) []string {
+	var dels []string
+	for k := range prevRoutes {
+		if _, ok := desiredRoutes[k]; !ok {
+			dels = append(dels, fmt.Sprintf("route del %s table %s", k, tableID))
+		}
+	}
+	sort.Strings(dels)
+
+	var adds []string
+	for _, k := range desiredOrder {
+		line := desiredRoutes[k]
+		prevLine, existed := prevRoutes[k]
+		// Always refresh default routes and routes bound to a tunnel device (kernel auto-deletes them if tun bounced)
+		isTunBound := (tunIface != "" && strings.Contains(line, " dev "+tunIface+" ")) ||
+			(prevTun != "" && prevTun != tunIface && strings.Contains(prevLine, " dev "+prevTun+" ")) ||
+			strings.Contains(k, "default")
+		if !existed || prevLine != line || isTunBound {
+			adds = append(adds, line)
+		}
+	}
+	return append(dels, adds...)
+}
+
+func buildDeleteCmdFromShowLine(showLine, tableID string) string {
+	fields := strings.Fields(showLine)
+	key := extractRouteKey(fields)
+	if key == "" {
+		return ""
+	}
+	return fmt.Sprintf("route del %s table %s", key, tableID)
+}
 
 func splitBatchChunks(script string, maxLines int) []string {
 	if maxLines <= 0 {
@@ -1419,18 +1549,110 @@ func splitBatchChunks(script string, maxLines int) []string {
 }
 
 func runIPBatch(script string) error {
-	for _, chunk := range splitBatchChunks(script, ipBatchChunkLines) {
-		if err := runIPBatchChunk(chunk); err != nil {
+	return runIPBatchWithHooks(script, defaultShowTableRoutes, runIPBatchChunk)
+}
+
+func flushTableSafe(tableID string, showFn func(string) (string, error), chunkFn func(string, bool) error) error {
+	out, err := showFn(tableID)
+	if err != nil {
+		// Fallback to direct single flush if listing failed (e.g. small table / unsupported show)
+		return chunkFn(fmt.Sprintf("route flush table %s\n", tableID), false)
+	}
+	var delLines []string
+	for _, raw := range strings.Split(out, "\n") {
+		if cmd := buildDeleteCmdFromShowLine(raw, tableID); cmd != "" {
+			delLines = append(delLines, cmd)
+		}
+	}
+	if len(delLines) == 0 {
+		return nil
+	}
+	for _, chunk := range splitBatchChunks(strings.Join(delLines, "\n"), ipDeleteBatchChunkLines) {
+		if err := chunkFn(chunk, true); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func runIPBatchChunk(script string) error {
+func runIPBatchWithHooks(script string, showFn func(string) (string, error), chunkFn func(string, bool) error) error {
+	var flushTables []string
+	var delLines []string
+	var otherLines []string
+
+	for _, raw := range strings.Split(script, "\n") {
+		l := strings.TrimSpace(raw)
+		if l == "" {
+			continue
+		}
+		if strings.HasPrefix(l, "route flush table ") {
+			tbl := strings.TrimSpace(strings.TrimPrefix(l, "route flush table "))
+			if tbl != "" {
+				flushTables = append(flushTables, tbl)
+				continue
+			}
+		}
+		if strings.HasPrefix(l, "route del ") {
+			delLines = append(delLines, l)
+			continue
+		}
+		otherLines = append(otherLines, l)
+	}
+
+	for _, tbl := range flushTables {
+		// Avoid iproute2 netlink ENOBUFS during large table flushes (>100 routes) by deleting in chunks;
+		// for smaller batches try quick flush first and fall back to chunked delete on any error.
+		if len(otherLines) > 100 {
+			if err := flushTableSafe(tbl, showFn, chunkFn); err != nil {
+				return err
+			}
+		} else {
+			if err := chunkFn(fmt.Sprintf("route flush table %s\n", tbl), false); err != nil {
+				if err2 := flushTableSafe(tbl, showFn, chunkFn); err2 != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	if len(delLines) > 0 {
+		for _, chunk := range splitBatchChunks(strings.Join(delLines, "\n"), ipDeleteBatchChunkLines) {
+			if err := chunkFn(chunk, true); err != nil {
+				return err
+			}
+		}
+	}
+
+	if len(otherLines) > 0 {
+		for _, chunk := range splitBatchChunks(strings.Join(otherLines, "\n"), ipBatchChunkLines) {
+			if err := chunkFn(chunk, false); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func defaultShowTableRoutes(tableID string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "ip", "-batch", "-")
+	out, err := exec.CommandContext(ctx, "ip", "-4", "-o", "route", "show", "table", tableID).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("ip route show table %s: %s (%w)", tableID, strings.TrimSpace(string(out)), err)
+	}
+	return string(out), nil
+}
+
+func runIPBatchChunk(script string, force bool) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	var args []string
+	if force {
+		args = []string{"-force", "-batch", "-"}
+	} else {
+		args = []string{"-batch", "-"}
+	}
+	cmd := exec.CommandContext(ctx, "ip", args...)
 	cmd.Stdin = strings.NewReader(script)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
