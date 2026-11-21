@@ -60,6 +60,28 @@ AllowedIPs = 0.0.0.0/0
 	if u3 != expected3 {
 		t.Errorf("expected %s, got %s", expected3, u3)
 	}
+
+	// 4. APIHost accidentally containing WireGuard endpoint port: 64.118.150.81:48389
+	sub4 := SubscriptionConfig{Token: "awg_tok_test123", APIHost: "64.118.150.81:48389", APIPort: 8443}
+	u4 := sm.EffectiveURL(sub4, "tok.conf")
+	expected4 := "http://64.118.150.81:8443/sub/awg_tok_test123"
+	if u4 != expected4 {
+		t.Errorf("expected %s, got %s", expected4, u4)
+	}
+
+	// 5. cfgName passed without .conf extension
+	sub5 := SubscriptionConfig{Token: "awg_tok_test123"}
+	u5 := sm.EffectiveURL(sub5, "tok")
+	if u5 != expected2 {
+		t.Errorf("expected %s, got %s", expected2, u5)
+	}
+
+	// 6. APIHost with http schema and slash
+	sub6 := SubscriptionConfig{Token: "awg_tok_test123", APIHost: "http://64.118.150.81:8443/"}
+	u6 := sm.EffectiveURL(sub6, "tok")
+	if u6 != expected4 {
+		t.Errorf("expected %s, got %s", expected4, u6)
+	}
 }
 
 func TestSubscriptionFetchAndSync(t *testing.T) {

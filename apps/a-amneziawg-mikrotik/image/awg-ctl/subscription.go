@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -40,6 +41,24 @@ func NewSubscriptionManager(settings *SettingsStore, mgr *TunnelManager, tg *TGN
 	}
 }
 
+// cleanHost strips schema, path, brackets, and port from a host/endpoint string.
+func cleanHost(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "http://")
+	raw = strings.TrimPrefix(raw, "https://")
+	if idx := strings.Index(raw, "/"); idx != -1 {
+		raw = raw[:idx]
+	}
+	if h, _, err := net.SplitHostPort(raw); err == nil && h != "" {
+		return strings.Trim(h, "[]")
+	}
+	raw = strings.Trim(raw, "[]")
+	if idx := strings.LastIndex(raw, ":"); idx != -1 && !strings.Contains(raw[:idx], ":") {
+		return raw[:idx]
+	}
+	return raw
+}
+
 // EffectiveURL resolves the actual subscription endpoint for a config:
 // 1. If explicit URL is given (http://, https://, vpn://), use it.
 // 2. If Token is given, construct http://<host>:<port>/sub/<token> using APIHost or config Endpoint.
@@ -57,20 +76,19 @@ func (sm *SubscriptionManager) EffectiveURL(sub SubscriptionConfig, cfgName stri
 		return ""
 	}
 
-	host := strings.TrimSpace(sub.APIHost)
+	host := cleanHost(sub.APIHost)
 	if host == "" {
 		// Try to extract host from existing config Endpoint
 		if sm.mgr != nil {
 			cfgs, _ := sm.mgr.ListConfigs()
+			baseName := strings.TrimSuffix(cfgName, ".conf")
 			for _, c := range cfgs {
-				if c.Name == cfgName && c.Endpoint != "" {
-					ep := strings.TrimSpace(c.Endpoint)
-					if idx := strings.LastIndex(ep, ":"); idx != -1 {
-						host = ep[:idx]
-					} else {
-						host = ep
+				cBase := strings.TrimSuffix(c.Name, ".conf")
+				if (c.Name == cfgName || cBase == baseName) && c.Endpoint != "" {
+					host = cleanHost(c.Endpoint)
+					if host != "" {
+						break
 					}
-					break
 				}
 			}
 		}
@@ -85,7 +103,14 @@ func (sm *SubscriptionManager) EffectiveURL(sub SubscriptionConfig, cfgName stri
 		port = 8443
 	}
 
-	return fmt.Sprintf("http://%s:%d/sub/%s", host, port, token)
+	var hostPort string
+	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
+		hostPort = fmt.Sprintf("[%s]:%d", host, port)
+	} else {
+		hostPort = fmt.Sprintf("%s:%d", host, port)
+	}
+
+	return fmt.Sprintf("http://%s/sub/%s", hostPort, token)
 }
 
 // FetchSubscription retrieves configuration content from a resolved subscription URL.

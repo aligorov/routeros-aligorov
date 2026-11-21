@@ -627,8 +627,9 @@
         <input id="subModalPort" type="number" value="8443" placeholder="8443">
       </div>
       <div style="flex:1.5">
-        <label class="mut" style="display:block;margin-bottom:4px">Кастомный IP/хост (опц.):</label>
-        <input id="subModalHost" placeholder="из Endpoint">
+        <label class="mut" style="display:block;margin-bottom:4px">Кастомный IP сервера (без порта, опц.):</label>
+        <input id="subModalHost" placeholder="авто из Endpoint">
+        <div class="mut" style="font-size:.74rem;margin-top:2px">Порт указывать не нужно — используется порт API (8443)</div>
       </div>
     </div>
     <div style="margin-bottom:10px">
@@ -1969,7 +1970,9 @@ function openSubModal(cfgName) {
   document.getElementById('subModalTitle').textContent = 'Ротация сервера: ' + cfgName;
   document.getElementById('subModalToken').value = sub.token || '';
   document.getElementById('subModalPort').value = sub.api_port || 8443;
-  document.getElementById('subModalHost').value = sub.api_host || '';
+  let hVal = sub.api_host || '';
+  if (hVal.includes(':') && !hVal.includes('::')) hVal = hVal.split(':')[0];
+  document.getElementById('subModalHost').value = hVal;
   document.getElementById('subModalURL').value = sub.url || '';
   document.getElementById('subModalInterval').value = sub.interval_min || 30;
   document.getElementById('subModalAuto').checked = sub.auto_update !== false;
@@ -1991,10 +1994,15 @@ function closeSubModal() {
 async function saveSubModal(syncNow, btn) {
   const cfgName = document.getElementById('subModalCfgName').value;
   if (!cfgName) return;
+  let cleanApiHost = document.getElementById('subModalHost').value.trim();
+  cleanApiHost = cleanApiHost.replace(/^https?:\/\//i, '').split('/')[0];
+  if (cleanApiHost.includes(':') && !cleanApiHost.includes('::')) {
+    cleanApiHost = cleanApiHost.split(':')[0];
+  }
   const payload = {
     token: document.getElementById('subModalToken').value.trim(),
     api_port: parseInt(document.getElementById('subModalPort').value, 10) || 8443,
-    api_host: document.getElementById('subModalHost').value.trim(),
+    api_host: cleanApiHost,
     url: document.getElementById('subModalURL').value.trim(),
     interval_min: parseInt(document.getElementById('subModalInterval').value, 10) || 30,
     auto_update: document.getElementById('subModalAuto').checked,
