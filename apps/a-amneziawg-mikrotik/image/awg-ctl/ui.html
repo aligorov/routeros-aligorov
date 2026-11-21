@@ -432,9 +432,9 @@
     </div>
 
     <div class="card" id="subsCard">
-      <h2>Синхронизация и график ротации серверов AWG</h2>
+      <h2>Синхронизация профилей с сервером AWG</h2>
       <p class="mut" style="margin-top:-6px;margin-bottom:12px">
-        Для каждого подключения укажите токен с VPS (порт API по умолчанию <strong>8443</strong>) и график автоматической ротации. При смене порта, ключей или параметров обфускации на сервере клиент подтянет новый конфиг без разрыва связи.
+        Ротация туннеля (смена порта, ключей, параметров обфускации и профиля маскировки QUIC/STUN/DNS) выполняется <strong>на сервере AWG</strong>. Роутер по постоянному токену и порту API <strong>8443</strong> регулярно проверяет статус сервера через HTTP (ETag/304) и автоматически подхватывает новые параметры сервера без разрыва связи.
       </p>
       <div id="subsSettingsList" style="display:flex;flex-direction:column;gap:12px"></div>
     </div>
@@ -613,7 +613,7 @@
 <div id="subOverlay" class="sub-overlay hide">
   <div class="sub-box">
     <div class="row" style="justify-content:space-between;margin-bottom:12px">
-      <h2 id="subModalTitle" style="margin:0">Ротация сервера и подписка</h2>
+      <h2 id="subModalTitle" style="margin:0">Синхронизация с сервером</h2>
       <button class="sm" onclick="closeSubModal()">✕</button>
     </div>
     <input type="hidden" id="subModalCfgName">
@@ -637,7 +637,7 @@
       <input id="subModalURL" placeholder="http://ip:8443/sub/awg_tok_... или vpn://...">
     </div>
     <div style="margin-bottom:10px">
-      <label class="mut" style="display:block;margin-bottom:4px">График автоматической ротации:</label>
+      <label class="mut" style="display:block;margin-bottom:4px">Период проверки обновлений сервера:</label>
       <select id="subModalInterval">
         <option value="15">Каждые 15 минут</option>
         <option value="30">Каждые 30 минут (рекомендуется)</option>
