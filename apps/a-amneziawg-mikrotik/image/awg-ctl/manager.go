@@ -511,6 +511,23 @@ func (m *TunnelManager) ApplySavedConfig(name string) error {
 	return m.restartAllOp()
 }
 
+// ApplySyncedConfig reloads tunnels after a subscription sync without stealing Primary
+// from an already-selected active profile when Multi-Tunnel mode is enabled.
+func (m *TunnelManager) ApplySyncedConfig(name string) error {
+	m.opMu.Lock()
+	defer m.opMu.Unlock()
+	m.mu.Lock()
+	multi := m.multiTunnel
+	m.mu.Unlock()
+	if !multi || m.GetActiveConfig() == "" {
+		if err := m.SetActiveConfig(name); err != nil {
+			return err
+		}
+	}
+	m.logger.Logf("Applying synced profile %s (active=%s)", name, m.GetActiveConfig())
+	return m.restartAllOp()
+}
+
 // SwitchPrimaryFast switches Primary routing (table awg -> new interface) in <100ms
 // without tearing down running tunnels in Multi-Tunnel / Hot-Standby mode.
 func (m *TunnelManager) SwitchPrimaryFast(name string) error {

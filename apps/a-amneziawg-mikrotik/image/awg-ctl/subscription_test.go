@@ -362,3 +362,58 @@ func TestWebStatusIncludesSubscriptionsAndSaveNormalizesURL(t *testing.T) {
 		t.Errorf("expected normalized token without URL, got token=%q url=%q", savedTok.Token, savedTok.URL)
 	}
 }
+
+func TestSubscriptionSyncPreservesPrimaryInMultiTunnel(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcDir := filepath.Join(tmpDir, "src")
+	runDir := filepath.Join(tmpDir, "run")
+	_ = os.MkdirAll(srcDir, 0o700)
+	_ = os.MkdirAll(runDir, 0o700)
+
+	domConf := "[Interface]\nPrivateKey = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=\nAddress = 10.8.99.5/32\n[Peer]\nPublicKey = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=\nEndpoint = de-e1.ligam.org:36144\nAllowedIPs = 0.0.0.0/0, ::/0\n"
+	tokOld := "[Interface]\nPrivateKey = ccccccccccccccccccccccccccccccccccccccccccc=\nAddress = 10.149.104.2/32\n[Peer]\nPublicKey = ddddddddddddddddddddddddddddddddddddddddddd=\nEndpoint = 64.118.150.81:27015\nAllowedIPs = 0.0.0.0/0\n"
+	tokNew := strings.ReplaceAll(tokOld, "0.0.0.0/0", "0.0.0.0/0, ::/0")
+
+	_ = os.WriteFile(filepath.Join(srcDir, "dom25.conf"), []byte(domConf), 0o600)
+	_ = os.WriteFile(filepath.Join(srcDir, "tok.conf"), []byte(tokOld), 0o600)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"tok-v2"`)
+		_, _ = w.Write([]byte(tokNew))
+	}))
+	defer ts.Close()
+
+	logger := NewRingLogger(50)
+	settings, err := NewSettingsStore(srcDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr := NewTunnelManager(srcDir, runDir, "veth0", false, false, logger)
+	mgr.SetRuntimeOptions(false, false, true)
+	mgr.runCmdFn = func(ctx context.Context, name string, args ...string) (string, error) { return "", nil }
+	mgr.ipCmdFn = func(args ...string) error { return nil }
+	if err := mgr.SetActiveConfig("dom25.conf"); err != nil {
+		t.Fatal(err)
+	}
+
+	sm := NewSubscriptionManager(settings, mgr, nil, logger)
+	if _, err := settings.SetSubscription("tok.conf", SubscriptionConfig{
+		URL:   ts.URL + "/sub/awg_tok_sec",
+		Token: "awg_tok_sec",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := sm.SyncForce(ctx, "tok.conf"); err != nil {
+		t.Fatalf("SyncForce secondary failed: %v", err)
+	}
+	if active := mgr.GetActiveConfig(); active != "dom25.conf" {
+		t.Fatalf("expected primary to remain dom25.conf, got %q", active)
+	}
+	updated, err := os.ReadFile(filepath.Join(srcDir, "tok.conf"))
+	if err != nil || !strings.Contains(string(updated), "::/0") {
+		t.Fatalf("expected tok.conf updated on disk, err=%v content=%s", err, string(updated))
+	}
+}

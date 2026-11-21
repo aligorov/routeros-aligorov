@@ -387,8 +387,8 @@ func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string,
 		return fmt.Errorf("ошибка сохранения конфига %s: %w", cfgName, err)
 	}
 
-	// Apply updated config seamlessly
-	if err := sm.mgr.ApplySavedConfig(cfgName); err != nil {
+	// Apply updated config without hijacking Primary in Multi-Tunnel mode
+	if err := sm.mgr.ApplySyncedConfig(cfgName); err != nil {
 		sub.LastSync = time.Now()
 		sub.LastStatus = "apply error: " + err.Error()
 		_, _ = sm.settings.SetSubscription(cfgName, sub)

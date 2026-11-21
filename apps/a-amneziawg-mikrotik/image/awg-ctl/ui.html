@@ -689,6 +689,7 @@
 <script>
 const esc = s => String(s ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 let editingNew = false;
+let cfgDirty = false;
 let refreshInFlight = false;
 let lastStatus = null;
 let lastGeoData = { geosite_categories: [], geoip_categories: [] };
@@ -716,6 +717,7 @@ function showTab(id, btn) {
   const tbtn = btn || document.querySelector(`.tab[data-tab="${id}"]`);
   if (tbtn) tbtn.classList.add('active');
   document.body.classList.toggle('fullpane', id === 'logs' || id === 'term');
+  if (id === 'configs') reloadActiveEditorIfClean();
   if (id === 'rules') { loadRules(); loadDomains(); loadSettingsIntoGeo(); }
   if (id === 'settings') loadSettings();
   if (id === 'logs') scrollLogsBottom();
@@ -1201,7 +1203,7 @@ async function refresh(manual = false) {
       const prev = sel.value;
       sel.innerHTML = cfgOptsHTML;
       if (prev && cfgs.some(c => c.name === prev)) sel.value = prev;
-      if (!editingNew && sel.value && !document.getElementById('cfgText').value) loadSelectedConfig();
+      if (!editingNew && !cfgDirty && sel.value && !document.getElementById('cfgText').value) loadSelectedConfig();
     }
 
     const rtKey = cfgs.map(c => c.interface).join(',');
@@ -1224,12 +1226,12 @@ async function refresh(manual = false) {
         ? `<div class="banner-warn">${conflicts.map(esc).join('<br>')}</div>` : '';
     }
 
-    const profKey = JSON.stringify([cfgs, fo.tunnels]);
+    const profKey = JSON.stringify([cfgs, fo.tunnels, st.subscriptions]);
     if (profKey !== snap.profs) {
       snap.profs = profKey;
       document.getElementById('profList').innerHTML = cfgs.length ? cfgs.map((c, idx) => {
         const h = healthByName[c.name];
-        const sub = (st.subscriptions || {})[c.name] || {};
+        const sub = findSub(st.subscriptions, c.name);
         return `
         <div class="prof-row ${c.primary ? 'is-primary' : ''}">
           <div class="row" style="gap:8px;flex:1;min-width:220px">
@@ -1253,6 +1255,9 @@ async function refresh(manual = false) {
         </div>
         ${c.start_error ? `<div class="mut" style="color:var(--bad);margin:-2px 0 8px 8px">${esc(c.name)}: ${esc(c.start_error)}</div>` : ''}`;
       }).join('') : '<span class="mut">Профилей нет — нажмите «+ Новый» или «Загрузить».</span>';
+      if (document.getElementById('tab-configs').classList.contains('active')) {
+        reloadActiveEditorIfClean();
+      }
     }
 
     // 7. Logs
@@ -1400,12 +1405,21 @@ async function loadSelectedConfig() {
     const d = await api('/api/configs/' + encodeURIComponent(name));
     document.getElementById('cfgName').value = d.name;
     document.getElementById('cfgText').value = d.content;
+    cfgDirty = false;
     document.getElementById('cfgMsg').textContent = '';
   } catch (e) { toast(e.message, 'bad'); }
 }
 
+function reloadActiveEditorIfClean() {
+  const sel = document.getElementById('cfgSelect');
+  if (!editingNew && !cfgDirty && sel && sel.value) {
+    loadSelectedConfig();
+  }
+}
+
 function newConfig() {
   editingNew = true;
+  cfgDirty = false;
   let n = 1;
   const names = [...document.getElementById('cfgSelect').options].map(o => o.value);
   while (names.includes('awg' + n + '.conf')) n++;
@@ -1422,6 +1436,7 @@ function importConfigFile(inp) {
   const r = new FileReader();
   r.onload = () => {
     editingNew = true;
+    cfgDirty = false;
     const base = f.name.replace(/\.conf$/i, '').replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_{2,}/g, '_').slice(0, 15).replace(/^_+|_+$/g, '') || 'awg0';
     document.getElementById('cfgName').value = base + '.conf';
     document.getElementById('cfgText').value = String(r.result || '');
@@ -1444,6 +1459,7 @@ function downloadConfig() {
 
 (function initDragDrop() {
   const ta = document.getElementById('cfgText');
+  ta.addEventListener('input', () => { cfgDirty = true; });
   ta.addEventListener('dragover', e => { e.preventDefault(); ta.classList.add('dragover'); });
   ta.addEventListener('dragleave', () => ta.classList.remove('dragover'));
   ta.addEventListener('drop', e => {
@@ -1481,6 +1497,7 @@ async function saveConfig(apply, btn) {
         timeoutMs: apply ? 60000 : 12000
       });
       editingNew = false;
+      cfgDirty = false;
       msg.textContent = apply ? 'Сохранено и применено' : 'Сохранено';
       toast(apply ? (name + ' применён') : (name + ' сохранён'));
       await refresh(true);
@@ -2034,11 +2051,18 @@ async function saveSubModal(syncNow, btn) {
       });
       if (res.warning) {
         toast(res.warning, 'warn');
+      } else if (syncNow) {
+        if (res.sub && res.sub.last_status === 'not_modified') {
+          toast('Конфиг уже актуален (изменений нет)', 'ok');
+        } else {
+          toast('Конфиг ' + cfgName + ' обновлён из подписки!', 'ok');
+        }
       } else {
         toast('Подписка и график сохранены', 'ok');
       }
       closeSubModal();
       await refresh(true);
+      if (syncNow) reloadActiveEditorIfClean();
     } catch (e) {
       toast('Ошибка: ' + e.message, 'bad');
     }
@@ -2095,6 +2119,7 @@ async function saveSubInline(cfgName, syncNow, btn) {
         toast('Сохранено', 'ok');
       }
       await refresh(true);
+      if (syncNow) reloadActiveEditorIfClean();
       if (document.getElementById('tab-settings').classList.contains('active')) {
         loadSettings();
       }
@@ -2109,11 +2134,12 @@ async function syncSubscription(cfgName, btn) {
     try {
       const res = await api('/api/subscriptions/' + encodeURIComponent(cfgName) + '/sync', { method: 'POST' });
       if (res.sub && res.sub.last_status === 'not_modified') {
-        toast('304 Not Modified: конфиг на сервере не менялся', 'ok');
+        toast('Конфиг уже актуален (изменений нет)', 'ok');
       } else {
         toast('Конфиг ' + cfgName + ' успешно обновлён из подписки!', 'ok');
       }
       await refresh(true);
+      reloadActiveEditorIfClean();
     } catch (e) {
       toast('Ошибка синхронизации: ' + e.message, 'bad');
     }
