@@ -23,15 +23,30 @@
 :if ([:len [/interface/list/find name="LAN"]] = 0) do={ /interface/list/add name=LAN; :put "+ interface list LAN (добавьте в него LAN/bridge!)" }
 :if ([:len [/interface/list/find name="InAccept"]] = 0) do={ /interface/list/add name=InAccept include=WAN; :put "+ interface list InAccept" }
 
-# --- 2. veth со статическими адресами (контейнер 192.168.253.2, роутер .1) ---
+# --- 2. veth со статическими адресами (контейнер 192.168.253.2, роутер .1, dual-stack) ---
 :if ([:len [/interface/veth/find name="AmneziaWGRoS"]] = 0) do={
-  /interface/veth/add name=AmneziaWGRoS address=192.168.253.2/30 gateway=192.168.253.1
-  :put "+ veth AmneziaWGRoS (192.168.253.2/30 gw 192.168.253.1)"
+  /interface/veth/add name=AmneziaWGRoS address="192.168.253.2/30,fd00:192:168:253::2/64" gateway=192.168.253.1 gateway6=fd00:192:168:253::1
+  :put "+ veth AmneziaWGRoS (192.168.253.2/30 + fd00:192:168:253::2/64)"
+} else={
+  /interface/veth/set [find name="AmneziaWGRoS"] address="192.168.253.2/30,fd00:192:168:253::2/64" gateway=192.168.253.1 gateway6=fd00:192:168:253::1
 }
 :if ([:len [/ip/address/find address="192.168.253.1/30"]] = 0) do={
   /ip/address/add address=192.168.253.1/30 interface=AmneziaWGRoS
   :put "+ IP 192.168.253.1/30 на роутере"
 }
+:do {
+  :if ([:len [/ipv6/settings/find]] > 0) do={
+    /ipv6/settings set forward=yes
+    :if ([:len [/ipv6/address/find address="fd00:192:168:253::1/64"]] = 0) do={
+      /ipv6/address/add address=fd00:192:168:253::1/64 interface=AmneziaWGRoS advertise=no
+      :put "+ IPv6 fd00:192:168:253::1/64 на роутере"
+    }
+    :if ([:len [/ipv6/firewall/nat/find comment="AWG_Container_IPv6_NAT"]] = 0) do={
+      /ipv6/firewall/nat add chain=srcnat src-address=fd00:192:168:253::/64 action=masquerade comment="AWG_Container_IPv6_NAT"
+      :put "+ IPv6 NAT Masquerade для контейнера"
+    }
+  }
+} on-error={}
 :if ([:len [/interface/list/member/find interface="AmneziaWGRoS" list="InAccept"]] = 0) do={
   /interface/list/member/add interface=AmneziaWGRoS list=InAccept
   :put "+ AmneziaWGRoS -> InAccept"
@@ -40,7 +55,7 @@
 # --- 3. fasttrack не должен съедать маркированный трафик ---
 :do { /ip firewall filter set [find where action=fasttrack-connection] connection-mark=no-mark } on-error={}
 
-# --- 4. Таблица маршрутизации + маршруты (default -> контейнер + blackhole-страховка) ---
+# --- 4. Таблица маршрутизации + маршруты (default -> контейнер + blackhole-страховка, dual-stack) ---
 :if ([:len [/routing/table/find name="AmneziaWGRoS"]] = 0) do={
   /routing/table/add name=AmneziaWGRoS fib
   :put "+ routing table AmneziaWGRoS"
@@ -51,14 +66,32 @@
   add blackhole dst-address=0.0.0.0/0 distance=254 routing-table=AmneziaWGRoS comment="AmneziaWGRoS_bh"
   :put "+ default -> 192.168.253.2 в таблицу AmneziaWGRoS (+blackhole fallback)"
 }
+:do {
+  /ipv6/route
+  :if ([:len [find comment="AmneziaWGRoS_default"]] = 0) do={
+    add dst-address=::/0 gateway=fd00:192:168:253::2 routing-table=AmneziaWGRoS comment="AmneziaWGRoS_default"
+    add blackhole dst-address=::/0 distance=254 routing-table=AmneziaWGRoS comment="AmneziaWGRoS_bh"
+    :put "+ IPv6 default -> fd00:192:168:253::2 в таблицу AmneziaWGRoS (+blackhole fallback)"
+  }
+} on-error={}
 
-# --- 5. mangle: выборочная маршрутизация по address-list=AmneziaWGRoS ---
+# --- 5. mangle: выборочная маршрутизация по address-list=AmneziaWGRoS (dual-stack) ---
 /ip firewall mangle
+:if ([:len [find comment="AWG_Accept_Container"]] = 0) do={ add action=accept chain=prerouting src-address=192.168.253.2 comment="AWG_Accept_Container"; :put "+ mangle AWG_Accept_Container" }
 :if ([:len [find comment="AWG_Accept_no_mark"]] = 0) do={ add action=accept chain=prerouting connection-mark=no-mark connection-state=established comment="AWG_Accept_no_mark"; :put "+ mangle AWG_Accept_no_mark" }
 :if ([:len [find comment="AWG_Accept_InAccept"]] = 0) do={ add action=accept chain=prerouting in-interface-list=InAccept comment="AWG_Accept_InAccept"; :put "+ mangle AWG_Accept_InAccept" }
 :if ([:len [find comment="AWG_Route_Conn"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark=AmneziaWGRoS new-routing-mark=AmneziaWGRoS passthrough=no comment="AWG_Route_Conn"; :put "+ mangle AWG_Route_Conn" }
 :if ([:len [find comment="AWG_Mark_AddressList"]] = 0) do={ add action=mark-connection chain=prerouting in-interface-list=LAN connection-mark=no-mark connection-state=new dst-address-type=!local dst-address-list=AmneziaWGRoS new-connection-mark=AmneziaWGRoS comment="AWG_Mark_AddressList"; :put "+ mangle AWG_Mark_AddressList" }
 :if ([:len [find comment="AWG_Route_New"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark=AmneziaWGRoS new-routing-mark=AmneziaWGRoS passthrough=no comment="AWG_Route_New"; :put "+ mangle AWG_Route_New" }
+
+:do {
+  /ipv6/firewall/mangle
+  :if ([:len [find comment="AWG_Accept_Container"]] = 0) do={ add action=accept chain=prerouting src-address=fd00:192:168:253::2 comment="AWG_Accept_Container" }
+  :if ([:len [find comment="AWG_Accept_no_mark"]] = 0) do={ add action=accept chain=prerouting connection-mark=no-mark connection-state=established comment="AWG_Accept_no_mark" }
+  :if ([:len [find comment="AWG_Route_Conn"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark=AmneziaWGRoS new-routing-mark=AmneziaWGRoS passthrough=no comment="AWG_Route_Conn" }
+  :if ([:len [find comment="AWG_Mark_AddressList"]] = 0) do={ add action=mark-connection chain=prerouting in-interface-list=LAN connection-mark=no-mark connection-state=new dst-address-list=AmneziaWGRoS new-connection-mark=AmneziaWGRoS comment="AWG_Mark_AddressList" }
+  :if ([:len [find comment="AWG_Route_New"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark=AmneziaWGRoS new-routing-mark=AmneziaWGRoS passthrough=no comment="AWG_Route_New" }
+} on-error={}
 
 # --- 6. DNS: защита от обхода через Apple Private Relay + разрешение remote-requests ---
 /ip dns static

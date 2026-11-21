@@ -1278,3 +1278,25 @@ func TestROSLoopGuardBeforeMarkRoutingAndInAccept(t *testing.T) {
 		t.Fatalf("expected InAccept accept rule before mark-routing to satisfy mangle_loop_guard, got %+v", repInAccept.Checks)
 	}
 }
+
+func TestROSDualStackIPv6Provisioning(t *testing.T) {
+	cULA, rULA, ulaSub := deriveDualStackULA("172.19.0.99")
+	if cULA != "fd00:172:19:0::99" || rULA != "fd00:172:19:0::1" || ulaSub != "fd00:172:19:0::/64" {
+		t.Fatalf("unexpected derived ULA: c=%s r=%s sub=%s", cULA, rULA, ulaSub)
+	}
+
+	cULA2, rULA2, ulaSub2 := deriveDualStackULA("192.168.253.2")
+	if cULA2 != "fd00:192:168:253::2" || rULA2 != "fd00:192:168:253::1" || ulaSub2 != "fd00:192:168:253::/64" {
+		t.Fatalf("unexpected derived ULA: c=%s r=%s sub=%s", cULA2, rULA2, ulaSub2)
+	}
+
+	s := AppSettings{
+		ROSMode:        ROSModeAddressList,
+		ROSAddressList: "testlist",
+		ROSRouteTable:  "testtable",
+	}
+	cli := BuildROSSchemaCLIScript(s, "172.19.0.99", "172.19.0.1")
+	if !strings.Contains(cli, "fd00:172:19:0::99") || !strings.Contains(cli, "/ipv6/route") || !strings.Contains(cli, "AWG_Container_IPv6_NAT") {
+		t.Fatalf("expected CLI script to contain dual-stack IPv6 rules, got:\n%s", cli)
+	}
+}

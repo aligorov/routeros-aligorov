@@ -871,7 +871,7 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 		multiTun = st.MultiTunnel
 		subs = st.Subscriptions
 	}
-	containerIP, gw := w.containerNetInfo()
+	containerIP, gw, containerIP6, gw6 := w.containerNetInfo()
 	var foStatus any
 	if w.failover != nil {
 		foStatus = w.failover.Status()
@@ -892,6 +892,8 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 		"lan_iface":      w.mgr.lanIface,
 		"container_ip":   containerIP,
 		"gateway":        gw,
+		"container_ip6":  containerIP6,
+		"gateway6":       gw6,
 		"auto_route":     w.mgr.autoRoute,
 		"kill_switch":    w.mgr.killSwitch,
 		"multi_tunnel":   multiTun,
@@ -908,16 +910,19 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (w *WebServer) containerNetInfo() (containerIP, gateway string) {
+func (w *WebServer) containerNetInfo() (containerIP, gateway, containerIP6, gateway6 string) {
 	if w.mgr == nil || w.mgr.lanIface == "" {
-		return "", ""
+		return "", "", "", ""
 	}
 	if ifc, err := net.InterfaceByName(w.mgr.lanIface); err == nil {
 		if addrs, err := ifc.Addrs(); err == nil {
 			for _, a := range addrs {
-				if ipn, ok := a.(*net.IPNet); ok && ipn.IP.To4() != nil {
-					containerIP = ipn.String()
-					break
+				if ipn, ok := a.(*net.IPNet); ok {
+					if ipn.IP.To4() != nil && containerIP == "" {
+						containerIP = ipn.String()
+					} else if ipn.IP.To4() == nil && !ipn.IP.IsLoopback() && !ipn.IP.IsLinkLocalUnicast() && containerIP6 == "" {
+						containerIP6 = ipn.String()
+					}
 				}
 			}
 		}
@@ -927,7 +932,8 @@ func (w *WebServer) containerNetInfo() (containerIP, gateway string) {
 	} else {
 		gateway, _ = defaultDetectRoute(w.mgr.lanIface)
 	}
-	return containerIP, gateway
+	gateway6, _ = defaultDetectRoute6(w.mgr.lanIface)
+	return containerIP, gateway, containerIP6, gateway6
 }
 
 func (w *WebServer) handleGetConfig(rw http.ResponseWriter, r *http.Request) {

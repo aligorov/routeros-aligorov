@@ -1274,9 +1274,11 @@ async function refresh(manual = false) {
       pill.textContent = 'DOWN';
     }
 
+    const ipStr = st.container_ip6 ? `${st.container_ip||'no IP'}, ${st.container_ip6}` : (st.container_ip||'no IP');
+    const gwStr = st.gateway6 ? `${st.gateway||'—'}, ${st.gateway6}` : (st.gateway||'—');
     document.getElementById('meta').textContent =
       (st.applying ? `[${st.applying_op || 'Применение...'}] · ` : '') +
-      `${(st.default_policy||'proxy').toUpperCase()} · ${st.lan_iface||'—'} (${st.container_ip||'no IP'}, gw ${st.gateway||'—'}) · rules: ${pol.rules_count||0} · failover: ${fo.mode||'off'} · TG: ${tg.enabled ? 'on' : 'off'}`;
+      `${(st.default_policy||'proxy').toUpperCase()} · ${st.lan_iface||'—'} (${ipStr}, gw ${gwStr}) · rules: ${pol.rules_count||0} · failover: ${fo.mode||'off'} · TG: ${tg.enabled ? 'on' : 'off'}`;
 
     const rosMode = ros.mode || 'gateway';
     const rosSelRules = document.getElementById('rosModeRules');
@@ -1419,7 +1421,7 @@ async function refresh(manual = false) {
     }
 
     // 3. Network card
-    const netKey = JSON.stringify([st.lan_iface, st.container_ip, st.gateway, st.dns_upstreams, tg, ros.last_error]);
+    const netKey = JSON.stringify([st.lan_iface, st.container_ip, st.container_ip6, st.gateway, st.gateway6, st.dns_upstreams, tg, ros.last_error]);
     if (netKey !== snap.net) {
       snap.net = netKey;
       document.getElementById('netCard').innerHTML = `
@@ -1429,8 +1431,8 @@ async function refresh(manual = false) {
         </div>
         <div class="statgrid">
           <div class="statbox"><div class="mut">veth</div><div class="statval">${esc(st.lan_iface||'—')}</div></div>
-          <div class="statbox"><div class="mut">IP контейнера</div><div class="statval">${esc(st.container_ip||'—')}</div></div>
-          <div class="statbox"><div class="mut">Шлюз</div><div class="statval">${esc(st.gateway||'—')}</div></div>
+          <div class="statbox"><div class="mut">IP контейнера</div><div class="statval" style="font-size:${st.container_ip6 ? '.82rem' : '1.1rem'}">${esc(st.container_ip||'—')}${st.container_ip6 ? '<br><span style="color:var(--ok)">' + esc(st.container_ip6) + '</span>' : ''}</div></div>
+          <div class="statbox"><div class="mut">Шлюз</div><div class="statval" style="font-size:${st.gateway6 ? '.82rem' : '1.1rem'}">${esc(st.gateway||'—')}${st.gateway6 ? '<br><span style="color:var(--ok)">' + esc(st.gateway6) + '</span>' : ''}</div></div>
           <div class="statbox"><div class="mut">Proxy DNS ${(st.dns_upstreams||[]).some(u=>/^https?:\/\//i.test(u)) ? '<span class="badge purp">DoH</span>' : ''}</div><div class="statval" style="font-size:.86rem">${esc((st.dns_upstreams||[]).join(', ')||'off')}</div></div>
           <div class="statbox"><div class="mut">Telegram</div><div class="statval">${tg.enabled ? `ON${tg.thread_id ? ' (#'+tg.thread_id+')' : ''}` : 'OFF'}</div></div>
         </div>

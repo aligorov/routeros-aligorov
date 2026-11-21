@@ -1743,6 +1743,48 @@ func defaultDetectRoute(lanIface string) (string, []netip.Prefix) {
 	return gw, connected
 }
 
+func defaultDetectRoute6(lanIface string) (string, []netip.Prefix) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ip", "-6", "route", "show", "table", "main").Output()
+	if err != nil {
+		return "", nil
+	}
+	var gw string
+	var connected []netip.Prefix
+	var buf bytes.Buffer
+	buf.Write(out)
+	for _, line := range strings.Split(buf.String(), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		if fields[0] == "default" {
+			var foundGW, foundDev string
+			for i := 1; i+1 < len(fields); i++ {
+				if fields[i] == "via" {
+					foundGW = fields[i+1]
+				} else if fields[i] == "dev" {
+					foundDev = fields[i+1]
+				}
+			}
+			if foundGW != "" && (foundDev == lanIface || gw == "") {
+				gw = foundGW
+			}
+			continue
+		}
+		if pfx, err := netip.ParsePrefix(fields[0]); err == nil && pfx.Addr().Is6() {
+			for i := 1; i+1 < len(fields); i++ {
+				if fields[i] == "dev" && fields[i+1] == lanIface {
+					connected = append(connected, pfx.Masked())
+					break
+				}
+			}
+		}
+	}
+	return gw, connected
+}
+
 func (p *PolicyEngine) hasIPv6Config() bool {
 	cfgDir := filepath.Dir(p.rulesPath)
 	if cfgDir == "" || cfgDir == "." {

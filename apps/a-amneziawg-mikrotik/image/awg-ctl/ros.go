@@ -1486,6 +1486,47 @@ func detectInterfaceIPv4(ifaceName string) string {
 	return ""
 }
 
+func detectInterfaceIPv6(ifaceName string) string {
+	ifaceName = strings.TrimSpace(ifaceName)
+	if ifaceName == "" {
+		return ""
+	}
+	ifc, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		return ""
+	}
+	addrs, err := ifc.Addrs()
+	if err != nil {
+		return ""
+	}
+	for _, a := range addrs {
+		if ipn, ok := a.(*net.IPNet); ok && ipn.IP != nil {
+			if ipn.IP.To4() == nil && !ipn.IP.IsLoopback() && !ipn.IP.IsLinkLocalUnicast() {
+				return ipn.IP.String()
+			}
+		}
+	}
+	return ""
+}
+
+// deriveDualStackULA derives deterministic RFC 4193 ULA IPv6 addresses from an IPv4 address.
+// Example: 172.19.0.99 -> container: fd00:172:19::99, router: fd00:172:19::1, subnet: fd00:172:19::/64
+func deriveDualStackULA(v4 string) (containerULA, routerULA, ulaSubnet string) {
+	v4 = normalizeROSContainerIP(v4)
+	ip := net.ParseIP(v4)
+	if ip == nil {
+		return "", "", ""
+	}
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return "", "", ""
+	}
+	containerULA = fmt.Sprintf("fd00:%d:%d:%d::%d", ip4[0], ip4[1], ip4[2], ip4[3])
+	routerULA = fmt.Sprintf("fd00:%d:%d:%d::1", ip4[0], ip4[1], ip4[2])
+	ulaSubnet = fmt.Sprintf("fd00:%d:%d:%d::/64", ip4[0], ip4[1], ip4[2])
+	return containerULA, routerULA, ulaSubnet
+}
+
 func formatROSError(baseURL, method, path string, statusCode int, data []byte) error {
 	summary := extractROSErrorBody(data)
 	if summary == "" {

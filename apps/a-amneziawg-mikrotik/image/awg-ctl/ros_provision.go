@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -203,6 +204,42 @@ func BuildROSSchemaCLIScript(s AppSettings, containerIP, peerIP string) string {
 
 	switch mode {
 	case ROSModeAddressList:
+		cULA, _, ulaSub := deriveDualStackULA(containerIP)
+		v6Block := ""
+		if cULA != "" {
+			v6Block = fmt.Sprintf(`
+:do {
+  :if ([:len [/ipv6/settings/find]] > 0) do={
+    /ipv6/settings set forward=yes
+    /ipv6/route
+    :if ([:len [find comment="AmneziaWGRoS_default"]] = 0) do={
+      add dst-address=::/0 gateway=%s routing-table="%s" comment="AmneziaWGRoS_default"
+    } else={
+      set [find comment="AmneziaWGRoS_default"] gateway=%s routing-table="%s" disabled=no
+    }
+    :if ([:len [find comment="AmneziaWGRoS_bh"]] = 0) do={
+      add blackhole dst-address=::/0 distance=254 routing-table="%s" comment="AmneziaWGRoS_bh"
+    }
+    /ipv6/firewall/mangle
+    :if ([:len [find comment="AWG_Accept_Container"]] = 0) do={ add action=accept chain=prerouting src-address=%s comment="AWG_Accept_Container" } else={ set [find comment="AWG_Accept_Container"] src-address=%s disabled=no }
+    :if ([:len [find comment="AWG_Accept_no_mark"]] = 0) do={ add action=accept chain=prerouting connection-mark=no-mark connection-state=established comment="AWG_Accept_no_mark" }
+    :if ([:len [find comment="AWG_Route_Conn"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark="%s" new-routing-mark="%s" passthrough=no comment="AWG_Route_Conn" }
+    :if ([:len [find comment="AWG_Mark_AddressList"]] = 0) do={ add action=mark-connection chain=prerouting in-interface-list=LAN connection-mark=no-mark connection-state=new dst-address-list="%s" new-connection-mark="%s" comment="AWG_Mark_AddressList" }
+    :if ([:len [find comment="AWG_Route_New"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark="%s" new-routing-mark="%s" passthrough=no comment="AWG_Route_New" }
+    /ipv6/firewall/nat
+    :if ([:len [find comment="AWG_Container_IPv6_NAT"]] = 0) do={
+      add chain=srcnat src-address=%s action=masquerade comment="AWG_Container_IPv6_NAT"
+    }
+  }
+} on-error={}`,
+				cULA, tableName, cULA, tableName, tableName,
+				cULA, cULA,
+				tableName, tableName,
+				listName, tableName,
+				tableName, tableName,
+				ulaSub,
+			)
+		}
 		return fmt.Sprintf(`# === Режим: Address-List + Mangle + Route -> в контейнер (%s) ===
 /interface/list
 :if ([:len [find name="LAN"]] = 0) do={ add name=LAN }
@@ -223,13 +260,14 @@ func BuildROSSchemaCLIScript(s AppSettings, containerIP, peerIP string) string {
 :if ([:len [find comment="AWG_Accept_no_mark"]] = 0) do={ add action=accept chain=prerouting connection-mark=no-mark connection-state=established comment="AWG_Accept_no_mark" }
 :if ([:len [find comment="AWG_Route_Conn"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark="%s" new-routing-mark="%s" passthrough=no comment="AWG_Route_Conn" }
 :if ([:len [find comment="AWG_Mark_AddressList"]] = 0) do={ add action=mark-connection chain=prerouting in-interface-list=LAN connection-mark=no-mark connection-state=new dst-address-type=!local dst-address-list="%s" new-connection-mark="%s" comment="AWG_Mark_AddressList" }
-:if ([:len [find comment="AWG_Route_New"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark="%s" new-routing-mark="%s" passthrough=no comment="AWG_Route_New" }`,
+:if ([:len [find comment="AWG_Route_New"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark="%s" new-routing-mark="%s" passthrough=no comment="AWG_Route_New" }%s`,
 			containerIP, tableName, tableName,
 			containerIP, tableName, containerIP, tableName, tableName,
 			containerIP, containerIP,
 			tableName, tableName,
 			listName, tableName,
 			tableName, tableName,
+			v6Block,
 		)
 
 	case ROSModeBGP:
@@ -863,6 +901,23 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 
 	var applied []string
 
+	var ipv6Enabled bool
+	var cULA, rULA, ulaSub string
+	if cCand, rCand, subCand := deriveDualStackULA(conn.gatewayIP); cCand != "" {
+		cULA = cCand
+		rULA = rCand
+		ulaSub = subCand
+		if v6Sets, err := c.rosPrint(ctx, conn, "/ipv6/settings", []string{"disable-ipv6", "forward"}); err == nil && len(v6Sets) > 0 {
+			if !isTruthyROS(v6Sets[0]["disable-ipv6"]) {
+				ipv6Enabled = true
+				if !isTruthyROS(v6Sets[0]["forward"]) {
+					_ = c.rosSet(ctx, conn, "/ipv6/settings", "", map[string]string{"forward": "yes"})
+					applied = append(applied, "enabled /ipv6/settings forward=yes")
+				}
+			}
+		}
+	}
+
 	ensureRoutingTable := func(name string) error {
 		rows, err := c.rosPrint(ctx, conn, "/routing/table", []string{".id", "name", "fib", "disabled"}, "name="+name)
 		if err != nil {
@@ -955,7 +1010,133 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 		} else if foundBHDisabled {
 			_ = c.rosSet(ctx, conn, "/ip/route", foundBHID, map[string]string{"disabled": "no"})
 		}
+
+		if ipv6Enabled && cULA != "" {
+			v6rows, err := c.rosPrint(ctx, conn, "/ipv6/route", []string{".id", "dst-address", "gateway", "routing-table", "blackhole", "disabled", "comment"}, "routing-table="+tbl)
+			if err == nil {
+				var foundDefID, foundBHID string
+				var foundDefGW, foundDefTbl string
+				var foundDefDisabled, foundBHDisabled bool
+				for _, r := range v6rows {
+					cmt := strField(r, "comment")
+					dst := strField(r, "dst-address")
+					rtbl := strField(r, "routing-table")
+					id := strField(r, ".id")
+					if cmt == "AmneziaWGRoS_default" || (dst == "::/0" && rtbl == tbl && !isTruthyROS(r["blackhole"])) {
+						if foundDefID == "" {
+							foundDefID = id
+							foundDefGW = stripIfaceScope(strField(r, "gateway"))
+							foundDefTbl = rtbl
+							foundDefDisabled = isTruthyROS(r["disabled"])
+						}
+					}
+					if cmt == "AmneziaWGRoS_bh" || (dst == "::/0" && rtbl == tbl && isTruthyROS(r["blackhole"])) {
+						if foundBHID == "" {
+							foundBHID = id
+							foundBHDisabled = isTruthyROS(r["disabled"])
+						}
+					}
+				}
+				if foundDefID == "" {
+					if err := c.rosAdd(ctx, conn, "/ipv6/route", map[string]string{
+						"dst-address":   "::/0",
+						"gateway":       cULA,
+						"routing-table": tbl,
+						"comment":       "AmneziaWGRoS_default",
+					}); err == nil {
+						applied = append(applied, fmt.Sprintf("added route ::/0 -> %s (table=%s)", cULA, tbl))
+					}
+				} else if foundDefGW != cULA || foundDefTbl != tbl || foundDefDisabled {
+					if err := c.rosSet(ctx, conn, "/ipv6/route", foundDefID, map[string]string{
+						"gateway":       cULA,
+						"routing-table": tbl,
+						"disabled":      "no",
+						"comment":       "AmneziaWGRoS_default",
+					}); err == nil {
+						applied = append(applied, fmt.Sprintf("updated route ::/0 -> %s (table=%s)", cULA, tbl))
+					}
+				}
+				if foundBHID == "" {
+					if err := c.rosAdd(ctx, conn, "/ipv6/route", map[string]string{
+						"dst-address":   "::/0",
+						"blackhole":     "yes",
+						"distance":      "254",
+						"routing-table": tbl,
+						"comment":       "AmneziaWGRoS_bh",
+					}); err == nil {
+						applied = append(applied, "added blackhole fallback route ::/0 in "+tbl)
+					}
+				} else if foundBHDisabled {
+					_ = c.rosSet(ctx, conn, "/ipv6/route", foundBHID, map[string]string{"disabled": "no"})
+				}
+			}
+		}
 		return nil
+	}
+
+	ensureIPv6BridgeAndNAT := func() {
+		if !ipv6Enabled || cULA == "" {
+			return
+		}
+		ipAddrs, err := c.rosPrint(ctx, conn, "/ip/address", []string{".id", "address", "interface", "disabled"})
+		if err != nil {
+			return
+		}
+		var targetIface string
+		cIP := net.ParseIP(conn.gatewayIP)
+		for _, a := range ipAddrs {
+			if isTruthyROS(a["disabled"]) {
+				continue
+			}
+			if _, ipnet, err := net.ParseCIDR(strField(a, "address")); err == nil && cIP != nil && ipnet.Contains(cIP) {
+				targetIface = strField(a, "interface")
+				break
+			}
+		}
+		if targetIface != "" {
+			v6Addrs, err := c.rosPrint(ctx, conn, "/ipv6/address", []string{".id", "address", "interface", "disabled"})
+			if err == nil {
+				hasAddr := false
+				for _, a := range v6Addrs {
+					if !isTruthyROS(a["disabled"]) && rosAddrMatchPrefixOrIP(strField(a, "address"), rULA) {
+						hasAddr = true
+						break
+					}
+				}
+				if !hasAddr {
+					if err := c.rosAdd(ctx, conn, "/ipv6/address", map[string]string{
+						"address":   rULA + "/64",
+						"interface": targetIface,
+						"advertise": "no",
+						"comment":   "awg-ctl: Container IPv6 GW",
+					}); err == nil {
+						applied = append(applied, fmt.Sprintf("added /ipv6/address %s/64 on %s", rULA, targetIface))
+					}
+				}
+			}
+		}
+
+		natRules, err := c.rosPrint(ctx, conn, "/ipv6/firewall/nat", []string{".id", "chain", "src-address", "action", "disabled"})
+		if err == nil {
+			hasNAT := false
+			for _, r := range natRules {
+				if !isTruthyROS(r["disabled"]) && strField(r, "chain") == "srcnat" &&
+					strField(r, "src-address") == ulaSub && strField(r, "action") == "masquerade" {
+					hasNAT = true
+					break
+				}
+			}
+			if !hasNAT {
+				if err := c.rosAdd(ctx, conn, "/ipv6/firewall/nat", map[string]string{
+					"chain":       "srcnat",
+					"src-address": ulaSub,
+					"action":      "masquerade",
+					"comment":     "AWG_Container_IPv6_NAT",
+				}); err == nil {
+					applied = append(applied, fmt.Sprintf("added /ipv6/firewall/nat masquerade for %s", ulaSub))
+				}
+			}
+		}
 	}
 
 	ensureFasttrackNoMark := func() error {
@@ -1064,6 +1245,7 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 			provErr = err
 			break
 		}
+		ensureIPv6BridgeAndNAT()
 		if err := ensureFasttrackNoMark(); err != nil {
 			provErr = err
 			break
@@ -1194,6 +1376,86 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 		}, ""); err != nil {
 			provErr = err
 			break
+		}
+
+		if ipv6Enabled && cULA != "" {
+			v6mangles, err := c.rosPrint(ctx, conn, "/ipv6/firewall/mangle", []string{
+				".id", "chain", "action", "src-address", "dst-address", "in-interface", "in-interface-list",
+				"dst-address-type", "dst-address-list", "connection-mark", "connection-state",
+				"new-connection-mark", "new-routing-mark", "passthrough", "disabled", "comment",
+			})
+			if err == nil {
+				upsertV6Mangle := func(comment string, fields map[string]string) {
+					ruleFields := map[string]string{"comment": comment, "disabled": "no"}
+					for k, v := range fields {
+						ruleFields[k] = v
+					}
+					var foundID string
+					for _, r := range v6mangles {
+						if strField(r, "comment") == comment {
+							foundID = strField(r, ".id")
+							break
+						}
+					}
+					if foundID == "" {
+						if err := c.rosAdd(ctx, conn, "/ipv6/firewall/mangle", ruleFields); err == nil {
+							applied = append(applied, "added /ipv6/firewall/mangle "+comment)
+						}
+					} else {
+						_ = c.rosSet(ctx, conn, "/ipv6/firewall/mangle", foundID, ruleFields)
+					}
+				}
+
+				upsertV6Mangle("AWG_Accept_Container", map[string]string{
+					"chain":       "prerouting",
+					"action":      "accept",
+					"src-address": cULA,
+				})
+				upsertV6Mangle("AWG_Accept_no_mark", map[string]string{
+					"chain":            "prerouting",
+					"action":           "accept",
+					"connection-mark":  "no-mark",
+					"connection-state": "established",
+				})
+				upsertV6Mangle("AWG_Route_Conn", map[string]string{
+					"chain":             "prerouting",
+					"action":            "mark-routing",
+					"in-interface-list": "LAN",
+					"connection-mark":   tableName,
+					"new-routing-mark":  tableName,
+					"passthrough":       "no",
+				})
+				if mode == ROSModeAddressList {
+					upsertV6Mangle("AWG_Mark_AddressList", map[string]string{
+						"chain":               "prerouting",
+						"action":              "mark-connection",
+						"in-interface-list":   "LAN",
+						"connection-mark":     "no-mark",
+						"connection-state":    "new",
+						"dst-address-list":    listName,
+						"new-connection-mark": tableName,
+						"passthrough":         "yes",
+					})
+				} else {
+					upsertV6Mangle("AWG_GW_Mark_All", map[string]string{
+						"chain":               "prerouting",
+						"action":              "mark-connection",
+						"in-interface-list":   "LAN",
+						"connection-mark":     "no-mark",
+						"connection-state":    "new",
+						"new-connection-mark": tableName,
+						"passthrough":         "yes",
+					})
+				}
+				upsertV6Mangle("AWG_Route_New", map[string]string{
+					"chain":             "prerouting",
+					"action":            "mark-routing",
+					"in-interface-list": "LAN",
+					"connection-mark":   tableName,
+					"new-routing-mark":  tableName,
+					"passthrough":       "no",
+				})
+			}
 		}
 
 	case ROSModeBGP:

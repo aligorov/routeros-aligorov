@@ -1033,6 +1033,7 @@ func (m *TunnelManager) startAllOp() error {
 		}
 		if autoRoute && ipCmd != nil {
 			_ = ipCmd("route", "flush", "table", table)
+			_ = ipCmd("-6", "route", "flush", "table", table)
 		}
 		m.logger.Logf("Starting %s (table=%s, primary=%v)...", cfg.Name, table, isPrimary)
 		if err := m.runCmd("/usr/bin/awg-quick", "up", runPath); err != nil {
@@ -1040,6 +1041,7 @@ func (m *TunnelManager) startAllOp() error {
 			m.startErrors[cfg.Name] = err.Error()
 			m.mu.Unlock()
 			m.logger.Logf("ERROR starting %s: %v", cfg.Name, err)
+			_ = m.runCmd("/usr/bin/awg-quick", "down", runPath)
 			if firstErr == nil {
 				firstErr = fmt.Errorf("awg-quick up %s: %w", cfg.Name, err)
 			}
