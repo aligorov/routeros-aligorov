@@ -844,10 +844,12 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 	}
 	var defPol string
 	var multiTun bool
+	var subs map[string]SubscriptionConfig
 	if w.settings != nil {
 		st := w.settings.Get()
 		defPol = st.DefaultPolicy
 		multiTun = st.MultiTunnel
+		subs = st.Subscriptions
 	}
 	containerIP, gw := w.containerNetInfo()
 	var foStatus any
@@ -873,6 +875,7 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 		"auto_route":     w.mgr.autoRoute,
 		"kill_switch":    w.mgr.killSwitch,
 		"multi_tunnel":   multiTun,
+		"subscriptions":  subs,
 		"default_policy": defPol,
 		"dns_upstreams":  upstreams,
 		"direct_dns":     directUpstreams,

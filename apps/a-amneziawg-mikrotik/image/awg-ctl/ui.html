@@ -1088,7 +1088,8 @@ async function refresh(manual = false) {
                 </div>`).join('')}
               ${(() => {
                 const cfgKey = c ? c.name : (i.name + '.conf');
-                const sub = (st.subscriptions || {})[cfgKey] || {};
+                const subsMap = st.subscriptions || {};
+                const sub = subsMap[cfgKey] || subsMap[cfgKey.replace(/\.conf$/, '')] || subsMap[cfgKey.replace(/\.conf$/, '') + '.conf'] || {};
                 const tokenDisplay = sub.token ? (sub.token.length > 22 ? sub.token.substring(0, 10) + '...' + sub.token.slice(-6) : sub.token) : (sub.url ? 'URL' : '');
                 const portDisplay = sub.api_port || 8443;
                 return `
