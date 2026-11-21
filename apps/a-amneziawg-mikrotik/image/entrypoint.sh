@@ -64,14 +64,27 @@ detect_lan_iface() {
 
 ensure_tun
 fix_resolvconf
+if [ -z "${AWG_LAN_IFACE:-}" ]; then
+    AWG_LAN_IFACE=$(detect_lan_iface)
+    export AWG_LAN_IFACE
+fi
+printf '[entrypoint] Detected veth interface: %s\n' "${AWG_LAN_IFACE:-none}"
+
 sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || printf '[entrypoint] WARN: could not set net.ipv4.ip_forward=1\n'
 if [ "${AWG_ENABLE_IPV6:-on}" = "on" ]; then
-    sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1 || true
-    sysctl -w net.ipv6.conf.default.forwarding=1 >/dev/null 2>&1 || true
+    # Set disable_ipv6=0 and accept_ra=2 BEFORE enabling forwarding=1 so Linux does not flush existing RA routes.
     sysctl -w net.ipv6.conf.all.disable_ipv6=0 >/dev/null 2>&1 || true
     sysctl -w net.ipv6.conf.default.disable_ipv6=0 >/dev/null 2>&1 || true
     sysctl -w net.ipv6.conf.all.accept_ra=2 >/dev/null 2>&1 || true
     sysctl -w net.ipv6.conf.default.accept_ra=2 >/dev/null 2>&1 || true
+    if [ -n "${AWG_LAN_IFACE:-}" ] && [ "${AWG_LAN_IFACE}" != "none" ]; then
+        sysctl -w "net.ipv6.conf.${AWG_LAN_IFACE}.disable_ipv6=0" >/dev/null 2>&1 || true
+        sysctl -w "net.ipv6.conf.${AWG_LAN_IFACE}.accept_ra=2" >/dev/null 2>&1 || true
+        sysctl -w "net.ipv6.conf.${AWG_LAN_IFACE}.accept_ra_defrtr=1" >/dev/null 2>&1 || true
+        sysctl -w "net.ipv6.conf.${AWG_LAN_IFACE}.accept_ra_rt_info_max_plen=64" >/dev/null 2>&1 || true
+    fi
+    sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1 || true
+    sysctl -w net.ipv6.conf.default.forwarding=1 >/dev/null 2>&1 || true
 else
     sysctl -w net.ipv6.conf.all.forwarding=0 >/dev/null 2>&1 || true
     sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
@@ -79,18 +92,9 @@ else
 fi
 fix_ip_rules
 
-if [ -z "${AWG_LAN_IFACE:-}" ]; then
-    AWG_LAN_IFACE=$(detect_lan_iface)
-    export AWG_LAN_IFACE
-fi
-printf '[entrypoint] Detected veth interface: %s\n' "${AWG_LAN_IFACE:-none}"
-
 if [ "${AWG_ENABLE_IPV6:-on}" = "on" ] && [ -n "${AWG_LAN_IFACE:-}" ] && [ "${AWG_LAN_IFACE}" != "none" ]; then
-    sysctl -w "net.ipv6.conf.${AWG_LAN_IFACE}.accept_ra=2" >/dev/null 2>&1 || true
-    sysctl -w "net.ipv6.conf.${AWG_LAN_IFACE}.accept_ra_defrtr=1" >/dev/null 2>&1 || true
-    sysctl -w "net.ipv6.conf.${AWG_LAN_IFACE}.accept_ra_rt_info_max_plen=64" >/dev/null 2>&1 || true
-
-    # Dynamic Dual-Stack: if LAN interface lacks a global/ULA IPv6, derive ULA from IPv4
+    # Dynamic Dual-Stack: if LAN interface lacks a global/ULA IPv6, derive ULA fallback from IPv4
+    # Use metric 2048 so any native RouterOS RA/SLAAC route (metric 1024) automatically takes precedence.
     if ! ip -6 -o addr show dev "${AWG_LAN_IFACE}" scope global 2>/dev/null | grep -q 'inet6'; then
         v4_cidr=$(ip -o -4 addr show dev "${AWG_LAN_IFACE}" 2>/dev/null | awk '{print $4; exit}')
         v4_gw=$(ip -o -4 route show default dev "${AWG_LAN_IFACE}" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="via"){print $(i+1); exit}}')
@@ -104,8 +108,8 @@ if [ "${AWG_ENABLE_IPV6:-on}" = "on" ] && [ -n "${AWG_LAN_IFACE:-}" ] && [ "${AW
             ula_ip="fd00:${o1}:${o2}:${o3}::${o4}/64"
             ula_gw="fd00:${o1}:${o2}:${o3}::${gw_o4}"
             ip -6 addr add "$ula_ip" dev "${AWG_LAN_IFACE}" 2>/dev/null || true
-            ip -6 route add default via "$ula_gw" dev "${AWG_LAN_IFACE}" metric 1024 2>/dev/null || true
-            printf '[entrypoint] Auto-configured dynamic ULA IPv6: %s via %s\n' "$ula_ip" "$ula_gw"
+            ip -6 route add default via "$ula_gw" dev "${AWG_LAN_IFACE}" metric 2048 2>/dev/null || true
+            printf '[entrypoint] Auto-configured dynamic ULA IPv6 fallback: %s via %s\n' "$ula_ip" "$ula_gw"
         fi
     fi
 fi

@@ -89,7 +89,7 @@
   :if ([:len [find comment="AWG_Accept_Container"]] = 0) do={ add action=accept chain=prerouting src-address=fd00:192:168:253::2 comment="AWG_Accept_Container" }
   :if ([:len [find comment="AWG_Accept_no_mark"]] = 0) do={ add action=accept chain=prerouting connection-mark=no-mark connection-state=established comment="AWG_Accept_no_mark" }
   :if ([:len [find comment="AWG_Route_Conn"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark=AmneziaWGRoS new-routing-mark=AmneziaWGRoS passthrough=no comment="AWG_Route_Conn" }
-  :if ([:len [find comment="AWG_Mark_AddressList"]] = 0) do={ add action=mark-connection chain=prerouting in-interface-list=LAN connection-mark=no-mark connection-state=new dst-address-list=AmneziaWGRoS new-connection-mark=AmneziaWGRoS comment="AWG_Mark_AddressList" }
+  :if ([:len [find comment="AWG_Mark_AddressList"]] = 0) do={ add action=mark-connection chain=prerouting in-interface-list=LAN connection-mark=no-mark connection-state=new dst-address-type=!local dst-address-list=AmneziaWGRoS new-connection-mark=AmneziaWGRoS comment="AWG_Mark_AddressList" }
   :if ([:len [find comment="AWG_Route_New"]] = 0) do={ add action=mark-routing chain=prerouting in-interface-list=LAN connection-mark=AmneziaWGRoS new-routing-mark=AmneziaWGRoS passthrough=no comment="AWG_Route_New" }
 } on-error={}
 

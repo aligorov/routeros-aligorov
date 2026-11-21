@@ -574,6 +574,16 @@ func (m *TunnelManager) switchPrimaryFastOp(name string) error {
 			_ = ipCmd("rule", "del", "priority", "300")
 			_ = ipCmd("rule", "add", "priority", "300", "from", "all", "iif", lanIface, "lookup", "awg")
 		}
+		if isRuntimeIPv6Active() {
+			_ = ipCmd("-6", "route", "replace", "::/0", "dev", targetIface, "table", "awg")
+			if killSwitch {
+				_ = ipCmd("-6", "route", "replace", "blackhole", "default", "table", "awg", "metric", "254")
+			}
+			if lanIface != "" {
+				_ = ipCmd("-6", "rule", "del", "priority", "300")
+				_ = ipCmd("-6", "rule", "add", "priority", "300", "from", "all", "iif", lanIface, "lookup", "awg")
+			}
+		}
 	}
 	m.logger.Logf("Primary tunnel fast-switched to %s (iface=%s)", name, targetIface)
 	if m.onChange != nil {
@@ -903,7 +913,123 @@ func (m *TunnelManager) DeleteConfig(name string) error {
 	return err
 }
 
+func isRuntimeIPv6Active() bool {
+	if strings.EqualFold(envOr("AWG_ENABLE_IPV6", "on"), "off") {
+		return false
+	}
+	if data, err := os.ReadFile("/proc/sys/net/ipv6/conf/all/disable_ipv6"); err == nil {
+		if strings.TrimSpace(string(data)) == "1" {
+			return false
+		}
+	}
+	return true
+}
+
+// sanitizeRuntimeConfig prepares a config for awg-quick so IPv6 requirements are satisfied:
+// - When IPv6 is enabled and the config uses IPv6 (Address/AllowedIPs), any MTU < 1280
+//   is raised to 1280 because Linux tears down IPv6 below IPV6_MIN_MTU (RFC 8200),
+//   causing `ip -6 route add ::/0` to fail with ENODEV ("No such device" / exit status 2).
+// - When IPv6 is disabled, IPv6 entries are stripped from Address/AllowedIPs/DNS in the
+//   runtime copy so dual-stack configs still work in IPv4-only containers.
+func sanitizeRuntimeConfig(text string, ipv6Enabled bool) (string, []string) {
+	lines := strings.Split(strings.TrimSuffix(normalizeLF(text), "\n"), "\n")
+	hasV6 := false
+	for _, raw := range lines {
+		trim := strings.TrimSpace(raw)
+		if trim == "" || strings.HasPrefix(trim, "#") || strings.HasPrefix(trim, ";") || strings.HasPrefix(trim, "[") {
+			continue
+		}
+		k, v, ok := strings.Cut(trim, "=")
+		if !ok {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(k))
+		if (key == "address" || key == "allowedips") && strings.Contains(v, ":") {
+			hasV6 = true
+			break
+		}
+	}
+
+	var out []string
+	var notices []string
+	sec := ""
+	mtuClamped := false
+	v6Stripped := false
+
+	for _, raw := range lines {
+		trim := strings.TrimSpace(raw)
+		if strings.HasPrefix(trim, "[") && strings.HasSuffix(trim, "]") {
+			sec = strings.ToLower(trim)
+			out = append(out, raw)
+			continue
+		}
+		if trim == "" || strings.HasPrefix(trim, "#") || strings.HasPrefix(trim, ";") {
+			out = append(out, raw)
+			continue
+		}
+		k, v, ok := strings.Cut(raw, "=")
+		if !ok {
+			out = append(out, raw)
+			continue
+		}
+		keyRaw := strings.TrimSpace(k)
+		key := strings.ToLower(keyRaw)
+		val := strings.TrimSpace(v)
+
+		if !ipv6Enabled && (key == "address" || key == "allowedips" || key == "dns") && strings.Contains(val, ":") {
+			var kept []string
+			for _, part := range strings.Split(val, ",") {
+				item := strings.TrimSpace(part)
+				if item == "" || strings.Contains(item, ":") {
+					continue
+				}
+				kept = append(kept, item)
+			}
+			v6Stripped = true
+			if len(kept) == 0 {
+				continue
+			}
+			out = append(out, fmt.Sprintf("%s = %s", keyRaw, strings.Join(kept, ", ")))
+			continue
+		}
+
+		if ipv6Enabled && hasV6 && sec == "[interface]" && key == "mtu" {
+			if mtuNum, err := strconv.Atoi(val); err == nil && mtuNum > 0 && mtuNum < 1280 {
+				out = append(out, fmt.Sprintf("%s = 1280", keyRaw))
+				if !mtuClamped {
+					mtuClamped = true
+					notices = append(notices, fmt.Sprintf("MTU %d < 1280 is incompatible with IPv6 (RFC 8200 min 1280); raised runtime MTU to 1280", mtuNum))
+				}
+				continue
+			}
+		}
+
+		out = append(out, raw)
+	}
+
+	if v6Stripped {
+		notices = append(notices, "IPv6 disabled in container; stripped IPv6 directives from runtime config")
+	}
+	return normalizeLF(strings.Join(out, "\n")), notices
+}
+
+func (m *TunnelManager) prepareRuntimeConfig(name, text, table string, primary bool) string {
+	text = normalizeConfigSections(text)
+	v6Active := isRuntimeIPv6Active()
+	sanitized, notices := sanitizeRuntimeConfig(text, v6Active)
+	for _, n := range notices {
+		if m.logger != nil {
+			m.logger.Logf("WARN %s: %s", name, n)
+		}
+	}
+	return m.injectAutoRouteWithIPv6(sanitized, table, primary, v6Active)
+}
+
 func (m *TunnelManager) injectAutoRoute(text string, table string, primary bool) string {
+	return m.injectAutoRouteWithIPv6(text, table, primary, isRuntimeIPv6Active())
+}
+
+func (m *TunnelManager) injectAutoRouteWithIPv6(text string, table string, primary, ipv6Enabled bool) string {
 	text = normalizeConfigSections(text)
 	if !m.autoRoute || m.lanIface == "" {
 		return text
@@ -919,11 +1045,15 @@ func (m *TunnelManager) injectAutoRoute(text string, table string, primary bool)
 		"PostDown = iptables -t nat -D POSTROUTING -o %i -j MASQUERADE || true",
 		"PostUp = iptables -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
 		"PostDown = iptables -D FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu || true",
-		"PostUp = ip6tables -t nat -C POSTROUTING -o %i -j MASQUERADE 2>/dev/null || ip6tables -t nat -A POSTROUTING -o %i -j MASQUERADE 2>/dev/null || true",
-		"PostDown = ip6tables -t nat -D POSTROUTING -o %i -j MASQUERADE 2>/dev/null || true",
-		"PostUp = ip6tables -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || ip6tables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true",
-		"PostDown = ip6tables -D FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true",
 	)
+	if ipv6Enabled {
+		lines = append(lines,
+			"PostUp = ip6tables -t nat -C POSTROUTING -o %i -j MASQUERADE 2>/dev/null || ip6tables -t nat -A POSTROUTING -o %i -j MASQUERADE 2>/dev/null || true",
+			"PostDown = ip6tables -t nat -D POSTROUTING -o %i -j MASQUERADE 2>/dev/null || true",
+			"PostUp = ip6tables -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || ip6tables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true",
+			"PostDown = ip6tables -D FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true",
+		)
+	}
 	if table != "" {
 		lines = append(lines, "Table = "+table)
 	}
@@ -931,14 +1061,22 @@ func (m *TunnelManager) injectAutoRoute(text string, table string, primary bool)
 		lines = append(lines,
 			fmt.Sprintf("PostUp = ip rule add priority 300 from all iif %s lookup %s || true", m.lanIface, table),
 			fmt.Sprintf("PostDown = ip rule del priority 300 from all iif %s lookup %s || true", m.lanIface, table),
-			fmt.Sprintf("PostUp = ip -6 rule add priority 300 from all iif %s lookup %s 2>/dev/null || true", m.lanIface, table),
-			fmt.Sprintf("PostDown = ip -6 rule del priority 300 from all iif %s lookup %s 2>/dev/null || true", m.lanIface, table),
 		)
+		if ipv6Enabled {
+			lines = append(lines,
+				fmt.Sprintf("PostUp = ip -6 rule add priority 300 from all iif %s lookup %s 2>/dev/null || true", m.lanIface, table),
+				fmt.Sprintf("PostDown = ip -6 rule del priority 300 from all iif %s lookup %s 2>/dev/null || true", m.lanIface, table),
+			)
+		}
 		if m.killSwitch {
 			lines = append(lines,
 				fmt.Sprintf("PostUp = ip route show table %s | grep -q \"blackhole\" || ip route add blackhole default table %s metric 254 || true", table, table),
-				fmt.Sprintf("PostUp = ip -6 route show table %s 2>/dev/null | grep -q \"blackhole\" || ip -6 route add blackhole default table %s metric 254 2>/dev/null || true", table, table),
 			)
+			if ipv6Enabled {
+				lines = append(lines,
+					fmt.Sprintf("PostUp = ip -6 route show table %s 2>/dev/null | grep -q \"blackhole\" || ip -6 route add blackhole default table %s metric 254 2>/dev/null || true", table, table),
+				)
+			}
 		}
 	}
 
@@ -1020,7 +1158,7 @@ func (m *TunnelManager) startAllOp() error {
 		if !isPrimary {
 			table = strconv.Itoa(probeNum)
 		}
-		prepared := m.injectAutoRoute(normalizeLF(string(srcBytes)), table, isPrimary)
+		prepared := m.prepareRuntimeConfig(cfg.Name, normalizeLF(string(srcBytes)), table, isPrimary)
 		runPath := filepath.Join(m.runDir, cfg.Name)
 		if err := os.WriteFile(runPath, []byte(prepared), 0o600); err != nil {
 			m.mu.Lock()
@@ -1074,6 +1212,11 @@ func (m *TunnelManager) startAllOp() error {
 			_ = ipCmd("route", "replace", "default", "dev", cfg.Interface, "table", probeTbl)
 			_ = ipCmd("rule", "del", "priority", "241", "from", "all", "fwmark", markHex, "lookup", probeTbl)
 			_ = ipCmd("rule", "add", "priority", "241", "from", "all", "fwmark", markHex, "lookup", probeTbl)
+			if isRuntimeIPv6Active() {
+				_ = ipCmd("-6", "route", "replace", "::/0", "dev", cfg.Interface, "table", probeTbl)
+				_ = ipCmd("-6", "rule", "del", "priority", "241", "from", "all", "fwmark", markHex, "lookup", probeTbl)
+				_ = ipCmd("-6", "rule", "add", "priority", "241", "from", "all", "fwmark", markHex, "lookup", probeTbl)
+			}
 		}
 		startedCount++
 	}
@@ -1117,8 +1260,11 @@ func (m *TunnelManager) stopStartedOp() {
 	for _, mk := range marks {
 		if ipCmd != nil && mk >= 0x201 {
 			tbl := strconv.Itoa(mk - 0x200 + 200)
-			_ = ipCmd("rule", "del", "priority", "241", "from", "all", "fwmark", fmt.Sprintf("0x%x", mk), "lookup", tbl)
+			markHex := fmt.Sprintf("0x%x", mk)
+			_ = ipCmd("rule", "del", "priority", "241", "from", "all", "fwmark", markHex, "lookup", tbl)
 			_ = ipCmd("route", "flush", "table", tbl)
+			_ = ipCmd("-6", "rule", "del", "priority", "241", "from", "all", "fwmark", markHex, "lookup", tbl)
+			_ = ipCmd("-6", "route", "flush", "table", tbl)
 		}
 	}
 	for i := len(started) - 1; i >= 0; i-- {

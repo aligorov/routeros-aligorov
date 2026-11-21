@@ -2,7 +2,7 @@
 
 Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go v3.1.20260828` + `awg-quick v3.1.20260812`) для **MikroTik RouterOS (`/app`)** с современным **WebUI (`:8092`)**, одновременной работой нескольких туннелей (**Multi-Tunnel**), автоматическим переключением (**Auto-Failover**), маршрутизацией по **GeoSite / GeoIP**, встроенным **DoH DNS-форвардером (`:53`)**, **Telegram-уведомлениями** и 4-режимной синхронизацией с **RouterOS (Binary API `:8728/:8729`, REST API, Address-List + Mangle, BGP)**.
 
-- **Образ:** `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`v1.7.4`, `linux/arm64`)
+- **Образ:** `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`v1.7.5`, `linux/arm64`)
 - **WebUI:** `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox)
 - **Сеть:** `/app` автоматически создаёт выделенный `veth` (без ручной подготовки интерфейсов)
 - **Том:** `awg-config` → `/etc/amnezia/amneziawg` (`*.conf`, `.active`, `settings.json`, `rules.conf`, `geo/`, `domains.txt`, `ros-dynamic.json`)
@@ -10,7 +10,7 @@
 
 ---
 
-## Возможности (v1.7.4)
+## Возможности (v1.7.5)
 
 - **Dynamic Dual-Stack IPv6 (Zero-Hardcode)** — полноценная поддержка IPv6-эндпоинтов на MikroTik RouterOS без ручного хардкода: автоматический приём SLAAC Router Advertisements (`accept_ra=2`), автогенерация детерминированного ULA IPv6 (`fd00:<ipv4>::/64`) из IPv4 подсети veth, автопровижининг IPv6-шлюза на RouterOS, правил маршрутизации `/ipv6/route`, IPv6 NAT Masquerade и mangle-правил, а также изоляция сбоев туннелей без повреждения соседних таблиц маршрутизации.
 

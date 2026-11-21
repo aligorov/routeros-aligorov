@@ -342,3 +342,91 @@ func TestSplitBatchChunks(t *testing.T) {
 		t.Fatalf("unexpected chunk line counts")
 	}
 }
+
+func TestSanitizeRuntimeConfigMTUAndIPv6(t *testing.T) {
+	// 1. Dual-stack config with MTU = 1200 must clamp runtime MTU to 1280 (RFC 8200 min) when IPv6 is enabled.
+	v6BadMTU := strings.Join([]string{
+		"[Interface]",
+		"PrivateKey = priv=",
+		"Address = 10.105.200.2/32, fd42:42:42::2/128",
+		"DNS = 1.1.1.1, 2606:4700:4700::1111",
+		"MTU = 1200",
+		"[Peer]",
+		"PublicKey = pub=",
+		"Endpoint = 185.216.84.74:40797",
+		"AllowedIPs = 0.0.0.0/0, ::/0",
+	}, "\n")
+	out, notices := sanitizeRuntimeConfig(v6BadMTU, true)
+	if !strings.Contains(out, "MTU = 1280") || strings.Contains(out, "MTU = 1200") {
+		t.Fatalf("expected MTU clamped to 1280 for IPv6 config, got:\n%s", out)
+	}
+	if len(notices) == 0 {
+		t.Fatalf("expected notice when clamping MTU 1200 -> 1280")
+	}
+
+	// 2. IPv4-only config keeps MTU = 1200 untouched.
+	v4Only := strings.Join([]string{
+		"[Interface]",
+		"PrivateKey = priv=",
+		"Address = 10.105.200.2/32",
+		"MTU = 1200",
+		"[Peer]",
+		"PublicKey = pub=",
+		"Endpoint = 1.2.3.4:443",
+		"AllowedIPs = 0.0.0.0/0",
+	}, "\n")
+	out4, notices4 := sanitizeRuntimeConfig(v4Only, true)
+	if !strings.Contains(out4, "MTU = 1200") || len(notices4) != 0 {
+		t.Fatalf("expected IPv4-only MTU = 1200 untouched, got notices=%v\n%s", notices4, out4)
+	}
+
+	// 3. When IPv6 is disabled in container, IPv6 directives are stripped cleanly and MTU=1200 stays intact.
+	stripped, noticesOff := sanitizeRuntimeConfig(v6BadMTU, false)
+	if strings.Contains(stripped, "fd42:42:42::2") || strings.Contains(stripped, "::/0") || strings.Contains(stripped, "2606:4700") {
+		t.Fatalf("expected all IPv6 entries stripped when ipv6Enabled=false, got:\n%s", stripped)
+	}
+	if !strings.Contains(stripped, "Address = 10.105.200.2/32") || !strings.Contains(stripped, "AllowedIPs = 0.0.0.0/0") {
+		t.Fatalf("expected IPv4 entries preserved when stripping IPv6, got:\n%s", stripped)
+	}
+	if len(noticesOff) == 0 {
+		t.Fatalf("expected notice when IPv6 stripped")
+	}
+}
+
+func TestPrepareRuntimeConfigAndFastSwitchIPv6(t *testing.T) {
+	t.Setenv("AWG_ENABLE_IPV6", "on")
+	tmp := t.TempDir()
+	logger := NewRingLogger(30)
+	mgr := NewTunnelManager(tmp, filepath.Join(tmp, "run"), "veth-app", true, true, logger)
+
+	raw := "[Interface]\nPrivateKey = priv=\nAddress = 10.105.200.2/32, fd42:42:42::2/128\nMTU = 1200\n[Peer]\nPublicKey = pub=\nAllowedIPs = 0.0.0.0/0, ::/0\n"
+	prep := mgr.prepareRuntimeConfig("nid.conf", raw, "202", false)
+	if !strings.Contains(prep, "Table = 202") || !strings.Contains(prep, "MTU = 1280") {
+		t.Fatalf("expected secondary config to have Table = 202 and MTU = 1280, got:\n%s", prep)
+	}
+	logs := strings.Join(logger.Lines(), "\n")
+	if !strings.Contains(logs, "raised runtime MTU to 1280") {
+		t.Fatalf("expected MTU adjustment warning in logger, got:\n%s", logs)
+	}
+
+	var ipCalls []string
+	mgr.ipCmdFn = func(args ...string) error {
+		ipCalls = append(ipCalls, "ip "+strings.Join(args, " "))
+		return nil
+	}
+	_ = os.WriteFile(filepath.Join(tmp, "nid.conf"), []byte(raw), 0o600)
+	if err := mgr.switchPrimaryFastOp("nid.conf"); err != nil {
+		t.Fatalf("switchPrimaryFastOp failed: %v", err)
+	}
+	joined := strings.Join(ipCalls, "\n")
+	for _, want := range []string{
+		"ip route replace default dev nid table awg",
+		"ip -6 route replace ::/0 dev nid table awg",
+		"ip -6 route replace blackhole default table awg metric 254",
+		"ip -6 rule add priority 300 from all iif veth-app lookup awg",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected %q in switchPrimaryFastOp calls, got:\n%s", want, joined)
+		}
+	}
+}

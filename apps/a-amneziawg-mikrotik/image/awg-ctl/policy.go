@@ -1285,10 +1285,15 @@ func (p *PolicyEngine) ApplyRouting() error {
 		applyErr = err
 	}
 
-	// Ensure fwmark rule for Proxy DNS binding to table awg when active
+	// Ensure fwmark rule for Proxy DNS binding to table awg when active (IPv4 + IPv6)
 	_ = p.runCmdFn("ip", "rule", "del", "priority", FwmarkRulePriority)
+	_ = p.runCmdFn("ip", "-6", "rule", "del", "priority", FwmarkRulePriority)
 	if tunIface != "" {
-		_ = p.runCmdFn("ip", "rule", "add", "priority", FwmarkRulePriority, "from", "all", "fwmark", fmt.Sprintf("0x%x", ProxyDNSFwmark), "lookup", "awg")
+		markHex := fmt.Sprintf("0x%x", ProxyDNSFwmark)
+		_ = p.runCmdFn("ip", "rule", "add", "priority", FwmarkRulePriority, "from", "all", "fwmark", markHex, "lookup", "awg")
+		if isRuntimeIPv6Active() {
+			_ = p.runCmdFn("ip", "-6", "rule", "add", "priority", FwmarkRulePriority, "from", "all", "fwmark", markHex, "lookup", "awg")
+		}
 	}
 
 	// Ensure MASQUERADE on lanIface for DIRECT hairpin traffic back to MikroTik

@@ -1121,7 +1121,7 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 			hasNAT := false
 			for _, r := range natRules {
 				if !isTruthyROS(r["disabled"]) && strField(r, "chain") == "srcnat" &&
-					strField(r, "src-address") == ulaSub && strField(r, "action") == "masquerade" {
+					rosAddrMatchPrefixOrIP(strField(r, "src-address"), ulaSub) && strField(r, "action") == "masquerade" {
 					hasNAT = true
 					break
 				}
@@ -1385,7 +1385,14 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 				"new-connection-mark", "new-routing-mark", "passthrough", "disabled", "comment",
 			})
 			if err == nil {
-				upsertV6Mangle := func(comment string, fields map[string]string) {
+				var v6MarkAnchorID string
+				for _, r := range v6mangles {
+					if strField(r, "chain") == "prerouting" && isMarkOrRouteRuleForTable(r, mode, listName, tableName) {
+						v6MarkAnchorID = strField(r, ".id")
+						break
+					}
+				}
+				upsertV6Mangle := func(comment string, fields map[string]string, placeBeforeID string) {
 					ruleFields := map[string]string{"comment": comment, "disabled": "no"}
 					for k, v := range fields {
 						ruleFields[k] = v
@@ -1398,8 +1405,16 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 						}
 					}
 					if foundID == "" {
+						if placeBeforeID != "" {
+							ruleFields["place-before"] = placeBeforeID
+						}
 						if err := c.rosAdd(ctx, conn, "/ipv6/firewall/mangle", ruleFields); err == nil {
 							applied = append(applied, "added /ipv6/firewall/mangle "+comment)
+						} else if placeBeforeID != "" {
+							delete(ruleFields, "place-before")
+							if err2 := c.rosAdd(ctx, conn, "/ipv6/firewall/mangle", ruleFields); err2 == nil {
+								applied = append(applied, "added /ipv6/firewall/mangle "+comment)
+							}
 						}
 					} else {
 						_ = c.rosSet(ctx, conn, "/ipv6/firewall/mangle", foundID, ruleFields)
@@ -1410,13 +1425,30 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 					"chain":       "prerouting",
 					"action":      "accept",
 					"src-address": cULA,
-				})
+				}, v6MarkAnchorID)
 				upsertV6Mangle("AWG_Accept_no_mark", map[string]string{
 					"chain":            "prerouting",
 					"action":           "accept",
 					"connection-mark":  "no-mark",
 					"connection-state": "established",
-				})
+				}, v6MarkAnchorID)
+				if mode == ROSModeGateway {
+					for _, bp := range []struct {
+						cmt  string
+						cidr string
+					}{
+						{"AWG_GW_Bypass_LL", "fe80::/10"},
+						{"AWG_GW_Bypass_ULA", "fc00::/7"},
+						{"AWG_GW_Bypass_Mcast", "ff00::/8"},
+					} {
+						upsertV6Mangle(bp.cmt, map[string]string{
+							"chain":             "prerouting",
+							"action":            "accept",
+							"in-interface-list": "LAN",
+							"dst-address":       bp.cidr,
+						}, v6MarkAnchorID)
+					}
+				}
 				upsertV6Mangle("AWG_Route_Conn", map[string]string{
 					"chain":             "prerouting",
 					"action":            "mark-routing",
@@ -1424,7 +1456,7 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 					"connection-mark":   tableName,
 					"new-routing-mark":  tableName,
 					"passthrough":       "no",
-				})
+				}, "")
 				if mode == ROSModeAddressList {
 					upsertV6Mangle("AWG_Mark_AddressList", map[string]string{
 						"chain":               "prerouting",
@@ -1432,10 +1464,11 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 						"in-interface-list":   "LAN",
 						"connection-mark":     "no-mark",
 						"connection-state":    "new",
+						"dst-address-type":    "!local",
 						"dst-address-list":    listName,
 						"new-connection-mark": tableName,
 						"passthrough":         "yes",
-					})
+					}, "")
 				} else {
 					upsertV6Mangle("AWG_GW_Mark_All", map[string]string{
 						"chain":               "prerouting",
@@ -1443,9 +1476,10 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 						"in-interface-list":   "LAN",
 						"connection-mark":     "no-mark",
 						"connection-state":    "new",
+						"dst-address-type":    "!local",
 						"new-connection-mark": tableName,
 						"passthrough":         "yes",
-					})
+					}, "")
 				}
 				upsertV6Mangle("AWG_Route_New", map[string]string{
 					"chain":             "prerouting",
@@ -1454,7 +1488,7 @@ func (c *ROSClient) ProvisionSchema(s AppSettings, opts ROSProvisionOptions) ROS
 					"connection-mark":   tableName,
 					"new-routing-mark":  tableName,
 					"passthrough":       "no",
-				})
+				}, "")
 			}
 		}
 
