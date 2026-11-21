@@ -1052,7 +1052,7 @@ async function refresh(manual = false) {
     }
 
     // 1. Interfaces cards
-    const ifKey = JSON.stringify([ifaces, cfgs.map(c => [c.interface, c.primary, c.table]), fo.tunnels]);
+    const ifKey = JSON.stringify([ifaces, cfgs.map(c => [c.interface, c.primary, c.table]), fo.tunnels, st.subscriptions]);
     if (ifKey !== snap.ifaces) {
       snap.ifaces = ifKey;
       const cfgByIface = {};
