@@ -1039,8 +1039,33 @@ func (w *WebServer) handleSaveSubscription(rw http.ResponseWriter, r *http.Reque
 
 	st := w.settings.Get()
 	existing := st.Subscriptions[name]
+	prevToken, prevURL, prevHost, prevPort := existing.Token, existing.URL, existing.APIHost, existing.APIPort
+
 	if req.Token != "" {
-		existing.Token = strings.TrimSpace(req.Token)
+		tok := strings.TrimSpace(req.Token)
+		switch {
+		case strings.HasPrefix(strings.ToLower(tok), "vpn://"):
+			existing.URL = tok
+			existing.Token = ""
+		case strings.HasPrefix(tok, "http://") || strings.HasPrefix(tok, "https://"):
+			if extractedTok, extractedPort, ok := extractTokenFromURL(tok); ok {
+				existing.Token = extractedTok
+				if req.URL == "" {
+					existing.URL = ""
+				}
+				if req.APIPort <= 0 && extractedPort > 0 {
+					existing.APIPort = extractedPort
+				}
+			} else {
+				existing.URL = tok
+				existing.Token = ""
+			}
+		default:
+			existing.Token = tok
+			if req.URL == "" {
+				existing.URL = ""
+			}
+		}
 	}
 	if req.APIPort > 0 {
 		existing.APIPort = req.APIPort
@@ -1050,7 +1075,16 @@ func (w *WebServer) handleSaveSubscription(rw http.ResponseWriter, r *http.Reque
 	// Always sanitize APIHost and allow clearing if empty
 	existing.APIHost = cleanHost(req.APIHost)
 	if req.URL != "" {
-		existing.URL = strings.TrimSpace(req.URL)
+		rawU := strings.TrimSpace(req.URL)
+		if strings.HasPrefix(rawU, "awg_tok_") {
+			existing.Token = rawU
+			existing.URL = ""
+		} else {
+			existing.URL = rawU
+		}
+	}
+	if existing.Token != prevToken || existing.URL != prevURL || existing.APIHost != prevHost || existing.APIPort != prevPort {
+		existing.LastETag = ""
 	}
 	if req.AutoUpdate != nil {
 		existing.AutoUpdate = *req.AutoUpdate
@@ -1081,7 +1115,7 @@ func (w *WebServer) handleSaveSubscription(rw http.ResponseWriter, r *http.Reque
 	if req.SyncNow && w.subMgr != nil {
 		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 		defer cancel()
-		if err := w.subMgr.Sync(ctx, name); err != nil {
+		if err := w.subMgr.SyncForce(ctx, name); err != nil {
 			writeJSON(rw, http.StatusOK, map[string]any{
 				"ok":      true,
 				"name":    name,
@@ -1124,7 +1158,7 @@ func (w *WebServer) handleSyncSubscription(rw http.ResponseWriter, r *http.Reque
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 	defer cancel()
-	if err := w.subMgr.Sync(ctx, name); err != nil {
+	if err := w.subMgr.SyncForce(ctx, name); err != nil {
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}

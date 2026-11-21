@@ -3,7 +3,7 @@
 #  Источники приложений: apps/*/app.yaml
 # =============================================================
 - name: A-amneziawg-mikrotik
-  descr: AmneziaWG 3.1 (v1.6.2) — Dual-Stack (IPv4+IPv6), Multi-Tunnel, Auto-Rotation
+  descr: AmneziaWG 3.1 (v1.6.3) — Dual-Stack (IPv4+IPv6), Multi-Tunnel, Auto-Rotation
     (Token/API :8443), Failover (TCP + ICMP Ping), DoH, Telegram, GeoSite/GeoIP, RouterOS
     (Address-List/BGP/Binary API), Терминал
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/a-amneziawg-mikrotik

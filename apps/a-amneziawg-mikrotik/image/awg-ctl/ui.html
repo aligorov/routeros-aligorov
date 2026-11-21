@@ -972,6 +972,12 @@ function fmtProbeCell(h) {
   return '—';
 }
 
+function findSub(subsMap, cfgName) {
+  if (!subsMap || !cfgName) return {};
+  const base = cfgName.replace(/\.conf$/, '');
+  return subsMap[cfgName] || subsMap[base] || subsMap[base + '.conf'] || {};
+}
+
 async function refresh(manual = false) {
   if (!authState.authenticated || refreshInFlight || (!manual && document.hidden)) return;
   refreshInFlight = true;
@@ -1088,8 +1094,7 @@ async function refresh(manual = false) {
                 </div>`).join('')}
               ${(() => {
                 const cfgKey = c ? c.name : (i.name + '.conf');
-                const subsMap = st.subscriptions || {};
-                const sub = subsMap[cfgKey] || subsMap[cfgKey.replace(/\.conf$/, '')] || subsMap[cfgKey.replace(/\.conf$/, '') + '.conf'] || {};
+                const sub = findSub(st.subscriptions, cfgKey);
                 const tokenDisplay = sub.token ? (sub.token.length > 22 ? sub.token.substring(0, 10) + '...' + sub.token.slice(-6) : sub.token) : (sub.url ? 'URL' : '');
                 const portDisplay = sub.api_port || 8443;
                 return `
@@ -1912,7 +1917,7 @@ function renderSettingsSubs(subs) {
   }
   const sMap = subs || (lastStatus && lastStatus.subscriptions) || {};
   container.innerHTML = cfgs.map(c => {
-    const sub = sMap[c.name] || {};
+    const sub = findSub(sMap, c.name);
     const intVal = sub.interval_min || 30;
     return `
     <div class="card" style="margin-bottom:0;background:rgba(255,255,255,.02);border:1px solid var(--bd)">
@@ -1930,7 +1935,7 @@ function renderSettingsSubs(subs) {
       <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;margin-bottom:8px">
         <div>
           <label class="mut">Токен клиента</label>
-          <input id="subTok_${esc(c.name)}" value="${esc(sub.token || '')}" placeholder="awg_tok_0123456789abcdef..." style="font-family:monospace;font-size:.85rem">
+          <input id="subTok_${esc(c.name)}" value="${esc(sub.token || sub.url || '')}" placeholder="awg_tok_0123456789abcdef..." style="font-family:monospace;font-size:.85rem">
         </div>
         <div>
           <label class="mut">Порт API (по умолч. 8443)</label>
@@ -1966,7 +1971,7 @@ function renderSettingsSubs(subs) {
 }
 
 function openSubModal(cfgName) {
-  const sub = (lastStatus && lastStatus.subscriptions && lastStatus.subscriptions[cfgName]) || {};
+  const sub = findSub(lastStatus && lastStatus.subscriptions, cfgName);
   document.getElementById('subModalCfgName').value = cfgName;
   document.getElementById('subModalTitle').textContent = 'Ротация сервера: ' + cfgName;
   document.getElementById('subModalToken').value = sub.token || '';
@@ -2080,8 +2085,14 @@ async function saveSubInline(cfgName, syncNow, btn) {
       });
       if (res.warning) {
         toast(res.warning, 'warn');
+      } else if (syncNow) {
+        if (res.sub && res.sub.last_status === 'not_modified') {
+          toast('Конфиг уже актуален (изменений нет)', 'ok');
+        } else {
+          toast('Конфиг ' + cfgName + ' обновлён из подписки!', 'ok');
+        }
       } else {
-        toast(syncNow ? 'Обновлено из подписки' : 'Сохранено', 'ok');
+        toast('Сохранено', 'ok');
       }
       await refresh(true);
       if (document.getElementById('tab-settings').classList.contains('active')) {

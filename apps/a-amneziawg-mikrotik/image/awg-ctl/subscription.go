@@ -75,6 +75,98 @@ func cleanHost(raw string) string {
 	return raw
 }
 
+// sanitizeHTTPURL cleans schema/host/chained ports from an http(s) subscription URL.
+func sanitizeHTTPURL(rawURL string) string {
+	rawURL = strings.TrimSpace(rawURL)
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		return rawURL
+	}
+	scheme := "http://"
+	rest := rawURL[len("http://"):]
+	if strings.HasPrefix(rawURL, "https://") {
+		scheme = "https://"
+		rest = rawURL[len("https://"):]
+	}
+	pathIdx := strings.Index(rest, "/")
+	var hostPortStr, pathStr string
+	if pathIdx != -1 {
+		hostPortStr = rest[:pathIdx]
+		pathStr = rest[pathIdx:]
+	} else {
+		hostPortStr = rest
+		pathStr = ""
+	}
+	lastPort := ""
+	if idx := strings.LastIndex(hostPortStr, ":"); idx != -1 {
+		p := hostPortStr[idx+1:]
+		if !strings.Contains(p, "]") {
+			if _, err := strconv.Atoi(p); err == nil {
+				lastPort = p
+			}
+		}
+	}
+	cleanH := cleanHost(hostPortStr)
+	if cleanH != "" {
+		if lastPort != "" {
+			if strings.Contains(cleanH, ":") && !strings.HasPrefix(cleanH, "[") {
+				cleanH = fmt.Sprintf("[%s]:%s", cleanH, lastPort)
+			} else {
+				cleanH = fmt.Sprintf("%s:%s", cleanH, lastPort)
+			}
+		} else if strings.Contains(cleanH, ":") && !strings.HasPrefix(cleanH, "[") {
+			cleanH = "[" + cleanH + "]"
+		}
+		return scheme + cleanH + pathStr
+	}
+	return rawURL
+}
+
+// extractTokenFromURL extracts an awg_tok_* client token and optional port from a subscription URL.
+func extractTokenFromURL(raw string) (token string, port int, ok bool) {
+	raw = strings.TrimSpace(raw)
+	var rest string
+	switch {
+	case strings.HasPrefix(raw, "http://"):
+		rest = raw[len("http://"):]
+	case strings.HasPrefix(raw, "https://"):
+		rest = raw[len("https://"):]
+	default:
+		return "", 0, false
+	}
+	if idx := strings.IndexAny(rest, "?#"); idx != -1 {
+		rest = rest[:idx]
+	}
+	pathIdx := strings.Index(rest, "/")
+	if pathIdx == -1 {
+		return "", 0, false
+	}
+	hostPort := rest[:pathIdx]
+	pathStr := rest[pathIdx+1:]
+
+	if idx := strings.LastIndex(hostPort, ":"); idx != -1 {
+		pStr := hostPort[idx+1:]
+		if !strings.Contains(pStr, "]") {
+			if p, err := strconv.Atoi(pStr); err == nil && p > 0 && p <= 65535 {
+				port = p
+			}
+		}
+	}
+
+	var lastSeg string
+	for _, seg := range strings.Split(pathStr, "/") {
+		if seg != "" {
+			lastSeg = seg
+		}
+	}
+	for _, suf := range []string{".conf", ".json", ".rsc"} {
+		lastSeg = strings.TrimSuffix(lastSeg, suf)
+	}
+	if strings.HasPrefix(lastSeg, "awg_tok_") {
+		return lastSeg, port, true
+	}
+	return "", 0, false
+}
+
 // EffectiveURL resolves the actual subscription endpoint for a config:
 // 1. If explicit URL is given (http://, https://, vpn://), use it (auto-cleaning any chained ports).
 // 2. If Token is given, construct http://<host>:<port>/sub/<token> using APIHost or config Endpoint.
@@ -84,43 +176,16 @@ func (sm *SubscriptionManager) EffectiveURL(sub SubscriptionConfig, cfgName stri
 		return rawURL
 	}
 	if strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") {
-		scheme := "http://"
-		rest := rawURL[len("http://"):]
-		if strings.HasPrefix(rawURL, "https://") {
-			scheme = "https://"
-			rest = rawURL[len("https://"):]
-		}
-		pathIdx := strings.Index(rest, "/")
-		var hostPortStr, pathStr string
-		if pathIdx != -1 {
-			hostPortStr = rest[:pathIdx]
-			pathStr = rest[pathIdx:]
-		} else {
-			hostPortStr = rest
-			pathStr = ""
-		}
-		lastPort := ""
-		if idx := strings.LastIndex(hostPortStr, ":"); idx != -1 {
-			p := hostPortStr[idx+1:]
-			if _, err := strconv.Atoi(p); err == nil {
-				lastPort = p
-			}
-		}
-		cleanH := cleanHost(hostPortStr)
-		if cleanH != "" {
-			if lastPort != "" {
-				if strings.Contains(cleanH, ":") && !strings.HasPrefix(cleanH, "[") {
-					cleanH = fmt.Sprintf("[%s]:%s", cleanH, lastPort)
-				} else {
-					cleanH = fmt.Sprintf("%s:%s", cleanH, lastPort)
-				}
-			}
-			return scheme + cleanH + pathStr
-		}
-		return rawURL
+		return sanitizeHTTPURL(rawURL)
 	}
 
 	token := strings.TrimSpace(sub.Token)
+	if strings.HasPrefix(strings.ToLower(token), "vpn://") {
+		return token
+	}
+	if strings.HasPrefix(token, "http://") || strings.HasPrefix(token, "https://") {
+		return sanitizeHTTPURL(token)
+	}
 	if token == "" && strings.HasPrefix(rawURL, "awg_tok_") {
 		token = rawURL
 	}
@@ -245,8 +310,17 @@ func (sm *SubscriptionManager) FetchSubscription(ctx context.Context, rawURL, cu
 	return rawBody, newETag, false, nil
 }
 
-// Sync updates a single config from its configured token / subscription URL.
+// Sync updates a single config from its configured token / subscription URL (honors cached ETag).
 func (sm *SubscriptionManager) Sync(ctx context.Context, cfgName string) error {
+	return sm.syncInternal(ctx, cfgName, false)
+}
+
+// SyncForce bypasses the cached ETag (If-None-Match) so manual syncs always fetch and compare with disk.
+func (sm *SubscriptionManager) SyncForce(ctx context.Context, cfgName string) error {
+	return sm.syncInternal(ctx, cfgName, true)
+}
+
+func (sm *SubscriptionManager) syncInternal(ctx context.Context, cfgName string, force bool) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -265,7 +339,11 @@ func (sm *SubscriptionManager) Sync(ctx context.Context, cfgName string) error {
 		return err
 	}
 
-	content, newETag, notModified, err := sm.FetchSubscription(ctx, targetURL, sub.LastETag)
+	sendETag := sub.LastETag
+	if force {
+		sendETag = ""
+	}
+	content, newETag, notModified, err := sm.FetchSubscription(ctx, targetURL, sendETag)
 	if err != nil {
 		sub.LastSync = time.Now()
 		sub.LastStatus = "error: " + err.Error()
@@ -286,6 +364,20 @@ func (sm *SubscriptionManager) Sync(ctx context.Context, cfgName string) error {
 		sub.LastStatus = "invalid config: " + err.Error()
 		_, _ = sm.settings.SetSubscription(cfgName, sub)
 		return fmt.Errorf("полученный конфиг не прошёл валидацию: %w", err)
+	}
+
+	if sm.mgr != nil {
+		if curContent, readErr := sm.mgr.ReadConfig(cfgName); readErr == nil &&
+			strings.TrimSpace(normalizeLF(curContent)) == strings.TrimSpace(normalizeLF(content)) {
+			sub.LastSync = time.Now()
+			if newETag != "" {
+				sub.LastETag = newETag
+			}
+			sub.LastStatus = "not_modified"
+			_, _ = sm.settings.SetSubscription(cfgName, sub)
+			sm.logger.Logf("[subscription] %s: конфиг уже актуален (ETag: %s)", cfgName, sub.LastETag)
+			return nil
+		}
 	}
 
 	if err := sm.mgr.SaveConfig(cfgName, content); err != nil {
