@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const AppVersion = "1.7.5"
+const AppVersion = "1.7.6"
 
 const (
 	ROSModeGateway     = "gateway"
@@ -735,6 +735,13 @@ func (s *SettingsStore) Update(upd SettingsUpdate) (AppSettings, error) {
 	}
 	if len(upd.DisabledConfigs) == 0 && len(s.val.DisabledConfigs) > 0 && upd.AppSettings.DisabledConfigs == nil {
 		upd.DisabledConfigs = append([]string(nil), s.val.DisabledConfigs...)
+	}
+	if upd.Subscriptions == nil && len(s.val.Subscriptions) > 0 {
+		subs := make(map[string]SubscriptionConfig, len(s.val.Subscriptions))
+		for k, v := range s.val.Subscriptions {
+			subs[k] = v
+		}
+		upd.Subscriptions = subs
 	}
 
 	next := normalizeSettings(upd.AppSettings, defaultSettingsFromEnv())

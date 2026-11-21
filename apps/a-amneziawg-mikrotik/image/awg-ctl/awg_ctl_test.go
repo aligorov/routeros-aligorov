@@ -430,3 +430,86 @@ func TestPrepareRuntimeConfigAndFastSwitchIPv6(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingsStoreUpdatePreservesSubscriptions(t *testing.T) {
+	dir := t.TempDir()
+	st, err := NewSettingsStore(dir)
+	if err != nil {
+		t.Fatalf("NewSettingsStore: %v", err)
+	}
+	if _, err := st.SetSubscription("nl.conf", SubscriptionConfig{
+		Token:         "awg_tok_preserve",
+		APIHost:       "198.51.100.10",
+		APIPort:       8443,
+		AutoUpdate:    true,
+		SyncOnFailure: true,
+	}); err != nil {
+		t.Fatalf("SetSubscription: %v", err)
+	}
+
+	updated, err := st.Update(SettingsUpdate{AppSettings: AppSettings{
+		FailoverMode: "standby",
+	}})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	sub, ok := updated.Subscriptions["nl.conf"]
+	if !ok || sub.Token != "awg_tok_preserve" || sub.APIHost != "198.51.100.10" {
+		t.Fatalf("expected existing subscription to be preserved when upd.Subscriptions is nil, got: %+v", updated.Subscriptions)
+	}
+
+	reloaded, err := NewSettingsStore(dir)
+	if err != nil {
+		t.Fatalf("reload SettingsStore: %v", err)
+	}
+	if got := reloaded.Get().Subscriptions["nl.conf"].Token; got != "awg_tok_preserve" {
+		t.Fatalf("expected persisted subscription token after reload, got %q", got)
+	}
+}
+
+func TestHandleSaveConfigKeepPrimary(t *testing.T) {
+	w, _, mgr, _ := newTestWebServer(t, "SecretPass123")
+	mgr.SetRuntimeOptions(true, true, true)
+	mgr.runCmdFn = func(ctx context.Context, name string, args ...string) (string, error) {
+		return "", nil
+	}
+	mgr.ipCmdFn = func(args ...string) error {
+		return nil
+	}
+	const sampleMain = "[Interface]\nAddress = 10.10.0.2/32\nPrivateKey = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n[Peer]\nEndpoint = 198.51.100.1:51820\nPublicKey = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=\nAllowedIPs = 0.0.0.0/0\n"
+	const sampleSec = "[Interface]\nAddress = 10.20.0.2/32\nPrivateKey = CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=\n[Peer]\nEndpoint = 198.51.100.2:51820\nPublicKey = DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD=\nAllowedIPs = 0.0.0.0/0\n"
+	if err := mgr.SaveConfig("main.conf", sampleMain); err != nil {
+		t.Fatalf("SaveConfig main: %v", err)
+	}
+	if err := mgr.SaveConfig("sec.conf", sampleSec); err != nil {
+		t.Fatalf("SaveConfig sec: %v", err)
+	}
+	if err := mgr.SetActiveConfig("main.conf"); err != nil {
+		t.Fatalf("SetActiveConfig: %v", err)
+	}
+
+	h := w.Handler()
+	reqKeep := httptest.NewRequest(http.MethodPost, "/api/configs/sec.conf", strings.NewReader(`{"content":"[Interface]\nAddress = 10.20.0.3/32\nPrivateKey = CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=\n[Peer]\nEndpoint = 198.51.100.2:51820\nPublicKey = DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD=\nAllowedIPs = 0.0.0.0/0\n","apply":true,"keep_primary":true}`))
+	reqKeep.Header.Set("Content-Type", "application/json")
+	reqKeep.SetBasicAuth("admin", "SecretPass123")
+	rwKeep := httptest.NewRecorder()
+	h.ServeHTTP(rwKeep, reqKeep)
+	if rwKeep.Code != http.StatusOK {
+		t.Fatalf("expected 200 on keep_primary save, got %d (%s)", rwKeep.Code, rwKeep.Body.String())
+	}
+	if got := mgr.GetActiveConfig(); got != "main.conf" {
+		t.Fatalf("expected primary main.conf preserved when keep_primary=true, got %q", got)
+	}
+
+	reqSwitch := httptest.NewRequest(http.MethodPost, "/api/configs/sec.conf", strings.NewReader(`{"content":"[Interface]\nAddress = 10.20.0.4/32\nPrivateKey = CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=\n[Peer]\nEndpoint = 198.51.100.2:51820\nPublicKey = DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD=\nAllowedIPs = 0.0.0.0/0\n","apply":true,"keep_primary":false}`))
+	reqSwitch.Header.Set("Content-Type", "application/json")
+	reqSwitch.SetBasicAuth("admin", "SecretPass123")
+	rwSwitch := httptest.NewRecorder()
+	h.ServeHTTP(rwSwitch, reqSwitch)
+	if rwSwitch.Code != http.StatusOK {
+		t.Fatalf("expected 200 on switch save, got %d (%s)", rwSwitch.Code, rwSwitch.Body.String())
+	}
+	if got := mgr.GetActiveConfig(); got != "sec.conf" {
+		t.Fatalf("expected active config switched to sec.conf when keep_primary=false, got %q", got)
+	}
+}

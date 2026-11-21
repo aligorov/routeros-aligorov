@@ -76,6 +76,9 @@
 
   .prof-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; background:var(--sub); border:1px solid var(--bd); border-radius:8px; margin-bottom:6px; }
   .prof-row.is-primary { border-color:rgba(59,130,246,.55); }
+  .prof-row.is-editing { border-color:var(--warn); box-shadow:0 0 0 1px rgba(245,158,11,.28); }
+  .modal-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+  .settings-savebar { position:sticky; bottom:10px; z-index:40; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; background:rgba(15,23,42,.96); border:1px solid rgba(59,130,246,.4); border-radius:10px; padding:12px 16px; margin-top:14px; box-shadow:0 8px 24px rgba(0,0,0,.5); backdrop-filter:blur(6px); }
 
   /* Terminal */
   .term-box { background:#080c10; border:1px solid var(--bd); border-radius:8px; overflow:hidden; }
@@ -91,6 +94,7 @@
   #toast { position:fixed; right:16px; bottom:16px; z-index:250; background:#1e293b; border:1px solid var(--bd); border-radius:8px; padding:10px 14px; font-size:.84rem; box-shadow:0 8px 24px rgba(0,0,0,.45); max-width:440px; opacity:0; pointer-events:none; transition:opacity .18s; }
   #toast.show { opacity:1; pointer-events:auto; }
   #toast.bad { border-color:var(--bad); color:#fecaca; }
+  #toast.warn { border-color:var(--warn); color:#fde68a; }
   #toast.ok { border-color:var(--ok); color:#bbf7d0; }
 
   /* Auth modal overlay */
@@ -127,7 +131,7 @@
       <button class="primary" onclick="tunnelAction('restart', this)">Перезапустить</button>
       <button onclick="tunnelAction('up', this)">Поднять</button>
       <button class="danger" onclick="tunnelAction('down', this)">Остановить</button>
-      <button onclick="refresh(true)">Обновить</button>
+      <button onclick="refresh(true, this)">↻ Обновить статус</button>
       <button id="btnLogout" class="sm hide" onclick="logoutWeb(this)">Выйти</button>
     </div>
   </header>
@@ -135,7 +139,7 @@
   <nav class="tabs">
     <button class="tab active" data-tab="status" onclick="showTab('status', this)">Статус</button>
     <button class="tab" data-tab="configs" onclick="showTab('configs', this)">Конфиги (.conf)</button>
-    <button class="tab" data-tab="keygen" onclick="showTab('keygen', this)">Генератор / QR</button>
+    <button class="tab" data-tab="keygen" onclick="showTab('keygen', this)">VPS и клиенты</button>
     <button class="tab" data-tab="rules" onclick="showTab('rules', this)">Правила / Geo</button>
     <button class="tab" data-tab="settings" onclick="showTab('settings', this)">Настройки</button>
     <button class="tab" data-tab="term" onclick="showTab('term', this)">Терминал</button>
@@ -149,21 +153,21 @@
     <div id="pingHostCard" class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:8px">
         <div class="row" style="gap:8px">
-          <h2 style="margin:0">Проверка Ping хоста (HEALTHY)</h2>
+          <h2 style="margin:0">Проверка доступности хоста (Ping / TCP)</h2>
           <span id="pingHealthyCur" class="badge dim">HEALTHY: —</span>
         </div>
-        <span class="mut">ICMP / TCP через каждый активный туннель и Direct (veth)</span>
+        <span class="mut">Через каждый активный туннель и Direct (veth)</span>
       </div>
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <input id="pingHostInput" placeholder="IP или домен, напр. 1.1.1.1 или gemini.google.com" style="flex:1;min-width:220px" onkeydown="if(event.key==='Enter')runFailoverPing()">
-        <select id="pingHostMethod" onchange="this.dataset.userChanged='1'" style="width:auto;min-width:175px">
+        <select id="pingHostMethod" onchange="this.dataset.userChanged='1';updatePingBtnLabel()" style="width:auto;min-width:175px">
           <option value="ping">ICMP Ping</option>
           <option value="tcp">TCP connect (:443)</option>
           <option value="any">ICMP или TCP (any)</option>
           <option value="both">ICMP + TCP (both)</option>
         </select>
-        <button id="btnFoPing" class="primary" onclick="runFailoverPing(this)">Проверить (Ping)</button>
-        <button id="btnFoSetHealthy" class="sm" onclick="applyPingAsHealthy(this)">Назначить для HEALTHY</button>
+        <button id="btnFoPing" class="primary" onclick="runFailoverPing(this)">Проверить Ping</button>
+        <button id="btnFoSetHealthy" class="sm" onclick="applyPingAsHealthy(this)">Сделать целью HEALTHY</button>
       </div>
       <div id="pingHostOut" style="margin-top:8px"></div>
     </div>
@@ -176,24 +180,38 @@
     <div class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
         <h2 style="margin:0">Профили туннелей</h2>
-        <span class="mut" id="planHint">Приоритет #1 — основной при старте; отмеченные участвуют в Multi-Tunnel и Failover</span>
+        <span class="mut" id="planHint">Приоритет #1 — основной туннель (Primary); отмеченные запускаются вместе в Multi-Tunnel и участвуют в Failover</span>
       </div>
       <div id="conflictsBox"></div>
       <div id="profList" style="margin-bottom:12px"></div>
       <div class="row" style="margin-bottom:10px">
         <select id="cfgSelect" style="max-width:220px" onchange="editingNew=false;loadSelectedConfig()"></select>
-        <input id="cfgName" placeholder="имя, напр. nl.conf" style="max-width:190px">
+        <input id="cfgName" placeholder="имя, напр. nl.conf" maxlength="20" style="max-width:190px">
         <button onclick="newConfig()">+ Новый</button>
+        <button onclick="toggleSubImportPanel()">+ Импорт URL / vpn://</button>
         <button onclick="document.getElementById('cfgFile').click()">Загрузить</button>
         <button onclick="downloadConfig()">Скачать</button>
-        <button class="danger" onclick="deleteConfig()">Удалить</button>
+        <button class="danger" onclick="deleteConfig(this)">Удалить</button>
         <input id="cfgFile" type="file" accept=".conf,.txt" class="hide" onchange="importConfigFile(this)">
       </div>
-      <textarea id="cfgText" placeholder="[Interface]&#10;PrivateKey = ...&#10;&#10;(можно перетащить .conf сюда)"></textarea>
+      <div id="subImportBox" class="hide" style="padding:10px 12px;margin-bottom:10px;background:var(--sub);border:1px solid var(--bd);border-radius:8px">
+        <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="subImportURL" placeholder="https://vps:8443/sub/awg_tok_... или vpn://..." style="flex:1;min-width:240px" onkeydown="if(event.key==='Enter')importSubscriptionURL()">
+          <input id="subImportName" placeholder="имя (напр. nl.conf)" maxlength="20" style="max-width:170px">
+          <label class="chk" style="margin:0"><input type="checkbox" id="subImportActivate" checked> Активировать</label>
+          <button class="primary sm" onclick="importSubscriptionURL(this)">Импортировать</button>
+          <button class="sm" onclick="toggleSubImportPanel(false)" title="Закрыть">✕</button>
+        </div>
+      </div>
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <span class="mut" id="cfgEditLabel">Редактирование: —</span>
+        <span class="mut" style="font-size:.76rem">Можно перетащить .conf в поле ниже</span>
+      </div>
+      <textarea id="cfgText" placeholder="[Interface]&#10;PrivateKey = ..."></textarea>
       <div class="row" style="margin-top:10px">
-        <button class="primary" onclick="saveConfig(true, this)">Сохранить и активировать</button>
+        <button class="primary" id="btnCfgSaveApply" onclick="saveConfig(true, this)">Сохранить и применить</button>
         <button onclick="saveConfig(false, this)">Сохранить</button>
-        <button onclick="showQRForText(document.getElementById('cfgText').value)">QR-код</button>
+        <button id="btnCfgQR" onclick="toggleConfigQR()">QR-код</button>
         <span class="mut" id="cfgMsg"></span>
       </div>
       <div id="qrBox" style="margin-top:12px"></div>
@@ -211,7 +229,7 @@
         </div>
         <div class="row">
           <button class="primary sm" onclick="openVPSModal()">+ Добавить VPS</button>
-          <button class="sm" onclick="refreshAllVPS(false, this)">↻ Обновить все</button>
+          <button class="sm" onclick="refreshAllVPS(false, this)">↻ Клиенты</button>
           <button class="sm" onclick="openTGContactsModal()">📇 Контакты ТГ</button>
         </div>
       </div>
@@ -270,7 +288,7 @@
           <div>
             <div class="mut" style="margin-bottom:4px">Сервер (server.conf)</div>
             <textarea id="kgSrvOut"></textarea>
-            <button style="margin-top:6px" onclick="applyGeneratedServer(this)">Сохранить server.conf и активировать</button>
+            <button style="margin-top:6px" onclick="applyGeneratedServer(this)">Сохранить server.conf и применить</button>
           </div>
           <div>
             <div class="mut" style="margin-bottom:4px">Клиент</div>
@@ -293,7 +311,7 @@
         <div><label class="mut">GeoIP URL (.dat или .txt)</label><input id="geoIPURLInput"></div>
       </div>
       <div class="row">
-        <button class="primary" id="btnGeoUpd" onclick="updateGeoDB()">Обновить Geo-базы</button>
+        <button class="primary" id="btnGeoUpd" onclick="updateGeoDB(this)">Обновить Geo-базы</button>
         <span class="mut" id="geoMsg"></span>
       </div>
     </div>
@@ -301,12 +319,13 @@
     <div class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
         <h2 style="margin:0">Правила маршрутизации</h2>
-        <div class="row">
+        <div class="row" style="gap:8px">
           <span class="mut">По умолчанию:</span>
-          <select id="defPolSelect" style="width:auto">
+          <select id="defPolSelect" style="width:auto" onchange="onDefPolQuickChange()">
             <option value="proxy">PROXY (через основной туннель)</option>
             <option value="direct">DIRECT (напрямую)</option>
           </select>
+          <span id="defPolDirty" class="badge dim hide" style="color:var(--warn);border-color:var(--warn)">не сохранено</span>
         </div>
       </div>
 
@@ -373,11 +392,10 @@
       <div class="mut" id="rosModeHint" style="margin-bottom:6px"></div>
       <div class="mut" id="rosInfo" style="margin-bottom:10px"></div>
 
-      <div id="rosRulesManualBox" class="hide">
+      <div id="rosRulesManualBox" class="hide" style="margin-bottom:10px">
         <textarea id="domText" style="min-height:95px" placeholder="ifconfig.me&#10;youtube.com"></textarea>
-        <div class="row" style="margin-top:10px">
-          <button class="primary" onclick="saveDomains(this)">Сохранить и синхронизировать</button>
-          <button onclick="syncROS(this, 'domMsg')">Синхронизировать</button>
+        <div class="row" style="margin-top:8px">
+          <button class="primary" onclick="saveDomains(this)">Сохранить domains.txt и синхронизировать</button>
         </div>
       </div>
 
@@ -587,15 +605,11 @@
         <button onclick="checkROSSchema('rosSchemaSetOut')">Проверить схему ROS</button>
         <button class="primary" onclick="provisionROSSchema(this, 'rosSchemaSetOut', true)">Применить схему на ROS</button>
         <button onclick="syncROS(this, 'rosTestMsg')">Синхронизировать сейчас</button>
-        <button class="bad" onclick="cleanupROS(this)">Удалить записи awg-ctl</button>
+        <button class="danger" onclick="cleanupROS(this)">Удалить записи awg-ctl</button>
       </div>
       <div class="mut" id="rosTestMsg" style="margin-bottom:6px"></div>
       <div class="mut" id="rosSetInfo" style="margin-bottom:10px"></div>
-      <div id="rosSchemaSetOut" class="hide" style="margin-bottom:12px"></div>
-      <div class="row">
-        <button class="primary" onclick="saveSettings(this)">Сохранить и применить настройки</button>
-        <span class="mut" id="setMsg"></span>
-      </div>
+      <div id="rosSchemaSetOut" class="hide" style="margin-bottom:6px"></div>
     </div>
 
     <div class="card" id="webAuthCard">
@@ -612,6 +626,15 @@
           <span class="mut" id="webAuthMsg"></span>
         </div>
       </div>
+      <div class="mut" style="font-size:.78rem;margin-top:8px">Смена пароля выполняется отдельно от общей кнопки сохранения настроек ниже.</div>
+    </div>
+
+    <div id="settingsSaveBar" class="settings-savebar">
+      <div class="row" style="gap:10px;flex-wrap:wrap">
+        <button class="primary" onclick="saveSettings(this)">Сохранить все настройки и применить</button>
+        <span class="mut" id="setMsg"></span>
+      </div>
+      <span class="mut" style="font-size:.78rem">Изменения применяются сразу без перезапуска контейнера</span>
     </div>
   </div>
 
@@ -630,12 +653,12 @@
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
         <h2 style="margin:0">Терминал контейнера (sh)</h2>
         <div class="row">
-          <button class="sm" onclick="runTermPreset('ip -4 addr show; GW=$(ip -4 route show default | awk \'{print $3; exit}\'); echo \"--- ping GW ($GW) ---\"; [ -n \"$GW\" ] && ping -c2 -W2 \"$GW\"; echo \"--- ping 8.8.8.8 ---\"; ping -c2 -W2 8.8.8.8; echo \"--- ARP ---\"; ip neigh show; echo \"--- awg ---\"; awg show')">Почему нет сети?</button>
-          <button class="sm" onclick="runTermPreset('ip -4 addr show; echo \"--- main ---\"; ip route show; echo \"--- awg ---\"; ip route show table awg; echo \"--- 210 (top 20) ---\"; ip route show table 210 | head -n 20; echo \"--- rules ---\"; ip rule show')">Маршруты / ip rule</button>
+          <button class="sm" onclick="runTermPreset('ip -4 addr show; ip -6 addr show | head -n 20; GW=$(ip -4 route show default | awk \'{print $3; exit}\'); echo \"--- ping GW ($GW) ---\"; [ -n \"$GW\" ] && ping -c2 -W2 \"$GW\"; echo \"--- ping 8.8.8.8 ---\"; ping -c2 -W2 8.8.8.8; echo \"--- ping6 Google ---\"; ping -6 -c2 -W2 2001:4860:4860::8888 2>&1 || true; echo \"--- ARP/NDP ---\"; ip neigh show | head -n 20; echo \"--- awg ---\"; awg show')">Почему нет сети?</button>
+          <button class="sm" onclick="runTermPreset('ip -4 addr show; echo \"--- main v4 ---\"; ip route show; echo \"--- main v6 ---\"; ip -6 route show | head -n 15; echo \"--- awg v4 ---\"; ip route show table awg; echo \"--- awg v6 ---\"; ip -6 route show table awg; echo \"--- 210 (top 20) ---\"; ip route show table 210 | head -n 20; echo \"--- rules ---\"; ip rule show; ip -6 rule show')">Маршруты / ip rule</button>
           <button class="sm" onclick="runTermPreset('awg show')">awg show</button>
-          <button class="sm" onclick="runTermPreset('ping -c 3 -W 2 8.8.8.8')">Ping 8.8.8.8</button>
+          <button class="sm" onclick="runTermPreset('ping -c 3 -W 2 8.8.8.8; ping -6 -c 2 -W 2 2001:4860:4860::8888 2>&1 || true')">Ping v4/v6</button>
           <button class="sm" onclick="runTermPreset('nslookup -timeout=2 google.com 127.0.0.1 || ping -c 1 -W 2 google.com')">DNS тест</button>
-          <button class="sm" onclick="runTermPreset('ss -tlnp; echo \"--- iptables ---\"; iptables-save')">Порты / iptables</button>
+          <button class="sm" onclick="runTermPreset('ss -tlnp; echo \"--- iptables ---\"; iptables-save; echo \"--- ip6tables ---\"; ip6tables-save 2>/dev/null || true')">Порты / iptables</button>
           <button class="sm danger hide" id="btnTermKill" onclick="killTerm()">Стоп (Ctrl+C)</button>
           <button class="sm" onclick="clearTerm()">Очистить</button>
         </div>
@@ -655,9 +678,14 @@
   <div id="tab-logs" class="tab-pane fullpane-pane hide">
     <div class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
-        <h2 style="margin:0">Логи контроллера и awg-quick</h2>
+        <div class="row" style="gap:10px">
+          <h2 style="margin:0">Логи контроллера и awg-quick</h2>
+          <span id="logCount" class="mut" style="font-size:.8rem">0 строк</span>
+        </div>
         <div class="row">
           <input id="logFilter" placeholder="фильтр (error, Failover, TG)" style="width:220px;padding:5px 8px;font-size:.8rem" oninput="renderLogs(true)">
+          <button class="sm" onclick="clearLogFilter()">Сбросить</button>
+          <button class="sm" onclick="refresh(true, this)">↻ Обновить</button>
           <button class="sm" onclick="copyLogs()">Копировать</button>
           <button class="sm" onclick="scrollLogsBottom()">Вниз ↓</button>
         </div>
@@ -724,7 +752,10 @@
 <!-- VPS ADD/EDIT MODAL -->
 <div id="vpsModal" class="sub-overlay hide">
   <div class="sub-box" style="max-width:520px">
-    <h2 id="vpsModalTitle">Добавить сервер VPS</h2>
+    <div class="modal-head">
+      <h2 id="vpsModalTitle" style="margin:0">Добавить сервер VPS</h2>
+      <button class="sm" onclick="closeModal('vpsModal')">✕</button>
+    </div>
     <div class="mut" style="margin-bottom:12px">Получить Admin-токен на VPS: <code>sudo awg-manager admin-token</code></div>
     <input type="hidden" id="vpsEditID">
     <div class="grid" style="margin-bottom:8px">
@@ -758,7 +789,10 @@
 <!-- VPS STEALTH / ENDPOINT / ROTATE MODAL -->
 <div id="vpsStealthModal" class="sub-overlay hide">
   <div class="sub-box" style="max-width:560px">
-    <h2 id="vpsStealthTitle">Маскировка и Endpoint сервера</h2>
+    <div class="modal-head">
+      <h2 id="vpsStealthTitle" style="margin:0">Маскировка и Endpoint сервера</h2>
+      <button class="sm" onclick="closeModal('vpsStealthModal')">✕</button>
+    </div>
     <input type="hidden" id="vpsStealthID">
     <div id="vpsStealthMeta" class="mut" style="margin-bottom:12px"></div>
 
@@ -799,7 +833,10 @@
 <!-- VPS CLIENT CREATE / EDIT MODAL -->
 <div id="vpsClientModal" class="sub-overlay hide">
   <div class="sub-box" style="max-width:560px;max-height:92vh;overflow-y:auto">
-    <h2 id="cliModalTitle">Новый клиент на VPS</h2>
+    <div class="modal-head">
+      <h2 id="cliModalTitle" style="margin:0">Новый клиент на VPS</h2>
+      <button class="sm" onclick="closeModal('vpsClientModal')">✕</button>
+    </div>
     <input type="hidden" id="cliEditMode">
     <input type="hidden" id="cliOrigName">
     <input type="hidden" id="cliOrigVPSID">
@@ -834,7 +871,7 @@
 
     <div class="grid" style="margin-bottom:8px">
       <div><label class="mut">DNS (пусто = по умолчанию VPS)</label><input id="cliDNS" placeholder="1.1.1.1, 1.0.0.1"></div>
-      <div><label class="mut">MTU (пусто = 1280)</label><input id="cliMTU" placeholder="1280"></div>
+      <div><label class="mut">MTU (пусто = по умолчанию VPS, ≥1280 для IPv6)</label><input id="cliMTU" placeholder="1280"></div>
     </div>
     <div style="margin-bottom:8px">
       <label class="mut">AllowedIPs (пусто = 0.0.0.0/0, ::/0)</label>
@@ -864,7 +901,7 @@
       </div>
       <div class="row">
         <label class="chk"><input type="checkbox" id="cliTGAuto" checked> Авто-рассылка при ротации / смене маскировки / Endpoint</label>
-        <label class="chk"><input type="checkbox" id="cliTGSendNow" checked> Отправить новый конфиг в ТГ сразу</label>
+        <label class="chk"><input type="checkbox" id="cliTGSendNow" checked> Отправить конфиг в ТГ после сохранения</label>
       </div>
     </div>
 
@@ -879,7 +916,10 @@
 <!-- VPS CLIENT QR & CONFIG MODAL -->
 <div id="vpsQRModal" class="sub-overlay hide">
   <div class="sub-box" style="max-width:600px;max-height:92vh;overflow-y:auto">
-    <h2 id="vpsQRTitle">Конфигурация клиента</h2>
+    <div class="modal-head">
+      <h2 id="vpsQRTitle" style="margin:0">Конфигурация клиента</h2>
+      <button class="sm" onclick="closeModal('vpsQRModal')">✕</button>
+    </div>
     <div id="vpsQRMeta" class="mut" style="margin-bottom:10px"></div>
     <div class="row" style="align-items:flex-start;gap:14px;margin-bottom:10px">
       <div id="vpsQRImgBox" style="min-width:220px;min-height:220px;display:flex;align-items:center;justify-content:center;background:var(--sub);border:1px solid var(--bd);border-radius:10px;padding:8px">
@@ -889,7 +929,7 @@
         <button class="primary sm" onclick="downloadCurrentVPSConf()">⬇ Скачать .conf</button>
         <button class="sm" onclick="copyText(currentQRData.config, 'Конфиг скопирован')">📋 Копировать .conf</button>
         <button class="sm" onclick="copyText(currentQRData.vpn_url, 'Ссылка vpn:// скопирована')">⚡ Копировать vpn:// (Amnezia)</button>
-        <button class="sm" onclick="copyText(currentQRData.sub_url, 'Ссылка подписки скопирована')">🔗 Копировать /sub/ токен</button>
+        <button class="sm" id="btnQRCopySub" onclick="copyText(currentQRData.sub_url, 'Ссылка подписки скопирована')">🔗 Копировать ссылку подписки</button>
         <button class="sm" id="btnQRSendTG" onclick="sendCurrentQRToTG(this)">📨 Отправить в Telegram</button>
         <button class="sm" onclick="importCurrentClientToRouter(this)">📥 Подключить на этот роутер</button>
       </div>
@@ -904,7 +944,10 @@
 <!-- TELEGRAM CONTACTS MODAL -->
 <div id="tgContactsModal" class="sub-overlay hide">
   <div class="sub-box" style="max-width:540px;max-height:90vh;overflow-y:auto">
-    <h2>Адресная книга Telegram (получатели конфигов)</h2>
+    <div class="modal-head">
+      <h2 style="margin:0">Адресная книга Telegram (получатели конфигов)</h2>
+      <button class="sm" onclick="closeModal('tgContactsModal')">✕</button>
+    </div>
     <div class="mut" style="margin-bottom:10px">Пользователь должен хотя бы раз нажать <code>/start</code> у бота, настроенного в «Настройки → Telegram».</div>
     <div class="grid" style="margin-bottom:8px">
       <div><label class="mut">Имя / @username</label><input id="tgcName" placeholder="@alexey"></div>
@@ -1044,7 +1087,7 @@ async function checkAuthStatus() {
     authState.termEnabled = !!st.term_enabled;
     const logoutBtn = document.getElementById('btnLogout');
     if (logoutBtn) logoutBtn.classList.toggle('hide', st.auth_via !== 'cookie');
-    updateTermDisabledBanner(authState.termEnabled);
+    updateTermDisabledBanner(authState.termEnabled, !!st.term_env_disabled);
     if (st.needs_setup) {
       openAuthModal('setup', '', st.default_user || 'admin');
       return false;
@@ -1161,8 +1204,20 @@ function onRosAPITLSChange() {
   else if (!tls && curPort === 8729) portEl.value = 8728;
 }
 
-function updateTermDisabledBanner(enabled) {
+function updateTermDisabledBanner(enabled, envDisabled = false) {
   const ban = document.getElementById('termDisabledBanner');
+  const txt = document.getElementById('termDisabledText');
+  const goBtn = document.getElementById('btnGoSettingsTerm');
+  if (txt) {
+    txt.textContent = envDisabled
+      ? 'TERM_ENABLE=off: Web-терминал принудительно отключён переменной окружения контейнера.'
+      : 'Включите «Включить Web-терминал (root sh)» во вкладке «Настройки».';
+  }
+  if (goBtn) goBtn.classList.toggle('hide', !!envDisabled);
+  const inp = document.getElementById('termInput');
+  const runBtn = document.getElementById('btnTermRun');
+  if (inp) inp.disabled = !enabled;
+  if (runBtn && !termState.running) runBtn.disabled = !enabled;
   if (!ban) return;
   ban.classList.toggle('hide', !!enabled);
 }
@@ -1239,15 +1294,16 @@ function findSub(subsMap, cfgName) {
   return subsMap[cfgName] || subsMap[base] || subsMap[base + '.conf'] || {};
 }
 
-async function refresh(manual = false) {
+async function refresh(manual = false, btn = null) {
   if (!authState.authenticated || refreshInFlight || (!manual && document.hidden)) return;
   refreshInFlight = true;
+  if (btn) btn.disabled = true;
   try {
     const st = await api('/api/status', { timeoutMs: 10000 });
     lastStatus = st;
     if (typeof st.term_enabled === 'boolean') {
       authState.termEnabled = st.term_enabled;
-      updateTermDisabledBanner(st.term_enabled);
+      updateTermDisabledBanner(st.term_enabled, !!st.term_env_disabled);
     }
     document.getElementById('verBadge').textContent = 'v' + (st.version || '?');
 
@@ -1345,7 +1401,7 @@ async function refresh(manual = false) {
                 </div>
                 <div class="row" style="gap:8px">
                   <span class="mut">Jc=${esc(i.jc)} S1=${esc(i.s1)} S2=${esc(i.s2)}</span>
-                  ${c && !c.primary && st.multi_tunnel ? `<button class="sm" onclick="activateProfile('${esc(c.name)}')">Сделать Primary</button>` : ''}
+                  ${c && !c.primary && st.multi_tunnel ? `<button class="sm" onclick="activateProfile('${esc(c.name)}', this)">Сделать Primary</button>` : ''}
                 </div>
               </div>
               <div class="mut" style="margin-top:6px">PublicKey: <code>${esc(i.public_key)}</code></div>
@@ -1353,7 +1409,7 @@ async function refresh(manual = false) {
                 <div class="peer">
                   <div><strong>Peer:</strong> <code>${esc(p.public_key)}</code></div>
                   <div class="mut">Endpoint: ${esc(p.endpoint)} · AllowedIPs: ${esc(p.allowed_ips)}</div>
-                  <div>Handshake: ${p.handshake_age_sec >= 0 ? `<span style="color:var(--ok)">${p.handshake_age_sec}s назад</span>` : '<span style="color:var(--warn)">нет рукопожатия</span>'} · RX ${fmtBytes(p.rx_bytes)} / TX ${fmtBytes(p.tx_bytes)}</div>
+                  <div>Handshake: ${p.handshake_age_sec >= 0 ? `<span style="color:var(--ok)">${p.handshake_age_sec}s назад</span>` : '<span style="color:var(--warn)">нет рукопожатия</span>'} · ↓ RX ${fmtBytes(p.rx_bytes)} / ↑ TX ${fmtBytes(p.tx_bytes)}</div>
                 </div>`).join('')}
               ${(() => {
                 const cfgKey = c ? c.name : (i.name + '.conf');
@@ -1389,6 +1445,7 @@ async function refresh(manual = false) {
     if (pingMethodEl && !pingMethodEl.dataset.userChanged && fo.probe_method) {
       pingMethodEl.value = fo.probe_method;
     }
+    updatePingBtnLabel();
     const foKey = JSON.stringify([fo, st.multi_tunnel, cfgs.length]);
     if (foKey !== snap.failover) {
       snap.failover = foKey;
@@ -1413,7 +1470,7 @@ async function refresh(manual = false) {
           </div>
           <div class="row">
             <button class="sm" onclick="failoverAction('check', this)">Проверить сейчас</button>
-            ${cfgs.filter(c => !c.disabled).length >= 2 ? `<button class="sm" onclick="failoverAction('switch', this)">Переключить далее</button>` : ''}
+            ${cfgs.filter(c => !c.disabled).length >= 2 ? `<button class="sm" onclick="failoverAction('switch', this)">Переключить на резерв</button>` : ''}
           </div>
         </div>
         ${fo.last_switch_reason ? `<div class="mut" style="margin-bottom:8px">Посл. переключение: ${esc(fo.last_switch_reason)}</div>` : ''}
@@ -1467,13 +1524,13 @@ async function refresh(manual = false) {
       if (!editingNew && !cfgDirty && sel.value && !document.getElementById('cfgText').value) loadSelectedConfig();
     }
 
-    const rtKey = cfgs.map(c => c.interface).join(',');
+    const rtKey = cfgs.map(c => c.interface + ':' + (c.active ? '1' : '0')).join(',');
     if (rtKey !== snap.ruleTargets) {
       snap.ruleTargets = rtKey;
       const actSel = document.getElementById('addAct');
       const prevAct = actSel.value;
       actSel.innerHTML = `<option value="PROXY">PROXY (основной)</option>` +
-        cfgs.map(c => `<option value="PROXY:${esc(c.interface)}">PROXY:${esc(c.interface)}</option>`).join('') +
+        cfgs.map(c => `<option value="PROXY:${esc(c.interface)}">PROXY:${esc(c.interface)} (${c.active ? 'UP' : 'OFF'})</option>`).join('') +
         `<option value="DIRECT">DIRECT</option><option value="DROP">DROP</option>`;
       if ([...actSel.options].some(o => o.value === prevAct)) actSel.value = prevAct;
     }
@@ -1490,14 +1547,16 @@ async function refresh(manual = false) {
     const profKey = JSON.stringify([cfgs, fo.tunnels, st.subscriptions]);
     if (profKey !== snap.profs) {
       snap.profs = profKey;
+      const curEdit = (!editingNew && document.getElementById('cfgSelect')) ? document.getElementById('cfgSelect').value : '';
       document.getElementById('profList').innerHTML = cfgs.length ? cfgs.map((c, idx) => {
         const h = healthByName[c.name];
         const sub = findSub(st.subscriptions, c.name);
+        const isEditingRow = !!(curEdit && curEdit === c.name);
         return `
-        <div class="prof-row ${c.primary ? 'is-primary' : ''}">
+        <div class="prof-row ${c.primary ? 'is-primary' : ''} ${isEditingRow ? 'is-editing' : ''}" data-cfg="${esc(c.name)}">
           <div class="row" style="gap:8px;flex:1;min-width:220px">
-            <input type="checkbox" title="Включить в Multi-Tunnel / Failover" ${c.disabled ? '' : 'checked'} onchange="toggleConfigEnabled('${esc(c.name)}', this.checked)">
-            <input type="radio" name="prof" title="Основной профиль" ${c.selected ? 'checked' : ''} onchange="activateProfile('${esc(c.name)}')">
+            <input type="checkbox" data-plan-ctrl="1" title="Включить в Multi-Tunnel / Failover" ${c.disabled ? '' : 'checked'} onchange="toggleConfigEnabled('${esc(c.name)}', this.checked, this)">
+            <input type="radio" name="prof" data-plan-ctrl="1" title="Сделать основным профилем (Primary)" ${c.selected ? 'checked' : ''} onchange="activateProfile('${esc(c.name)}', this)">
             <span class="mut">${c.priority ? '#' + c.priority : '—'}</span>
             <strong>${esc(c.name)}</strong>
             ${c.primary ? '<span class="badge info">PRIMARY</span>' : (c.active ? '<span class="badge ok">UP</span>' : '')}
@@ -1509,13 +1568,14 @@ async function refresh(manual = false) {
           <div class="row" style="gap:4px">
             ${sub && (sub.token || sub.url) ? `<button class="sm" title="Синхронизировать сейчас" onclick="syncSubscription('${esc(c.name)}', this)">↻</button>` : ''}
             <button class="sm" title="Настроить токен и график ротации" onclick="openSubModal('${esc(c.name)}')">🔑 Токен</button>
-            <button class="sm" title="Выше" ${idx === 0 ? 'disabled' : ''} onclick="moveConfigOrder(${idx}, -1)">↑</button>
-            <button class="sm" title="Ниже" ${idx === cfgs.length-1 ? 'disabled' : ''} onclick="moveConfigOrder(${idx}, 1)">↓</button>
-            <button class="sm" onclick="document.getElementById('cfgSelect').value='${esc(c.name)}';editingNew=false;loadSelectedConfig()">Ред.</button>
+            <button class="sm" data-plan-ctrl="1" title="Выше" ${idx === 0 ? 'disabled' : ''} onclick="moveConfigOrder(${idx}, -1, this)">↑</button>
+            <button class="sm" data-plan-ctrl="1" title="Ниже" ${idx === cfgs.length-1 ? 'disabled' : ''} onclick="moveConfigOrder(${idx}, 1, this)">↓</button>
+            <button class="sm" onclick="document.getElementById('cfgSelect').value='${esc(c.name)}';editingNew=false;loadSelectedConfig(true)">Ред.</button>
           </div>
         </div>
         ${c.start_error ? `<div class="mut" style="color:var(--bad);margin:-2px 0 8px 8px">${esc(c.name)}: ${esc(c.start_error)}</div>` : ''}`;
-      }).join('') : '<span class="mut">Профилей нет — нажмите «+ Новый» или «Загрузить».</span>';
+      }).join('') : '<span class="mut">Профилей нет — нажмите «+ Новый», «+ Импорт URL / vpn://» или «Загрузить».</span>';
+      updateProfEditingHighlight();
       if (document.getElementById('tab-configs').classList.contains('active')) {
         reloadActiveEditorIfClean();
       }
@@ -1536,6 +1596,7 @@ async function refresh(manual = false) {
     }
     document.getElementById('meta').textContent = 'Ошибка: ' + e.message;
   } finally {
+    if (btn) btn.disabled = false;
     refreshInFlight = false;
   }
 }
@@ -1544,9 +1605,16 @@ function renderLogs(forceScroll) {
   const box = document.getElementById('logsBox');
   const q = (document.getElementById('logFilter').value || '').trim().toLowerCase();
   const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 36;
-  const lines = (snap.logs || '').split('\n');
-  box.textContent = q ? lines.filter(l => l.toLowerCase().includes(q)).join('\n') : snap.logs;
+  const lines = (snap.logs || '').split('\n').filter(Boolean);
+  const filtered = q ? lines.filter(l => l.toLowerCase().includes(q)) : lines;
+  box.textContent = q ? filtered.join('\n') : snap.logs;
+  const cntEl = document.getElementById('logCount');
+  if (cntEl) cntEl.textContent = q ? `${filtered.length} из ${lines.length}` : `${lines.length} строк`;
   if (forceScroll || nearBottom) box.scrollTop = box.scrollHeight;
+}
+function clearLogFilter() {
+  const el = document.getElementById('logFilter');
+  if (el) { el.value = ''; renderLogs(true); }
 }
 function scrollLogsBottom() { const b = document.getElementById('logsBox'); b.scrollTop = b.scrollHeight; }
 async function copyLogs() {
@@ -1558,12 +1626,22 @@ async function copyLogs() {
 async function failoverAction(act, btn) {
   await withBusy(btn, async () => {
     try {
-      const r = await api('/api/failover/' + act, {method:'POST'});
-      toast(act === 'check' ? 'Проверка туннелей завершена' : 'Туннель переключён');
-      if (r.last_switch_reason) document.getElementById('cfgMsg').textContent = r.last_switch_reason;
+      const r = await api('/api/failover/' + act, { method: 'POST', timeoutMs: 35000 });
+      const msg = act === 'check'
+        ? 'Проверка туннелей завершена'
+        : (r.last_switch_reason ? 'Переключено: ' + r.last_switch_reason : 'Туннель переключён');
+      toast(msg, 'ok');
       await refresh(true);
     } catch (e) { toast(e.message, 'bad'); }
   });
+}
+
+function updatePingBtnLabel() {
+  const sel = document.getElementById('pingHostMethod');
+  const btn = document.getElementById('btnFoPing');
+  if (!sel || !btn) return;
+  const map = { ping: 'Проверить Ping', tcp: 'Проверить TCP', any: 'Проверить Ping/TCP', both: 'Проверить оба' };
+  btn.textContent = map[sel.value] || 'Проверить';
 }
 
 async function runFailoverPing(btn) {
@@ -1575,7 +1653,8 @@ async function runFailoverPing(btn) {
     try {
       const r = await api('/api/failover/ping', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ host, method })
+        body: JSON.stringify({ host, method }),
+        timeoutMs: 45000
       });
       const res = r.results || [];
       if (!res.length) {
@@ -1610,13 +1689,14 @@ async function applyPingAsHealthy(btn) {
   const host = hostInput || (lastStatus?.failover?.probe_target || '1.1.1.1');
   await withBusy(btn, async () => {
     try {
-      const cur = await api('/api/settings');
+      const cur = await api('/api/settings', { timeoutMs: 20000 });
       const next = { ...cur, failover_probe_target: host, failover_probe_method: method };
       await api('/api/settings', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(next)
+        body: JSON.stringify(next),
+        timeoutMs: 45000
       });
-      await api('/api/failover/check', { method: 'POST' });
+      await api('/api/failover/check', { method: 'POST', timeoutMs: 35000 });
       if (document.getElementById('setFoProbeMethod')) {
         document.getElementById('setFoProbeMethod').value = method;
         document.getElementById('setFoProbe').value = host;
@@ -1629,16 +1709,45 @@ async function applyPingAsHealthy(btn) {
 }
 
 // --- Configs & Multi-Tunnel Plan ---
+let planInFlight = false;
+function updateProfEditingHighlight() {
+  const selVal = document.getElementById('cfgSelect')?.value || '';
+  const activeEdit = editingNew ? '' : selVal;
+  document.querySelectorAll('#profList .prof-row[data-cfg]').forEach(row => {
+    row.classList.toggle('is-editing', !!(activeEdit && row.dataset.cfg === activeEdit));
+  });
+  const lbl = document.getElementById('cfgEditLabel');
+  if (lbl) {
+    lbl.textContent = editingNew ? 'Создание нового профиля' : (activeEdit ? 'Редактирование: ' + activeEdit : 'Редактирование: —');
+  }
+  const applyBtn = document.getElementById('btnCfgSaveApply');
+  if (applyBtn) {
+    const curPrimary = (lastStatus && lastStatus.configs || []).find(c => c.primary)?.name || '';
+    const keepPrim = !!(lastStatus && lastStatus.multi_tunnel && !editingNew && activeEdit && curPrimary && curPrimary !== activeEdit);
+    applyBtn.title = keepPrim
+      ? `Сохранит и применит ${activeEdit} в Multi-Tunnel без смены Primary (${curPrimary})`
+      : 'Сохранит конфиг и применит туннели';
+  }
+}
+
 async function saveTunnelPlan(order, disabled) {
+  if (planInFlight) { toast('Дождитесь завершения предыдущего изменения', 'warn'); return; }
+  planInFlight = true;
+  document.querySelectorAll('#profList [data-plan-ctrl]').forEach(el => { el.disabled = true; });
   try {
     const r = await api('/api/configs/plan', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ order, disabled, apply: true })
+      body: JSON.stringify({ order, disabled, apply: true }),
+      timeoutMs: 45000
     });
     if (r.apply_error) toast(r.apply_error, 'bad');
     else toast('Порядок и список профилей обновлён');
     await refresh(true);
-  } catch (e) { toast(e.message, 'bad'); }
+  } catch (e) { toast(e.message, 'bad'); await refresh(true); }
+  finally {
+    planInFlight = false;
+    document.querySelectorAll('#profList [data-plan-ctrl]').forEach(el => { el.disabled = false; });
+  }
 }
 
 function moveConfigOrder(idx, dir) {
@@ -1658,7 +1767,7 @@ function toggleConfigEnabled(name, enabled) {
   saveTunnelPlan(names, [...dis]);
 }
 
-async function loadSelectedConfig() {
+async function loadSelectedConfig(scrollToEditor = false) {
   const name = document.getElementById('cfgSelect').value;
   if (!name) return;
   editingNew = false;
@@ -1668,13 +1777,15 @@ async function loadSelectedConfig() {
     document.getElementById('cfgText').value = d.content;
     cfgDirty = false;
     document.getElementById('cfgMsg').textContent = '';
+    updateProfEditingHighlight();
+    if (scrollToEditor) document.getElementById('cfgText')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch (e) { toast(e.message, 'bad'); }
 }
 
 function reloadActiveEditorIfClean() {
   const sel = document.getElementById('cfgSelect');
   if (!editingNew && !cfgDirty && sel && sel.value) {
-    loadSelectedConfig();
+    loadSelectedConfig(false);
   }
 }
 
@@ -1688,7 +1799,49 @@ function newConfig() {
   document.getElementById('cfgText').value = '';
   document.getElementById('qrBox').innerHTML = '';
   document.getElementById('cfgMsg').textContent = '';
+  updateProfEditingHighlight();
   document.getElementById('cfgText').focus();
+}
+
+function toggleSubImportPanel(force) {
+  const box = document.getElementById('subImportBox');
+  if (!box) return;
+  const open = typeof force === 'boolean' ? force : box.classList.contains('hide');
+  box.classList.toggle('hide', !open);
+  if (open) setTimeout(() => document.getElementById('subImportURL')?.focus(), 20);
+}
+
+async function importSubscriptionURL(btn) {
+  const rawURL = (document.getElementById('subImportURL')?.value || '').trim();
+  if (!rawURL) { toast('Вставьте ссылку подписки https://.../sub/... или vpn://...', 'bad'); return; }
+  const name = (document.getElementById('subImportName')?.value || '').trim();
+  const activate = !!document.getElementById('subImportActivate')?.checked;
+  const msg = document.getElementById('cfgMsg');
+  if (msg) msg.textContent = 'Импорт подписки...';
+  await withBusy(btn, async () => {
+    try {
+      const res = await api('/api/subscriptions/import', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ url: rawURL, name, activate }),
+        timeoutMs: 35000
+      });
+      document.getElementById('subImportURL').value = '';
+      document.getElementById('subImportName').value = '';
+      toggleSubImportPanel(false);
+      editingNew = false;
+      cfgDirty = false;
+      if (msg) msg.textContent = 'Импортировано: ' + (res.name || '');
+      toast('Профиль ' + (res.name || '') + ' импортирован', 'ok');
+      await refresh(true);
+      if (res.name && document.getElementById('cfgSelect')) {
+        document.getElementById('cfgSelect').value = res.name;
+        await loadSelectedConfig(false);
+      }
+    } catch (e) {
+      if (msg) msg.textContent = 'Ошибка импорта: ' + e.message;
+      toast('Ошибка импорта: ' + e.message, 'bad');
+    }
+  });
 }
 
 function importConfigFile(inp) {
@@ -1730,51 +1883,62 @@ function downloadConfig() {
   });
 })();
 
-async function activateProfile(name) {
+async function activateProfile(name, btn = null) {
   editingNew = false;
   const msg = document.getElementById('cfgMsg');
   msg.textContent = 'Переключение на ' + name + '...';
-  try {
-    await api('/api/configs/' + encodeURIComponent(name) + '/activate', {method:'POST', timeoutMs:60000});
-    msg.textContent = 'Активен: ' + name;
-    toast('Профиль ' + name + ' включён');
-  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
-  await refresh(true);
+  await withBusy(btn, async () => {
+    try {
+      await api('/api/configs/' + encodeURIComponent(name) + '/activate', {method:'POST', timeoutMs:60000});
+      msg.textContent = 'Активен: ' + name;
+      toast('Профиль ' + name + ' стал Primary');
+    } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+    await refresh(true);
+  });
 }
 
 async function saveConfig(apply, btn) {
   let name = document.getElementById('cfgName').value.trim();
-  if (!name) { document.getElementById('cfgMsg').textContent = 'Укажите имя (напр. nl.conf)'; return; }
+  if (!name) {
+    document.getElementById('cfgMsg').textContent = 'Укажите имя (напр. nl.conf)';
+    toast('Укажите имя профиля (напр. nl.conf)', 'bad');
+    return;
+  }
   if (!name.endsWith('.conf')) name += '.conf';
   document.getElementById('cfgName').value = name;
   const content = document.getElementById('cfgText').value;
+  const curPrimary = (lastStatus && lastStatus.configs || []).find(c => c.primary)?.name || '';
+  const keepPrimary = !!(apply && lastStatus && lastStatus.multi_tunnel && !editingNew && curPrimary && curPrimary !== name);
   const msg = document.getElementById('cfgMsg');
-  msg.textContent = apply ? 'Сохранение и применение...' : 'Сохранение...';
+  msg.textContent = apply ? (keepPrimary ? `Применение ${name} (без смены Primary)...` : 'Сохранение и применение...') : 'Сохранение...';
   await withBusy(btn, async () => {
     try {
       await api('/api/configs/' + encodeURIComponent(name), {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({content, apply}),
+        body: JSON.stringify({content, apply, keep_primary: keepPrimary}),
         timeoutMs: apply ? 60000 : 12000
       });
       editingNew = false;
       cfgDirty = false;
-      msg.textContent = apply ? 'Сохранено и применено' : 'Сохранено';
-      toast(apply ? (name + ' применён') : (name + ' сохранён'));
+      msg.textContent = apply ? (keepPrimary ? `Применено (Primary: ${curPrimary})` : 'Сохранено и применено') : 'Сохранено';
+      toast(apply ? (keepPrimary ? `${name} применён (Primary остаётся ${curPrimary})` : `${name} применён`) : `${name} сохранён`);
       await refresh(true);
+      updateProfEditingHighlight();
     } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
   });
 }
 
-async function deleteConfig() {
+async function deleteConfig(btn) {
   const name = document.getElementById('cfgName').value.trim();
-  if (!name || !confirm('Удалить ' + name + '?')) return;
-  try {
-    await api('/api/configs/' + encodeURIComponent(name), {method:'DELETE', timeoutMs:30000});
-    newConfig();
-    toast('Удалён: ' + name);
-    await refresh(true);
-  } catch (e) { toast(e.message, 'bad'); }
+  if (!name || !confirm('Удалить профиль ' + name + '?')) return;
+  await withBusy(btn, async () => {
+    try {
+      await api('/api/configs/' + encodeURIComponent(name), {method:'DELETE', timeoutMs:30000});
+      newConfig();
+      toast('Удалён: ' + name);
+      await refresh(true);
+    } catch (e) { toast(e.message, 'bad'); }
+  });
 }
 
 async function tunnelAction(act, btn) {
@@ -1787,6 +1951,20 @@ async function tunnelAction(act, btn) {
   });
 }
 
+function hideQRBox(target = 'qrBox') {
+  const box = document.getElementById(target);
+  if (!box) return;
+  const oldImg = box.querySelector('img');
+  if (oldImg && oldImg.src.startsWith('blob:')) URL.revokeObjectURL(oldImg.src);
+  box.innerHTML = '';
+}
+
+function toggleConfigQR() {
+  const box = document.getElementById('qrBox');
+  if (box && box.querySelector('img')) { hideQRBox('qrBox'); return; }
+  showQRForText(document.getElementById('cfgText').value, 'qrBox');
+}
+
 async function showQRForText(text, target='qrBox') {
   if (!text.trim()) { toast('Пустой конфиг для QR', 'bad'); return; }
   try {
@@ -1796,7 +1974,8 @@ async function showQRForText(text, target='qrBox') {
     const oldImg = box.querySelector('img');
     if (oldImg && oldImg.src.startsWith('blob:')) URL.revokeObjectURL(oldImg.src);
     const url = URL.createObjectURL(blob);
-    box.innerHTML = `<img src="${url}" width="220" height="220" style="background:#fff;padding:8px;border-radius:8px">`;
+    const hideBtn = target === 'vpsQRImgBox' ? '' : `<button class="sm" style="align-self:flex-start" onclick="hideQRBox('${esc(target)}')">✕ Скрыть</button>`;
+    box.innerHTML = `<div class="row" style="gap:10px;align-items:flex-start"><img src="${url}" width="220" height="220" style="background:#fff;padding:8px;border-radius:8px">${hideBtn}</div>`;
   } catch (e) { toast('Ошибка QR: ' + e.message, 'bad'); }
 }
 
@@ -1812,7 +1991,7 @@ async function generatePair(btn) {
       const cliHost = cliIP.split('/')[0] + '/32';
       const awgBlock = `Jc = ${a.jc}\nJmin = ${a.jmin}\nJmax = ${a.jmax}\nS1 = ${a.s1}\nS2 = ${a.s2}\nH1 = ${a.h1}\nH2 = ${a.h2}\nH3 = ${a.h3}\nH4 = ${a.h4}`;
       document.getElementById('kgSrvOut').value = `[Interface]\nAddress = ${srvIP}\nListenPort = ${port}\nPrivateKey = ${k.server_private}\n${awgBlock}\n\n[Peer]\nPublicKey = ${k.client_public}\nPresharedKey = ${k.preshared_key}\nAllowedIPs = ${cliHost}\n`;
-      document.getElementById('kgCliOut').value = `[Interface]\nPrivateKey = ${k.client_private}\nAddress = ${cliIP}\nDNS = 1.1.1.1\nMTU = 1420\n${awgBlock}\n\n[Peer]\nPublicKey = ${k.server_public}\nPresharedKey = ${k.preshared_key}\nAllowedIPs = 0.0.0.0/0\nEndpoint = ${ep}\nPersistentKeepalive = 25\n`;
+      document.getElementById('kgCliOut').value = `[Interface]\nPrivateKey = ${k.client_private}\nAddress = ${cliIP}\nDNS = 1.1.1.1\nMTU = 1280\n${awgBlock}\n\n[Peer]\nPublicKey = ${k.server_public}\nPresharedKey = ${k.preshared_key}\nAllowedIPs = 0.0.0.0/0\nEndpoint = ${ep}\nPersistentKeepalive = 25\n`;
     } catch (e) { toast(e.message, 'bad'); }
   });
 }
@@ -1820,9 +1999,10 @@ async function generatePair(btn) {
 async function applyGeneratedServer(btn) {
   const content = document.getElementById('kgSrvOut').value;
   if (!content.trim()) return;
+  if (!confirm('Сохранить server.conf и активировать его на роутере?')) return;
   await withBusy(btn, async () => {
     try {
-      await api('/api/configs/server.conf', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content, apply:true})});
+      await api('/api/configs/server.conf', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({content, apply:true}), timeoutMs:60000});
       toast('server.conf применён');
       await refresh(true);
     } catch (e) { toast(e.message, 'bad'); }
@@ -1942,8 +2122,15 @@ async function loadRules() {
     document.getElementById('rulesText').value = d.raw || '';
     renderRulesVisual();
     if (d.stats && d.stats.default_policy) document.getElementById('defPolSelect').value = d.stats.default_policy;
+    document.getElementById('defPolDirty')?.classList.add('hide');
     if (d.geo) renderGeoStatus(d.geo);
   } catch (e) { document.getElementById('rulesMsg').textContent = 'Ошибка: ' + e.message; }
+}
+
+function onDefPolQuickChange() {
+  document.getElementById('defPolDirty')?.classList.remove('hide');
+  const msg = document.getElementById('rulesMsg');
+  if (msg) msg.textContent = 'Политика по умолчанию изменена — нажмите «Сохранить и применить».';
 }
 
 async function loadSettingsIntoGeo() {
@@ -1995,8 +2182,10 @@ async function saveRules(btn) {
         body: JSON.stringify({
           raw: document.getElementById('rulesText').value,
           default_policy: document.getElementById('defPolSelect').value
-        })
+        }),
+        timeoutMs: 30000
       });
+      document.getElementById('defPolDirty')?.classList.add('hide');
       if (r.geo) renderGeoStatus(r.geo);
       if (r.apply_error) {
         msg.textContent = 'Ошибка применения: ' + r.apply_error;
@@ -2020,25 +2209,26 @@ async function saveRules(btn) {
   });
 }
 
-async function updateGeoDB() {
-  const btn = document.getElementById('btnGeoUpd');
+async function updateGeoDB(btn) {
+  const actBtn = btn || document.getElementById('btnGeoUpd');
   const msg = document.getElementById('geoMsg');
-  btn.disabled = true;
-  msg.textContent = 'Загрузка Geo-баз... (15–45 сек)';
-  try {
-    const r = await api('/api/geo/update', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        geosite_url: document.getElementById('geoSiteURLInput').value.trim(),
-        geoip_url: document.getElementById('geoIPURLInput').value.trim()
-      })
-    });
-    if (r.geo) renderGeoStatus(r.geo);
-    msg.textContent = r.ok ? 'Geo-базы обновлены' : ('Ошибка: ' + (r.error || 'не удалось'));
-    toast(msg.textContent, r.ok ? 'ok' : 'bad');
-    await refresh(true);
-  } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
-  finally { btn.disabled = false; }
+  msg.textContent = 'Загрузка Geo-баз... (15–60 сек)';
+  await withBusy(actBtn, async () => {
+    try {
+      const r = await api('/api/geo/update', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          geosite_url: document.getElementById('geoSiteURLInput').value.trim(),
+          geoip_url: document.getElementById('geoIPURLInput').value.trim()
+        }),
+        timeoutMs: 90000
+      });
+      if (r.geo) renderGeoStatus(r.geo);
+      msg.textContent = r.ok ? 'Geo-базы обновлены' : ('Ошибка: ' + (r.error || 'не удалось'));
+      toast(msg.textContent, r.ok ? 'ok' : 'bad');
+      await refresh(true);
+    } catch (e) { msg.textContent = 'Ошибка: ' + e.message; toast(e.message, 'bad'); }
+  });
 }
 
 async function testRuleQuery() {
@@ -2057,6 +2247,7 @@ function onFoModeChange() {
   const m = document.getElementById('setFoMode').value;
   if (m === 'standby') document.getElementById('setMultiTunnel').checked = true;
   if (m === 'switch') document.getElementById('setMultiTunnel').checked = false;
+  updateFoDependentFields();
 }
 function onFoProbeMethodChange() {
   const pm = document.getElementById('setFoProbeMethod')?.value || 'tcp';
@@ -2070,6 +2261,15 @@ function onMultiToggle() {
   const fm = document.getElementById('setFoMode');
   if (multi && fm.value === 'switch') fm.value = 'standby';
   if (!multi && fm.value === 'standby') fm.value = 'switch';
+  updateFoDependentFields();
+}
+function updateFoDependentFields() {
+  const off = document.getElementById('setFoMode')?.value === 'off';
+  // Keep setFoProbeMethod & setFoProbe enabled for manual Status/Failover probes
+  ['setFailback', 'setFoTrigger', 'setFoInterval', 'setFoThresh', 'setFoHSWait', 'setFoHSMax', 'setFoCooldown'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = off;
+  });
 }
 
 async function loadSettings() {
@@ -2170,6 +2370,7 @@ async function loadSettings() {
     document.getElementById('setRosSyncDomains').checked = !!s.ros_sync_domains;
     document.getElementById('setRosClearPass').checked = false;
     onSettingsROSModeChange();
+    updateFoDependentFields();
     updateRosGWWarning(autoRosIP);
     renderSettingsSubs(s.subscriptions);
   } catch (e) { document.getElementById('setMsg').textContent = 'Ошибка: ' + e.message; }
@@ -2185,6 +2386,26 @@ function fmtTimeAgo(iso) {
   return Math.floor(diff / 3600) + 'ч назад';
 }
 
+function stripHostPortOnly(s) {
+  const v = String(s || '').trim().replace(/^https?:\/\//i, '').split('/')[0];
+  if (!v) return '';
+  if (v.startsWith('[')) {
+    const end = v.indexOf(']');
+    return end > 1 ? v.slice(1, end) : v;
+  }
+  const parts = v.split(':');
+  // IPv4/domain with trailing :port has 2 parts; raw IPv6 addresses have 3+ colons
+  if (parts.length === 2) return parts[0];
+  return v;
+}
+
+function fmtSubInterval(m) {
+  if (!m || m <= 0) return '30 мин';
+  if (m < 60) return `${m} мин`;
+  if (m < 1440) return `${Math.round(m / 60)} ч`;
+  return `${Math.round(m / 1440)} дн`;
+}
+
 function renderSettingsSubs(subs) {
   const container = document.getElementById('subsSettingsList');
   if (!container) return;
@@ -2196,53 +2417,25 @@ function renderSettingsSubs(subs) {
   const sMap = subs || (lastStatus && lastStatus.subscriptions) || {};
   container.innerHTML = cfgs.map(c => {
     const sub = findSub(sMap, c.name);
-    const intVal = sub.interval_min || 30;
+    const hasSub = !!(sub.token || sub.url);
+    const tokMask = sub.token
+      ? (sub.token.length > 20 ? sub.token.slice(0, 10) + '...' + sub.token.slice(-6) : sub.token)
+      : (sub.url ? sub.url : '');
     return `
-    <div class="card" style="margin-bottom:0;background:rgba(255,255,255,.02);border:1px solid var(--bd)">
-      <div class="row" style="justify-content:space-between;margin-bottom:8px">
-        <div class="row" style="gap:8px">
+    <div class="prof-row" style="margin-bottom:0">
+      <div style="display:grid;gap:4px;flex:1;min-width:240px">
+        <div class="row" style="gap:8px;flex-wrap:wrap">
           <strong>${esc(c.name)}</strong>
           ${c.primary ? '<span class="badge info">PRIMARY</span>' : ''}
-          <span class="mut">${esc(c.endpoint || '')}</span>
-        </div>
-        <div class="row" style="gap:6px">
+          ${hasSub ? `<span class="badge ok">🔑 :${sub.api_port || 8443}</span>` : '<span class="badge dim">не настроена</span>'}
           ${sub.last_status ? `<span class="badge ${sub.last_status === 'ok' || sub.last_status === 'not_modified' ? 'ok' : 'bad'}">${esc(sub.last_status)}</span>` : ''}
-          ${sub.last_etag ? `<span class="mut" style="font-size:.76rem">ETag: ${esc(sub.last_etag)}</span>` : ''}
+          ${sub.last_sync ? `<span class="mut" style="font-size:.78rem">${fmtTimeAgo(sub.last_sync)}</span>` : ''}
         </div>
+        ${hasSub ? `<div class="mut" style="font-size:.8rem"><code>${esc(tokMask)}</code>${sub.api_host ? ` · host: <code>${esc(sub.api_host)}</code>` : ''} · график: ${fmtSubInterval(sub.interval_min || 30)}${sub.auto_update === false ? ' (авто выкл)' : ''}${sub.last_etag ? ` · ETag ${esc(sub.last_etag)}` : ''}</div>` : `<div class="mut" style="font-size:.8rem">Endpoint профиля: ${esc(c.endpoint || '—')}</div>`}
       </div>
-      <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;margin-bottom:8px">
-        <div>
-          <label class="mut">Токен клиента</label>
-          <input id="subTok_${esc(c.name)}" value="${esc(sub.token || sub.url || '')}" placeholder="awg_tok_0123456789abcdef..." style="font-family:monospace;font-size:.85rem">
-        </div>
-        <div>
-          <label class="mut">Порт API (по умолч. 8443)</label>
-          <input id="subPort_${esc(c.name)}" type="number" value="${sub.api_port || 8443}" placeholder="8443">
-        </div>
-        <div>
-          <label class="mut">График ротации</label>
-          <select id="subInt_${esc(c.name)}">
-            <option value="15" ${intVal === 15 ? 'selected' : ''}>Каждые 15 минут</option>
-            <option value="30" ${intVal === 30 ? 'selected' : ''}>Каждые 30 минут (рекомендуется)</option>
-            <option value="60" ${intVal === 60 ? 'selected' : ''}>Каждый 1 час</option>
-            <option value="180" ${intVal === 180 ? 'selected' : ''}>Каждые 3 часа</option>
-            <option value="360" ${intVal === 360 ? 'selected' : ''}>Каждые 6 часов</option>
-            <option value="720" ${intVal === 720 ? 'selected' : ''}>Каждые 12 часов</option>
-            <option value="1440" ${intVal === 1440 ? 'selected' : ''}>Каждые 24 часа (раз в сутки)</option>
-            <option value="4320" ${intVal === 4320 ? 'selected' : ''}>Каждые 3 дня (сервер 3days)</option>
-            <option value="10080" ${intVal === 10080 ? 'selected' : ''}>Раз в неделю (сервер weekly)</option>
-          </select>
-        </div>
-      </div>
-      <div class="row" style="justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:8px">
-        <div class="row" style="gap:14px">
-          <label class="chk"><input type="checkbox" id="subAuto_${esc(c.name)}" ${sub.auto_update !== false ? 'checked' : ''}> Авто-обновление</label>
-          <label class="chk"><input type="checkbox" id="subOnFail_${esc(c.name)}" ${sub.sync_on_failure !== false ? 'checked' : ''}> Опрос при сбое / UNHEALTHY</label>
-        </div>
-        <div class="row" style="gap:6px">
-          <button class="sm primary" onclick="saveSubInline('${esc(c.name)}', false, this)">Сохранить</button>
-          <button class="sm" onclick="saveSubInline('${esc(c.name)}', true, this)">↻ Обновить сейчас</button>
-        </div>
+      <div class="row" style="gap:6px">
+        ${hasSub ? `<button class="sm" onclick="syncSubscription('${esc(c.name)}', this)">↻ Обновить сейчас</button>` : ''}
+        <button class="sm ${hasSub ? '' : 'primary'}" onclick="openSubModal('${esc(c.name)}')">${hasSub ? 'Настроить' : '+ Настроить'}</button>
       </div>
     </div>`;
   }).join('');
@@ -2254,9 +2447,7 @@ function openSubModal(cfgName) {
   document.getElementById('subModalTitle').textContent = 'Ротация сервера: ' + cfgName;
   document.getElementById('subModalToken').value = sub.token || '';
   document.getElementById('subModalPort').value = sub.api_port || 8443;
-  let hVal = sub.api_host || '';
-  if (hVal.includes(':') && !hVal.includes('::')) hVal = hVal.split(':')[0];
-  document.getElementById('subModalHost').value = hVal;
+  document.getElementById('subModalHost').value = stripHostPortOnly(sub.api_host || '');
   document.getElementById('subModalURL').value = sub.url || '';
   document.getElementById('subModalInterval').value = sub.interval_min || 30;
   document.getElementById('subModalAuto').checked = sub.auto_update !== false;
@@ -2278,19 +2469,13 @@ function closeSubModal() {
 async function saveSubModal(syncNow, btn) {
   const cfgName = document.getElementById('subModalCfgName').value;
   if (!cfgName) return;
-  let cleanApiHost = document.getElementById('subModalHost').value.trim();
-  cleanApiHost = cleanApiHost.replace(/^https?:\/\//i, '').split('/')[0];
-  if (cleanApiHost.includes(':') && !cleanApiHost.includes('::')) {
-    cleanApiHost = cleanApiHost.split(':')[0];
-  }
+  const cleanApiHost = stripHostPortOnly(document.getElementById('subModalHost').value);
   let cleanURL = document.getElementById('subModalURL').value.trim();
   if (cleanURL.startsWith('http://') || cleanURL.startsWith('https://')) {
     try {
       const u = new URL(cleanURL);
-      let h = u.hostname;
-      if (h.includes(':') && !h.includes('::')) h = h.split(':')[0];
       const p = u.port || '8443';
-      cleanURL = `${u.protocol}//${h}:${p}${u.pathname}${u.search}`;
+      cleanURL = `${u.protocol}//${u.hostname}:${p}${u.pathname}${u.search}`;
     } catch (_) {}
   }
   const payload = {
@@ -2308,7 +2493,8 @@ async function saveSubModal(syncNow, btn) {
       const res = await api('/api/subscriptions/' + encodeURIComponent(cfgName), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        timeoutMs: 30000
       });
       if (res.warning) {
         toast(res.warning, 'warn');
@@ -2324,6 +2510,9 @@ async function saveSubModal(syncNow, btn) {
       closeSubModal();
       await refresh(true);
       if (syncNow) reloadActiveEditorIfClean();
+      if (document.getElementById('tab-settings').classList.contains('active')) {
+        loadSettings();
+      }
     } catch (e) {
       toast('Ошибка: ' + e.message, 'bad');
     }
@@ -2340,47 +2529,6 @@ async function deleteSubModal(btn) {
       toast('Подписка удалена', 'ok');
       closeSubModal();
       await refresh(true);
-    } catch (e) {
-      toast('Ошибка: ' + e.message, 'bad');
-    }
-  });
-}
-
-async function saveSubInline(cfgName, syncNow, btn) {
-  const tokEl = document.getElementById('subTok_' + cfgName);
-  const portEl = document.getElementById('subPort_' + cfgName);
-  const intEl = document.getElementById('subInt_' + cfgName);
-  const autoEl = document.getElementById('subAuto_' + cfgName);
-  const failEl = document.getElementById('subOnFail_' + cfgName);
-  if (!tokEl) return;
-  const payload = {
-    token: tokEl.value.trim(),
-    api_port: parseInt(portEl.value, 10) || 8443,
-    interval_min: parseInt(intEl.value, 10) || 30,
-    auto_update: autoEl.checked,
-    sync_on_failure: failEl.checked,
-    sync_now: syncNow
-  };
-  await withBusy(btn, async () => {
-    try {
-      const res = await api('/api/subscriptions/' + encodeURIComponent(cfgName), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (res.warning) {
-        toast(res.warning, 'warn');
-      } else if (syncNow) {
-        if (res.sub && res.sub.last_status === 'not_modified') {
-          toast('Конфиг уже актуален (изменений нет)', 'ok');
-        } else {
-          toast('Конфиг ' + cfgName + ' обновлён из подписки!', 'ok');
-        }
-      } else {
-        toast('Сохранено', 'ok');
-      }
-      await refresh(true);
-      if (syncNow) reloadActiveEditorIfClean();
       if (document.getElementById('tab-settings').classList.contains('active')) {
         loadSettings();
       }
@@ -2393,7 +2541,7 @@ async function saveSubInline(cfgName, syncNow, btn) {
 async function syncSubscription(cfgName, btn) {
   await withBusy(btn, async () => {
     try {
-      const res = await api('/api/subscriptions/' + encodeURIComponent(cfgName) + '/sync', { method: 'POST' });
+      const res = await api('/api/subscriptions/' + encodeURIComponent(cfgName) + '/sync', { method: 'POST', timeoutMs: 30000 });
       if (res.sub && res.sub.last_status === 'not_modified') {
         toast('Конфиг уже актуален (изменений нет)', 'ok');
       } else {
@@ -2401,6 +2549,9 @@ async function syncSubscription(cfgName, btn) {
       }
       await refresh(true);
       reloadActiveEditorIfClean();
+      if (document.getElementById('tab-settings').classList.contains('active')) {
+        loadSettings();
+      }
     } catch (e) {
       toast('Ошибка синхронизации: ' + e.message, 'bad');
     }
@@ -2446,7 +2597,7 @@ async function saveSettings(btn) {
         tg_node_name: document.getElementById('setTGNode').value.trim(),
         tg_via: document.getElementById('setTGVia').value,
         tg_api_url: document.getElementById('setTGAPI').value.trim(),
-        tg_daily_digest_hour: parseInt(document.getElementById('setTGDigest').value ?? '-1', 10),
+        tg_daily_digest_hour: (() => { const d = parseInt(document.getElementById('setTGDigest').value, 10); return isNaN(d) ? -1 : d; })(),
         tg_on_start: document.getElementById('setTGStart').checked,
         tg_on_failover: document.getElementById('setTGFailover').checked,
         tg_on_down: document.getElementById('setTGDown').checked,
@@ -2478,7 +2629,8 @@ async function saveSettings(btn) {
       };
       const r = await api('/api/settings', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        timeoutMs: 45000
       });
       msg.textContent = r.apply_error ? ('Ошибка применения: ' + r.apply_error) : 'Настройки сохранены и применены';
       toast(msg.textContent, r.apply_error ? 'bad' : 'ok');
@@ -2561,10 +2713,8 @@ function updateRulesROSModeUI(mode) {
   const hint = document.getElementById('rosModeHint');
   if (hint) hint.textContent = rosModeHints[mode] || '';
   const manBox = document.getElementById('rosRulesManualBox');
-  const actBox = document.getElementById('rosRulesActions');
   const syncBtn = document.getElementById('btnRosRulesSync');
   if (manBox) manBox.classList.toggle('hide', mode !== 'manual');
-  if (actBox) actBox.classList.toggle('hide', mode === 'manual');
   if (syncBtn) syncBtn.classList.toggle('hide', mode === 'gateway');
 }
 
@@ -2585,7 +2735,8 @@ async function switchROSModeQuick(mode) {
   try {
     const r = await api('/api/ros/mode', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ ros_mode: mode })
+      body: JSON.stringify({ ros_mode: mode }),
+      timeoutMs: 30000
     });
     const setSel = document.getElementById('setRosMode');
     if (setSel) { setSel.value = mode; onSettingsROSModeChange(); }
@@ -2612,7 +2763,7 @@ function renderROSSchemaBox(boxId, rep, applied) {
   const errHTML = rep.error ? `<div style="color:var(--bad);margin:4px 0">Ошибка: ${esc(rep.error)}</div>` : '';
   const preId = boxId + '_cli';
   box.innerHTML = `
-    <div style="border:1px solid var(--brd);border-radius:8px;padding:10px;background:rgba(0,0,0,.18)">
+    <div style="border:1px solid var(--bd);border-radius:8px;padding:10px;background:rgba(0,0,0,.18)">
       <div class="row" style="justify-content:space-between;margin-bottom:6px">
         <strong>Схема RouterOS (${esc(rep.mode)} · шлюз ${esc(rep.container_ip || '—')})</strong>
         <button type="button" class="sm" onclick="copyROSCLIScript('${preId}')">Копировать CLI</button>
@@ -2633,7 +2784,7 @@ async function checkROSSchema(boxId) {
   if (box) { box.classList.remove('hide'); box.innerHTML = '<span class="mut">Проверка конфигурации RouterOS...</span>'; }
   try {
     const mode = boxId === 'rosSchemaSetOut' ? document.getElementById('setRosMode').value : document.getElementById('rosModeRules').value;
-    const rep = await api('/api/ros/schema?mode=' + encodeURIComponent(mode));
+    const rep = await api('/api/ros/schema?mode=' + encodeURIComponent(mode), { timeoutMs: 30000 });
     renderROSSchemaBox(boxId, rep, null);
   } catch (e) {
     if (box) box.innerHTML = `<span style="color:var(--bad)">Ошибка проверки: ${esc(e.message)}</span>`;
@@ -2648,7 +2799,8 @@ async function provisionROSSchema(btn, boxId, includeSetupDNS) {
       const setupDNS = includeSetupDNS && document.getElementById('setRosProvisionDNS')?.checked;
       const r = await api('/api/ros/provision', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ setup_dns: !!setupDNS })
+        body: JSON.stringify({ setup_dns: !!setupDNS }),
+        timeoutMs: 45000
       });
       renderROSSchemaBox(boxId, r.report, r.applied);
       toast(r.ok ? 'Схема RouterOS применена' : (r.error || 'Ошибка настройки схемы'), r.ok ? 'ok' : 'bad');
@@ -2678,7 +2830,8 @@ async function testROS(btn) {
           ros_use_binary_api: document.getElementById('setRosUseBinAPI').checked,
           ros_api_port: parseInt(document.getElementById('setRosAPIPort').value || '8728', 10) || 8728,
           ros_api_tls: document.getElementById('setRosAPITLS').checked
-        })
+        }),
+        timeoutMs: 25000
       });
       const binNote = r.bin_api_addr
         ? (r.bin_api_ok ? ` · Binary API (${r.bin_api_addr}): OK` : ` · Binary API (${r.bin_api_addr}): ${r.bin_api_error || 'недоступен'}`)
@@ -2703,7 +2856,7 @@ async function syncROS(btn, msgId = 'domMsg') {
   if (msg) { msg.textContent = 'Синхронизация...'; msg.style.color = ''; }
   await withBusy(btn, async () => {
     try {
-      const r = await api('/api/ros/sync', {method:'POST'});
+      const r = await api('/api/ros/sync', { method: 'POST', timeoutMs: 45000 });
       const ros = r.ros || {};
       let txt = 'Синхронизировано';
       if (ros.mode === 'address_list') {
@@ -2727,7 +2880,7 @@ async function cleanupROS(btn) {
   const msg = document.getElementById('rosTestMsg');
   await withBusy(btn, async () => {
     try {
-      const r = await api('/api/ros/cleanup', {method:'POST'});
+      const r = await api('/api/ros/cleanup', { method: 'POST', timeoutMs: 45000 });
       msg.style.color = 'var(--ok)';
       msg.textContent = `Удалено записей: маршрутов=${r.routes_deleted}, DNS=${r.dns_deleted} (+ кэш динамических IPs очищен)`;
       toast(msg.textContent);
@@ -2870,6 +3023,22 @@ function closeModal(id) {
   const el = document.getElementById(id);
   if (el) el.classList.add('hide');
 }
+
+document.addEventListener('click', e => {
+  const ov = e.target;
+  if (ov && ov.classList && ov.classList.contains('sub-overlay') && !ov.classList.contains('hide')) {
+    if (ov.id === 'subOverlay') closeSubModal();
+    else closeModal(ov.id);
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  document.querySelectorAll('.sub-overlay:not(.hide)').forEach(ov => {
+    if (ov.id === 'subOverlay') closeSubModal();
+    else closeModal(ov.id);
+  });
+});
 
 function copyText(txt, okMsg = 'Скопировано') {
   if (!txt) { toast('Пусто для копирования', 'bad'); return; }
@@ -3018,7 +3187,7 @@ function renderVPSFleet() {
         <div class="mut">${traffic}</div>
       </td>
       <td>
-        <div><code>${esc(c.ipv4 || '—')}</code>${c.ipv6 ? ` <span class="mut">+ IPv6</span>` : ''}</div>
+        <div><code>${esc(c.ipv4 || '—')}</code>${c.ipv6 ? ` · <code>${esc(c.ipv6)}</code>` : ''}</div>
         <div class="mut">${esc(c.endpoint || '—')}${epTag}</div>
       </td>
       <td>${tgHtml}</td>
@@ -3149,7 +3318,9 @@ function openVPSStealthModal(vpsID) {
     `Текущий профиль: <strong>${esc(presetLabelByID(srv.last_preset, srv))}</strong> (порт <code>${srv.last_port || '?'}</code>) · ` +
     `Endpoint: <code>${esc(srv.last_endpoint || '—')}</code> (${esc(srv.last_endpoint_mode || 'ipv4')})`;
   document.getElementById('btnEpIPv4').textContent = `IPv4${srv.last_public_ipv4 ? ' (' + srv.last_public_ipv4 + ')' : ''}`;
-  document.getElementById('btnEpIPv6').textContent = `IPv6${srv.last_public_ipv6 ? ' (' + srv.last_public_ipv6 + ')' : ''}`;
+  const btnV6 = document.getElementById('btnEpIPv6');
+  btnV6.textContent = `IPv6${srv.last_public_ipv6 ? ' (' + srv.last_public_ipv6 + ')' : ' (не обнаружен)'}`;
+  btnV6.disabled = !srv.last_public_ipv6;
   document.getElementById('vpsCustomEpInput').value = '';
   document.getElementById('vpsEpResetAll').checked = false;
 
@@ -3439,8 +3610,13 @@ function showVPSQRModalWithData(vpsID, data) {
   };
   document.getElementById('vpsQRTitle').textContent = `Конфигурация: ${c.client_name} (${c.vps_name || vpsID})`;
   document.getElementById('vpsQRMeta').innerHTML =
-    `Endpoint: <code>${esc(c.endpoint || '—')}</code> · IP: <code>${esc(c.ipv4 || '—')}</code> · ETag: <code>${esc(data.etag || '—')}</code>`;
+    `Endpoint: <code>${esc(c.endpoint || '—')}</code> · IPv4: <code>${esc(c.ipv4 || '—')}</code>${c.ipv6 ? ` · IPv6: <code>${esc(c.ipv6)}</code>` : ''} · ETag: <code>${esc(data.etag || '—')}</code>`;
   document.getElementById('vpsQRConfText').value = data.config || '';
+  const btnSub = document.getElementById('btnQRCopySub');
+  if (btnSub) {
+    btnSub.disabled = !data.sub_url;
+    btnSub.title = data.sub_url ? data.sub_url : 'Токен подписки не задан';
+  }
   document.getElementById('btnQRSendTG').disabled = !c.tg_chat_id;
   document.getElementById('btnQRSendTG').title = c.tg_chat_id ? `Отправить в ${c.tg_label || c.tg_chat_id}` : 'Сначала привяжите Telegram в редактировании клиента';
   document.getElementById('vpsQRModal').classList.remove('hide');
@@ -3462,7 +3638,7 @@ async function sendCurrentQRToTG(btn) {
 }
 
 async function importCurrentClientToRouter(btn) {
-  const localName = prompt('Имя локального профиля на этом роутере (.conf):', currentQRData.client_name);
+  const localName = prompt('Имя профиля (.conf) на этом роутере (импорт с привязкой подписки, активный Primary не меняется):', currentQRData.client_name);
   if (!localName) return;
   await withBusy(btn, async () => {
     try {
@@ -3470,7 +3646,7 @@ async function importCurrentClientToRouter(btn) {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({local_name: localName, activate: false})
       });
-      toast(`Профиль ${res.name} сохранён на роутере с привязанной подпиской`, 'ok');
+      toast(`Профиль ${res.name} сохранён с подпиской. Включите его во вкладке «Конфиги (.conf)».`, 'ok');
       await refresh(true);
     } catch (e) { toast(e.message, 'bad'); }
   });

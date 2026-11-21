@@ -582,14 +582,15 @@ func (w *WebServer) handleAuthStatus(rw http.ResponseWriter, r *http.Request) {
 		defUser = expectUser
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{
-		"needs_setup":   !configured,
-		"configured":    configured,
-		"source":        src,
-		"authenticated": authed,
-		"auth_via":      via,
-		"user":          user,
-		"default_user":  defUser,
-		"term_enabled":  w.isTermEnabled(),
+		"needs_setup":       !configured,
+		"configured":        configured,
+		"source":            src,
+		"authenticated":     authed,
+		"auth_via":          via,
+		"user":              user,
+		"default_user":      defUser,
+		"term_enabled":      w.isTermEnabled(),
+		"term_env_disabled": termEnvFlag() == "off",
 	})
 }
 
@@ -904,9 +905,10 @@ func (w *WebServer) handleStatus(rw http.ResponseWriter, _ *http.Request) {
 		"policy":         policyStats,
 		"failover":       foStatus,
 		"tg":             tgStatus,
-		"ros":            w.ros.Status(),
-		"term_enabled":   w.isTermEnabled(),
-		"logs":           w.logger.Lines(),
+		"ros":               w.ros.Status(),
+		"term_enabled":      w.isTermEnabled(),
+		"term_env_disabled": termEnvFlag() == "off",
+		"logs":              w.logger.Lines(),
 	})
 }
 
@@ -949,8 +951,9 @@ func (w *WebServer) handleGetConfig(rw http.ResponseWriter, r *http.Request) {
 func (w *WebServer) handleSaveConfig(rw http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	var body struct {
-		Content string `json:"content"`
-		Apply   bool   `json:"apply"`
+		Content     string `json:"content"`
+		Apply       bool   `json:"apply"`
+		KeepPrimary bool   `json:"keep_primary"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil {
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -961,8 +964,14 @@ func (w *WebServer) handleSaveConfig(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Apply {
-		if err := w.mgr.ApplySavedConfig(name); err != nil {
-			writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		var applyErr error
+		if body.KeepPrimary {
+			applyErr = w.mgr.ApplySyncedConfig(name)
+		} else {
+			applyErr = w.mgr.ApplySavedConfig(name)
+		}
+		if applyErr != nil {
+			writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": applyErr.Error()})
 			return
 		}
 	}

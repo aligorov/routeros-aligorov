@@ -1,5 +1,5 @@
 name: A-amneziawg-mikrotik
-descr: "AmneziaWG 3.1 (v1.7.5) — Dynamic Dual-Stack IPv6, VPS Fleet & Client Manager (12 UDP Stealth + IPv4/IPv6 + TG Auto-Delivery), Multi-Tunnel, Failover, DoH, GeoSite/GeoIP, RouterOS (Address-List/BGP/Binary API)"
+descr: "AmneziaWG 3.1 (v1.7.6) — Dynamic Dual-Stack IPv6, VPS Fleet & Client Manager (12 UDP Stealth + IPv4/IPv6 + TG Auto-Delivery), Multi-Tunnel, Failover, DoH, GeoSite/GeoIP, RouterOS (Address-List/BGP/Binary API)"
 page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/a-amneziawg-mikrotik
 category: networking
 icon: icon.png

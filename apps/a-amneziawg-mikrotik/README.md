@@ -2,7 +2,7 @@
 
 Клиент и сервер **AmneziaWG 3.1** (`amneziawg-go v3.1.20260828` + `awg-quick v3.1.20260812`) для **MikroTik RouterOS (`/app`)** с современным **WebUI (`:8092`)**, одновременной работой нескольких туннелей (**Multi-Tunnel**), автоматическим переключением (**Auto-Failover**), маршрутизацией по **GeoSite / GeoIP**, встроенным **DoH DNS-форвардером (`:53`)**, **Telegram-уведомлениями** и 4-режимной синхронизацией с **RouterOS (Binary API `:8728/:8729`, REST API, Address-List + Mangle, BGP)**.
 
-- **Образ:** `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`v1.7.5`, `linux/arm64`)
+- **Образ:** `ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1` (`v1.7.6`, `linux/arm64`, `linux/amd64` для CHR)
 - **WebUI:** `http://<ip-роутера>:8092` (кнопка **Open WebUI** в Winbox)
 - **Сеть:** `/app` автоматически создаёт выделенный `veth` (без ручной подготовки интерфейсов)
 - **Том:** `awg-config` → `/etc/amnezia/amneziawg` (`*.conf`, `.active`, `settings.json`, `rules.conf`, `geo/`, `domains.txt`, `ros-dynamic.json`)
@@ -10,11 +10,11 @@
 
 ---
 
-## Возможности (v1.7.5)
+## Возможности (v1.7.6)
 
 - **Dynamic Dual-Stack IPv6 (Zero-Hardcode)** — полноценная поддержка IPv6-эндпоинтов на MikroTik RouterOS без ручного хардкода: автоматический приём SLAAC Router Advertisements (`accept_ra=2`), автогенерация детерминированного ULA IPv6 (`fd00:<ipv4>::/64`) из IPv4 подсети veth, автопровижининг IPv6-шлюза на RouterOS, правил маршрутизации `/ipv6/route`, IPv6 NAT Masquerade и mangle-правил, а также изоляция сбоев туннелей без повреждения соседних таблиц маршрутизации.
 
-- **Управление VPS (`awg-manager`), клиентами, маскировкой (12 UDP-протоколов) и авто-рассылкой в Telegram** — единый список VPS-серверов (подключение по Admin API токену `awg_adm_*` по HTTPS на `:8443`) и единый реестр клиентов на вкладке «Генератор / QR»: создание, редактирование (имя, `DNS`, `MTU`, `AllowedIPs`, индивидуальный `Endpoint IPv4/IPv6/домен`, `rekey`, смена токена), удаление, показ актуального QR / `.conf` / `vpn://`, смена внешнего Endpoint VPS (`IPv4`/`IPv6`/домен), смена маскировки (`QUIC`, `QUIC Alt`, `WebRTC/STUN`, `DTLS 1.2`, `DNS`, `NTP`, `SIP`, `Steam`, `Minecraft`, `Discord`, `BitTorrent DHT`, `Custom`) и полная ротация. При любых изменениях или ротации на VPS контейнер автоматически синхронизирует свои туннели и рассылает обновлённый QR + `.conf` + `vpn://` привязанным пользователям через бота контейнера.
+- **Управление VPS (`awg-manager`), клиентами, маскировкой (12 UDP-протоколов) и авто-рассылкой в Telegram** — единый список VPS-серверов (подключение по Admin API токену `awg_adm_*` по HTTPS на `:8443`) и единый реестр клиентов на вкладке «VPS и клиенты»: создание, редактирование (имя, `DNS`, `MTU`, `AllowedIPs`, индивидуальный `Endpoint IPv4/IPv6/домен`, `rekey`, смена токена), удаление, показ актуального QR / `.conf` / `vpn://`, смена внешнего Endpoint VPS (`IPv4`/`IPv6`/домен), смена маскировки (`QUIC`, `QUIC Alt`, `WebRTC/STUN`, `DTLS 1.2`, `DNS`, `NTP`, `SIP`, `Steam`, `Minecraft`, `Discord`, `BitTorrent DHT`, `Custom`) и полная ротация. При любых изменениях или ротации на VPS контейнер автоматически синхронизирует свои туннели и рассылает обновлённый QR + `.conf` + `vpn://` привязанным пользователям через бота контейнера.
 
 - **Авто-ротация сервера и токены подписок (Subscription API :8443)** — для каждого подключения на вкладке «Статус» и «Настройки» задаётся постоянный токен клиента (`awg_tok_...`) и порт API подписки сервера (по умолчанию `8443`). При смене UDP-порта, ключей или обфускации на сервере (например, при блокировках ТСПУ) клиент подтягивает новый конфиг автоматически по расписанию (15м, 30м, 1ч, 3ч, 6ч, 12ч, 1д, 3д, 7д) или мгновенно при потере связи (**Failover-sync** при переходе в `UNHEALTHY`) без разрыва туннеля. Кэширование `ETag` и `304 Not Modified` экономит трафик и ресурсы.
 - **Multi-Tunnel и приоритеты профилей** — загрузка любого числа `.conf` (drag-and-drop в браузере), порядок приоритетов (`#1` — Primary), одновременный подъём нескольких туннелей в отдельных таблицах (`awg`, `202+`, `210`), проверка конфликтов подсетей `Address` и переключение Primary в один клик.
@@ -131,10 +131,10 @@
 ## Сборка и публикация образа
 
 ```bash
-# arm64 (роутеры MikroTik ARM64)
+# мульти-арх (роутеры MikroTik ARM64 и CHR x86_64)
 ./scripts/ghcr-push.sh apps/a-amneziawg-mikrotik/image amneziawg-mikrotik 1
 
-# мульти-арх сборка (arm64, amd64, arm/v7)
+# расширенная мульти-арх сборка (arm64, amd64, arm/v7)
 docker buildx build --builder multiarch \
   --platform linux/arm64,linux/amd64,linux/arm/v7 \
   -t ghcr.io/aligorov/routeros-aligorov/amneziawg-mikrotik:1.5.1 \
