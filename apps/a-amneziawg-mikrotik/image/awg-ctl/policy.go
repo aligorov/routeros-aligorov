@@ -102,6 +102,7 @@ type PolicyEngine struct {
 	logger    *RingLogger
 
 	mu           sync.RWMutex
+	applyMu      sync.Mutex
 	rawText      string
 	rules        []PolicyRule
 	learned      map[netip.Addr]learnedEntry
@@ -601,7 +602,10 @@ func (p *PolicyEngine) RecordResolvedIPsForTarget(domain string, action PolicyAc
 	p.mu.Unlock()
 
 	if len(batchLines) > 0 && lanIface != "" {
-		if err := p.runBatchFn(strings.Join(batchLines, "\n") + "\n"); err != nil {
+		p.applyMu.Lock()
+		err := p.runBatchFn(strings.Join(batchLines, "\n") + "\n")
+		p.applyMu.Unlock()
+		if err != nil {
 			p.logger.Logf("WARN policy dynamic /32 batch: %v", err)
 		} else {
 			p.mu.Lock()
@@ -1228,6 +1232,9 @@ func (p *PolicyEngine) ApplyRouting() error {
 	if p.mgr == nil || p.mgr.lanIface == "" {
 		return nil
 	}
+	p.applyMu.Lock()
+	defer p.applyMu.Unlock()
+
 	lanIface := p.mgr.lanIface
 	killSwitch := p.mgr.killSwitch
 	defAction := p.DefaultAction()
@@ -1446,6 +1453,12 @@ func extractRouteKey(tokens []string) string {
 		return ""
 	}
 	idx := 0
+	if tokens[0] == "unicast" {
+		if len(tokens) < 2 {
+			return ""
+		}
+		tokens = tokens[1:]
+	}
 	var keyParts []string
 	switch tokens[0] {
 	case "blackhole", "unreachable", "prohibit", "throw":
@@ -1643,6 +1656,25 @@ func defaultShowTableRoutes(tableID string) (string, error) {
 	return string(out), nil
 }
 
+func isOnlyNotFoundDelOutput(out string) bool {
+	sawNotFound := false
+	for _, raw := range strings.Split(out, "\n") {
+		l := strings.TrimSpace(raw)
+		if l == "" {
+			continue
+		}
+		if strings.Contains(l, "No such process") {
+			sawNotFound = true
+			continue
+		}
+		if strings.HasPrefix(l, "Command failed ") {
+			continue
+		}
+		return false
+	}
+	return sawNotFound
+}
+
 func runIPBatchChunk(script string, force bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1656,7 +1688,11 @@ func runIPBatchChunk(script string, force bool) error {
 	cmd.Stdin = strings.NewReader(script)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		msg := strings.TrimSpace(string(out))
+		rawOut := string(out)
+		if force && isOnlyNotFoundDelOutput(rawOut) {
+			return nil
+		}
+		msg := strings.TrimSpace(rawOut)
 		if len(msg) > 400 {
 			msg = msg[:400] + "..."
 		}

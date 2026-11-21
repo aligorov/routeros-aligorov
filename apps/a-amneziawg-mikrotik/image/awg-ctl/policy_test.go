@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -424,5 +425,46 @@ func TestRunIPBatchLargeTableSafeFlushAndDiffSync(t *testing.T) {
 	if !strings.Contains(appliedBatches[0], "route replace 1.1.1.0/24 dev awg1 table 210") ||
 		!strings.Contains(appliedBatches[0], "route replace default dev awg1 metric 10 table 210") {
 		t.Fatalf("diff batch missing updated awg1 routes:\n%s", appliedBatches[0])
+	}
+
+	// 4. Helper checks: No such process detection & concurrent ApplyRouting serialization
+	if !isOnlyNotFoundDelOutput("RTNETLINK answers: No such process\nCommand failed -:1\nRTNETLINK answers: No such process\nCommand failed -:2\n") {
+		t.Fatalf("expected isOnlyNotFoundDelOutput=true for ESRCH-only output")
+	}
+	if isOnlyNotFoundDelOutput("RTNETLINK answers: No such process\nFailed to send flush request: No buffer space available\n") {
+		t.Fatalf("expected isOnlyNotFoundDelOutput=false when ENOBUFS is present")
+	}
+	if got := extractRouteKey([]string{"unicast", "10.0.0.0/24", "via", "172.19.0.1"}); got != "10.0.0.0/24" {
+		t.Fatalf("unexpected unicast key: %q", got)
+	}
+
+	var inFlight int
+	var maxInFlight int
+	var flMu sync.Mutex
+	pe.runBatchFn = func(string) error {
+		flMu.Lock()
+		inFlight++
+		if inFlight > maxInFlight {
+			maxInFlight = inFlight
+		}
+		flMu.Unlock()
+		defer func() {
+			flMu.Lock()
+			inFlight--
+			flMu.Unlock()
+		}()
+		return nil
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = pe.ApplyRouting()
+		}()
+	}
+	wg.Wait()
+	if maxInFlight > 1 {
+		t.Fatalf("ApplyRouting executed concurrently (maxInFlight=%d)", maxInFlight)
 	}
 }
