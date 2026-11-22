@@ -133,8 +133,9 @@
     relay-keys: {}
     relay-certs: {}
 - name: A-mikrotik-mcp
-  descr: MCP-шлюз (v1.1.0) для RouterOS 7.24+ (REST API + Binary API over Streamable
-    HTTP) — 35 инструментов управления, диагностики, анализа логов и скриптов
+  descr: MCP-шлюз (v1.3.0) для RouterOS 7.24+ (REST API + Binary API over Streamable
+    HTTP) — 38 инструментов управления, параллельной настройки парка, диагностики,
+    анализа логов и скриптов
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/mikrotik-mcp
   category: ai
   icon: https://aligorov.github.io/routeros-aligorov/apps/mikrotik-mcp/icon.png
@@ -142,7 +143,7 @@
   auto-update: false
   services:
     mikrotik-mcp:
-      image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:1.1.0
+      image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:1.3.0
       hostname: mikrotik-mcp
       ports:
       - 3000:3000/tcp:web
@@ -151,6 +152,7 @@
         MCP_HOST: 0.0.0.0
         MCP_PORT: '3000'
         MCP_PATH: /mcp
+        MCP_ALLOWED_HOSTS: '*'
         MCP_BEARER_TOKEN: auto
         MIKROTIK_HOST: auto
         MIKROTIK_ROUTER_ID: local-router

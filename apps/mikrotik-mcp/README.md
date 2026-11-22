@@ -2,7 +2,7 @@
 
 Полнофункциональный мульти-роутерный **MCP-шлюз (`mikrotik-mcp-server`)** для **MikroTik RouterOS 7.24+** по протоколам **REST API** (`/rest`) и **Binary API** (`8728`/`8729`), без использования SSH.
 
-- Образ: `ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:1.1.0` (`linux/arm64`, `linux/amd64`; также публикуются теги каналов `:1.1` и `:1`).
+- Образ: `ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:1.3.0` (`linux/arm64`, `linux/amd64`; также публикуются теги каналов `:1.3` и `:1`).
 - Порт: `3000/tcp` (Streamable HTTP MCP endpoint `/mcp` и проверка живости `/healthz`).
 - Тома:
   - `mcp-config` → `/app/config` (опциональные `routers.yaml` для управления парком роутеров и `ca.pem` для TLS-верификации).
@@ -26,9 +26,9 @@
 1. В **Winbox → App → App** нажмите **Update** (обновить каталог) и включите **`A-mikrotik-mcp`**.
 2. В настройках приложения (**Environment**) укажите как минимум:
    - `MIKROTIK_USERNAME` и `MIKROTIK_PASSWORD` (должны совпадать с созданным пользователем в RouterOS);
-   - `MIKROTIK_HOST` — оставьте `auto` (контейнер сам определит шлюз хоста RouterOS) или укажите явный IP роутера;
+   - `MIKROTIK_HOST` — оставьте `auto` (локальный роутер) или перечислите **несколько роутеров через запятую** с общим пользователем, например: `auto,10.10.20.1,192.168.88.1` или с именами `core=auto,branch1=10.10.20.1,office=https://192.168.88.1:443`;
    - `MCP_BEARER_TOKEN` — задайте свой длинный секретный токен или оставьте `auto` (случайный 48-символьный токен сгенерируется при первом старте и сохранится в `/app/data/.bearer_token`).
-3. Для управления **несколькими роутерами** положите файл `routers.yaml` (и при желании `ca.pem`) в каталог тома `mcp-config` на диске роутера и перезапустите контейнер.
+3. Для управления **несколькими роутерами с разными учётками/CA** положите файл `routers.yaml` (и при желании `ca.pem`) в каталог тома `mcp-config` на диске роутера (или добавьте профили через `mikrotik_manage_router_profile` с `persist=true` — они сохранятся в `/app/config/routers.yaml`).
 
 ## Подключение MCP-клиента
 
@@ -41,7 +41,7 @@
 | Переменная | Назначение | По умолчанию |
 |---|---|---|
 | `MCP_BEARER_TOKEN` | Bearer-токен авторизации (`auto` — генерация в `/app/data/.bearer_token`) | `auto` |
-| `MIKROTIK_HOST` | IP/домен роутера (`auto` — автоопределение шлюза хоста) | `auto` |
+| `MIKROTIK_HOST` | IP/домен роутера (`auto`) или список через запятую (`auto,10.10.20.1`, `core=auto,branch=https://10.10.20.1:443`) | `auto` |
 | `MIKROTIK_ROUTER_ID` | Идентификатор профиля роутера в шлюзе | `local-router` |
 | `MIKROTIK_USERNAME` / `MIKROTIK_PASSWORD` | Учётные данные пользователя RouterOS (`api,rest-api`) | `mcp` / `change-me-router-password` |
 | `MIKROTIK_TRANSPORT_PREF` | Приоритет транспорта: `auto` \| `rest` \| `api` | `auto` |
@@ -49,6 +49,7 @@
 | `MIKROTIK_API_TLS` / `MIKROTIK_API_PORT` | TLS (`true`/`false`) и порт Binary API | `true` / `8729` |
 | `MIKROTIK_TLS_VERIFY` | Проверять TLS-сертификат роутера (при `ca.pem` можно `true`) | `false` |
 | `MCP_PORT` / `MCP_PATH` | Порт и URL-путь HTTP MCP endpoint | `3000` / `/mcp` |
+| `MCP_ALLOWED_HOSTS` | Разрешённые HTTP `Host` (`*`, `*.routingthecloud.com`, или конкретные домены/IP; `127.0.0.1` и `localhost` разрешены всегда) | `*` |
 | `MCP_AUDIT_LOG_PATH` | Файл JSONL-аудита вызовов MCP внутри тома `mcp-data` | `/app/data/mcp-audit.jsonl` |
 | `MIKROTIK_ROUTER_AUDIT_LOG` | Автоматически создавать на роутере отдельный лог `mcpdisk` + правила `[MCP-LOG]` в `/system/logging` | `true` |
 | `MIKROTIK_ROUTER_LOG_MARKERS` | Писать `[MCP]`-метки через `/log/info` / `/log/warning` при мутациях | `true` |
