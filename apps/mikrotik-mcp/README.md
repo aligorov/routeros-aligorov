@@ -1,12 +1,28 @@
 # A-mikrotik-mcp
 
-Полнофункциональный мульти-роутерный **MCP-шлюз (`mikrotik-mcp-server`)** для **MikroTik RouterOS 7.24+** по протоколам **REST API** (`/rest`) и **Binary API** (`8728`/`8729`), без использования SSH.
+Полнофункциональный мульти-роутерный **MCP-шлюз нового поколения (`mikrotik-mcp-server` v2.0.0)** для **MikroTik RouterOS 7.24+** по протоколам **REST API** (`/rest`) и **Binary API** (`8728`/`8729`), без использования SSH.
 
-- Образ: `ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:1.3.0` (`linux/arm64`, `linux/amd64`; также публикуются теги каналов `:1.3` и `:1`).
-- Порт: `3000/tcp` (Streamable HTTP MCP endpoint `/mcp` и проверка живости `/healthz`).
+- Образ: `ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.0` (`linux/arm64`, `linux/amd64`; теги каналов `:2.0`, `:2` и `:latest`).
+- Порт: `3000/tcp` (веб-дашборд `/dashboard`, Streamable HTTP MCP endpoint `/mcp` и проверка живости `/healthz`).
 - Тома:
   - `mcp-config` → `/app/config` (опциональные `routers.yaml` для управления парком роутеров и `ca.pem` для TLS-верификации).
-  - `mcp-data` → `/app/data` (хранит автосгенерированный Bearer-токен `.bearer_token`).
+  - `mcp-data` → `/app/data` (хранит автосгенерированный Bearer-токен `.bearer_token`, снапшоты конфигураций в `/app/data/snapshots` и JSONL-аудит).
+
+## Новые возможности версии 2.0.0:
+1. **46 MCP-инструментов**:
+   - `mikrotik_security_audit`: Автоматический аудит безопасности с расчётом оценки защищённости 0–100 по 10+ критическим векторам и генерацией готовых команд устранения.
+   - `mikrotik_discover_routers`: Автообнаружение роутеров сети через MNDP, LLDP, WireGuard, OSPF, BGP и DHCP-аренды с безопасным пробингом и авторегистрацией.
+   - `mikrotik_config_snapshots`: Машина времени конфигураций `.rsc` с очисткой динамических баннеров, unified diffing и мгновенным откатом.
+   - `mikrotik_fleet_diff` & `mikrotik_fleet_updates`: N-way сравнение дрейфа конфигураций парка с эталонным роутером и матрица обновлений RouterOS / RouterBOOT.
+   - `mikrotik_topology_map`: Интерактивная карта топологии сети (Mermaid + JSON) с корреляцией L2/L3/WireGuard/VRRP/BGP/OSPF.
+   - `mikrotik_fleet_incidents`: Проактивный мониторинг инцидентов (недоступность, BGP/VRRP флапы, устаревшие WG-хэндшейки, NAND износ).
+   - `mikrotik_manage_cloud_and_zerotier`: Управление MikroTik Cloud DDNS, Back-To-Home VPN и ZeroTier.
+   - Расширенная аппаратная диагностика: SFP DDM оптика, управление PoE-out, профилирование CPU (`/tool/profile`), топ-соединения conntrack.
+2. **Встроенный Web Dashboard (`/dashboard`)**:
+   - Графическая визуализация топологии, карточки аудита безопасности, просмотр снапшотов с diffing и панель инцидентов прямо в браузере.
+3. **Безопасность и RBAC**:
+   - Поддержка Read-Only токенов (`MCP_READONLY_TOKENS`) для мониторинга без риска случайных изменений.
+   - Блокировка команд перезагрузки и выключения (`MCP_DENY_POWER_ACTIONS=true`).
 
 ## Подготовка RouterOS перед запуском
 
