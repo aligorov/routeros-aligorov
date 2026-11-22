@@ -144,7 +144,7 @@
   auto-update: false
   services:
     mikrotik-mcp:
-      image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.0
+      image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.1
       hostname: mikrotik-mcp
       ports:
       - 3000:3000/tcp:web
