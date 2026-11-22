@@ -24,6 +24,7 @@ services:
       MCP_WATCH_ENABLED: "true"
       MCP_WATCH_INTERVAL_SEC: "60"
       MCP_DASHBOARD_ENABLED: "true"
+      MCP_DASHBOARD_ALLOWED_IPS: ""
       MIKROTIK_HOST: auto
       MIKROTIK_ROUTER_ID: local-router
       MIKROTIK_USERNAME: mcp
