@@ -9,7 +9,7 @@ https://aligorov.github.io/routeros-aligorov/store.yaml
 
 ## Подключение стора на роутере
 
-Требования: RouterOS 7.21+ (лучше 7.22+), установленный пакет `container`, у роутера есть
+Требования: RouterOS 7.21+ (лучше 7.22+, **ARM64** и **CHR x86_64**), установленный пакет `container`, у роутера есть
 интернет и рабочий DNS (нужны доступ к `github.io` — стор, и к registry образов — `docker.io` / `ghcr.io`).
 Тома контейнеров пишутся на диск: на роутерах без USB это NAND — рекомендуется USB-накопитель.
 
@@ -42,7 +42,7 @@ https://aligorov.github.io/routeros-aligorov/store.yaml
 
 ## store-combine: добавление контейнеров через Telegram-бота / MCP / CLI
 
-В `service/` живёт комбайн: проверяет Docker-образ (arm64, размер, env),
+В `service/` живёт комбайн: проверяет Docker-образ (arm64 / amd64 для CHR, размер, env),
 генерирует манифест по официальной схеме, маскирует секреты, валидирует
 и публикует в стор одной командой:
 
@@ -65,7 +65,7 @@ npm run cli -- add docker.io/library/redis:7-alpine --port 6390:6379 --commit
    ```sh
    echo <GHCR_TOKEN> | docker login ghcr.io -u aligorov --password-stdin
    ```
-2. Собрать и запушить (нативная arm64-сборка для роутера):
+2. Собрать и запушить (мульти-арх `linux/arm64` + `linux/amd64` для ARM-роутеров и CHR):
    ```sh
    ./scripts/ghcr-push.sh /путь/к/исходникам my-app 1.0.0
    # -> ghcr.io/aligorov/routeros-aligorov/my-app:1.0.0
@@ -100,7 +100,7 @@ schemas/…schema.json       # официальная JSON-схема маниф
 scripts/build.sh           # сборка store.yaml + default.yaml + index.html из apps/*/
 scripts/validate.sh        # валидация всех манифестов по схеме
 scripts/new-app.sh         # создать новое приложение из шаблона
-scripts/ghcr-push.sh       # сборка arm64-образа и пуш в GHCR
+scripts/ghcr-push.sh       # сборка arm64+amd64 образа (ARM64 + CHR) и пуш в GHCR
 ```
 
 ## Что уже есть в сторе

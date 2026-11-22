@@ -1,5 +1,5 @@
 import YAML from "yaml";
-import { checkImage, type ImageInfo } from "./registry.js";
+import { assertImageArch, checkImage, formatArchList, type ImageInfo, type TargetArch } from "./registry.js";
 import { assertValid } from "./validate.js";
 
 export interface AddOptions {
@@ -12,6 +12,8 @@ export interface AddOptions {
   /** Именованные тома: "data:/var/lib/app" */
   volumes?: string[];
   ramHintMB?: number;
+  /** Требуемая архитектура: any (arm64 или amd64 CHR), arm64, amd64/chr, both */
+  arch?: TargetArch;
 }
 
 const SECRET_KEY_RE = /(PASS|SECRET|TOKEN|KEY|CERT|CRED|^SUB\d)/i;
@@ -60,11 +62,7 @@ export async function buildAppFiles(
   existing: { manifest: any }[] = [],
 ): Promise<{ name: string; manifest: any; files: Record<string, Buffer | string>; info: ImageInfo }> {
   const info = await checkImage(image);
-  if (!info.arm64) {
-    throw new Error(
-      `Образ ${image} не имеет linux/arm64 — на MikroTik (arm) не запустится. Добавление прервано.`,
-    );
-  }
+  assertImageArch(image, info, opts.arch ?? "any");
   if (opts.ramHintMB && info.sizeCompressed > opts.ramHintMB * 1024 * 1024 * 2) {
     // мягкое предупреждение — не блокируем
   }
@@ -183,7 +181,7 @@ export async function buildAppFiles(
     "",
     `Автоматически сгенерировано store-combine из образа \`${info.registry}/${info.name}:${info.tag}\`.`,
     "",
-    `- arm64: да (digest ${info.digest?.slice(0, 19) ?? "n/a"}…)`,
+    `- Архитектуры: ${formatArchList(info)}`,
     `- Размер (сжато): ${(info.sizeCompressed / 1024 / 1024).toFixed(1)} МБ`,
     portEntries.length ? `- Порты: ${portEntries.join(", ")}` : "- Порты наружу не публикуются",
     Object.keys(secrets).length

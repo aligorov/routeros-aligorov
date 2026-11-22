@@ -2,7 +2,7 @@
 
 Периферийный edge-узел филиала **Ligament Relay** для экосистемы **Ligament 2FA**, адаптированный для запуска на MikroTik RouterOS (`/app`).
 
-- Образ: `ghcr.io/aligorov/routeros-aligorov/ligament-relay:1` (`linux/arm64`).
+- Образ: `ghcr.io/aligorov/routeros-aligorov/ligament-relay:1` (`linux/arm64`, `linux/amd64` для CHR).
 - Порты:
   - `1812/udp` — локальный RADIUS-сервер (с проверкой `Message-Authenticator` против BlastRADIUS).
   - `8082/tcp` — локальный HTTP API (`/healthz`, `/api/v1/status`, `/api/v1/auth/verify`, `/api/v1/ws`).

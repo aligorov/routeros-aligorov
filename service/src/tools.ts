@@ -14,7 +14,7 @@ export function registerTools(server: McpServer): void {
     "check_image",
     {
       description:
-        "Проверить Docker-образ (docker.io/ghcr.io): arm64, размер, порты, env. Без побочных эффектов.",
+        "Проверить Docker-образ (docker.io/ghcr.io): arm64 (ARM), amd64 (CHR), размер, порты, env. Без побочных эффектов.",
       inputSchema: { image: z.string().describe("например docker.io/library/nginx:1.27-alpine") },
     },
     async ({ image }) => text(formatInfo(await checkImage(image))),
@@ -24,7 +24,7 @@ export function registerTools(server: McpServer): void {
     "add_docker_image",
     {
       description:
-        "Конвертировать Docker-образ в приложение RouterOS app-store. По умолчанию dry-run " +
+        "Конвертировать Docker-образ в приложение RouterOS app-store (ARM64 и/или CHR x86_64). По умолчанию dry-run " +
         "(возвращает YAML); commit:true — записать и опубликовать в стор.",
       inputSchema: {
         image: z.string(),
@@ -34,6 +34,7 @@ export function registerTools(server: McpServer): void {
         env: z.record(z.string(), z.string()).optional(),
         ports: z.array(z.string()).optional().describe('["8080:80", "53:53/udp"]'),
         volumes: z.array(z.string()).optional().describe('["data:/var/lib/app"]'),
+        arch: z.enum(["any", "arm64", "amd64", "chr", "both"]).optional().describe("требуемая архитектура: any (по умолчанию), arm64, amd64/chr, both"),
         commit: z.boolean().optional(),
       },
     },
@@ -45,6 +46,7 @@ export function registerTools(server: McpServer): void {
         env: p.env,
         ports: p.ports,
         volumes: p.volumes,
+        arch: p.arch,
       }, await listApps());
       let out = formatInfo(r.info) + `\n\napps/${r.name}/app.yaml:\n${r.files["app.yaml"]}`;
       if (p.commit) {
@@ -63,11 +65,12 @@ export function registerTools(server: McpServer): void {
     "import_compose",
     {
       description:
-        "Импортировать docker-compose.yml (локальный путь или URL) в одно приложение RouterOS. " +
+        "Импортировать docker-compose.yml (локальный путь или URL) в одно приложение RouterOS (ARM64 и/или CHR x86_64). " +
         "По умолчанию dry-run; commit:true — опубликовать.",
       inputSchema: {
         source: z.string().describe("путь к docker-compose.yml или https://URL"),
         name: z.string().optional(),
+        arch: z.enum(["any", "arm64", "amd64", "chr", "both"]).optional(),
         commit: z.boolean().optional(),
       },
     },
@@ -76,6 +79,7 @@ export function registerTools(server: McpServer): void {
       const isRemote = /^https?:\/\//.test(p.source);
       const r = await importCompose(await loadCompose(p.source), {
         name: p.name,
+        arch: p.arch,
         ...(isRemote
           ? { allowEnvFile: false }
           : { baseDir: path.dirname(path.resolve(p.source)) }),

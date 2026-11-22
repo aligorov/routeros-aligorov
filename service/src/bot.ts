@@ -175,7 +175,7 @@ function help(): string {
   return [
     "<b>store-combine — комбайн app-store для MikroTik</b>",
     "",
-    "/check <образ> — проверить (arm64, размер, порты)",
+    "/check <образ> — проверить (arm64, amd64/CHR, размер, порты)",
     "/add <образ> [имя] — конвертировать и предложить публикацию",
     "/import <URL> или файл .yml документом — импорт docker-compose",
     "/list — приложения в сторе",

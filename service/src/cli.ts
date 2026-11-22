@@ -1,13 +1,22 @@
 // CLI: npm run cli -- <команда>
 //   check <image>
-//   add <image> [--name n] [--descr "d"] [--category c] [--env K=V]... [--port 8080:80]... [--commit]
+//   add <image> [--name n] [--descr "d"] [--category c] [--arch any|arm64|amd64|chr|both] [--env K=V]... [--port 8080:80]... [--commit]
 //   list
 //   remove <name> [--commit]
 import path from "node:path";
-import { checkImage, formatInfo } from "./core/registry.js";
+import { checkImage, formatInfo, type TargetArch } from "./core/registry.js";
 import { buildAppFiles } from "./core/converter.js";
 import { listApps, publishApp, removeApp, publisherMode } from "./core/publisher.js";
 import { config } from "./config.js";
+
+const VALID_ARCHES = new Set<TargetArch>(["any", "arm64", "amd64", "chr", "both"]);
+function parseArch(raw?: string): TargetArch | undefined {
+  if (!raw) return undefined;
+  if (!VALID_ARCHES.has(raw as TargetArch)) {
+    throw new Error(`--arch ожидает any|arm64|amd64|chr|both, получено '${raw}'`);
+  }
+  return raw as TargetArch;
+}
 
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
@@ -49,12 +58,14 @@ async function main() {
       const name = flag("--name");
       const descr = flag("--descr");
       const category = flag("--category");
+      const arch = parseArch(flag("--arch"));
       const image = rest[0];
       if (!image) throw new Error("usage: add <image> [опции]");
       const r = await buildAppFiles(image, {
         name,
         descr,
         category,
+        arch,
         env,
         ports,
         volumes,
@@ -76,13 +87,15 @@ async function main() {
     case "import": {
       const commit = boolFlag("--commit");
       const name = flag("--name");
+      const arch = parseArch(flag("--arch"));
       const source = rest[0];
-      if (!source) throw new Error("usage: import <docker-compose.yml | URL> [--name n] [--commit]");
+      if (!source) throw new Error("usage: import <docker-compose.yml | URL> [--name n] [--arch any|arm64|amd64|chr|both] [--commit]");
       const { importCompose, loadCompose } = await import("./core/compose.js");
       const isRemote = /^https?:\/\//.test(source);
       const content = await loadCompose(source);
       const r = await importCompose(content, {
         name,
+        arch,
         ...(isRemote
           ? { allowEnvFile: false }
           : { baseDir: path.dirname(path.resolve(source)) }),
@@ -128,7 +141,7 @@ async function main() {
     }
     default:
       console.log(
-        "Команды: check <image> | add <image> [--name --descr --category --env K=V --port h:c] [--commit] | list | remove <name> [--commit]",
+        "Команды: check <image> | add <image> [--name --descr --category --arch any|arm64|amd64|chr|both --env K=V --port h:c] [--commit] | import <compose> [--name --arch] [--commit] | list | remove <name> [--commit]",
       );
   }
 }

@@ -2,7 +2,7 @@
 
 WebRTC STUN / TURN / TURNS TLS сервер (`coturn` + автоматический выпуск и продление сертификатов Let's Encrypt через `certbot`) для экосистемы **Ligament 2FA**, адаптированный под RouterOS `/app`.
 
-- Образы:
+- Образы (`linux/arm64`, `linux/amd64` для CHR):
   - `ghcr.io/aligorov/routeros-aligorov/ligament-ice-certbot:1` (`certbot`)
   - `ghcr.io/aligorov/routeros-aligorov/ligament-ice:1` (`coturn` + встроенный `turnserver.conf`)
 - Порты:

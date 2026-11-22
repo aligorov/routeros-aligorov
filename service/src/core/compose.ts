@@ -3,7 +3,7 @@
 import YAML from "yaml";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { checkImage, type ImageInfo } from "./registry.js";
+import { assertImageArch, checkImage, type ImageInfo, type TargetArch } from "./registry.js";
 import { assertValid } from "./validate.js";
 import { guessCategory } from "./converter.js";
 import { placeholderIcon } from "./icons.js";
@@ -12,7 +12,8 @@ const SECRET_KEY_RE = /(PASS|SECRET|TOKEN|KEY|CERT|CRED)/i;
 
 export interface ComposeImportOptions {
   name?: string;
-  checkArm64?: boolean; // default: true
+  checkArm64?: boolean; // устаревшее имя флага; включает проверку архитектур
+  arch?: TargetArch; // default: "any" (arm64 или amd64 CHR)
   baseDir?: string;
   allowEnvFile?: boolean;
   /** Читатель env_file (путь относительно compose-файла). По умолчанию fs. */
@@ -101,7 +102,7 @@ export async function importCompose(
     }
     if (raw.build) warnings.push(`Сервис '${rawSvc}': build: проигнорирован, использую image`);
 
-    // arm64
+    // проверка архитектур (arm64 и/или amd64 CHR)
     if (opts.checkArm64 !== false) {
       let info: ImageInfo;
       try {
@@ -116,10 +117,13 @@ export async function importCompose(
         );
         info = null as any;
       }
-      if (info && !info.arm64) {
-        throw new Error(
-          `Образ ${raw.image} (сервис '${rawSvc}') не имеет linux/arm64 — на MikroTik не запустится. Импорт прерван.`,
-        );
+      if (info) {
+        assertImageArch(raw.image, info, opts.arch ?? "any", `сервис '${rawSvc}'`);
+        if (!info.arm64) {
+          warnings.push(`Сервис '${rawSvc}': нет linux/arm64 (образ только для MikroTik CHR x86_64)`);
+        } else if (!info.amd64) {
+          warnings.push(`Сервис '${rawSvc}': нет linux/amd64 (на MikroTik CHR x86_64 не запустится)`);
+        }
       }
     }
 

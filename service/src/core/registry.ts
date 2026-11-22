@@ -7,7 +7,10 @@ export interface ImageInfo {
   name: string; // library/nginx, owner/app
   tag: string;
   arm64: boolean;
-  digest?: string; // arm64-манифест
+  amd64: boolean; // MikroTik CHR (x86_64)
+  platforms: string[];
+  digest?: string; // arm64 или основной digest
+  amd64Digest?: string;
   sizeCompressed: number; // байты, сумма слоёв
   env: string[]; // "KEY=value"
   exposedPorts: string[]; // "80/tcp", "53/udp"
@@ -103,48 +106,66 @@ export async function checkImage(input: string): Promise<ImageInfo> {
   );
   const manifest: any = await mr.json();
 
-  let armManifest: any = null;
+  let targetManifest: any = null;
   let arm64 = false;
+  let amd64 = false;
+  let platforms: string[] = [];
   let digest: string | undefined;
+  let amd64Digest: string | undefined;
   const warnings: string[] = [];
 
   if (Array.isArray(manifest.manifests)) {
-    const entry = manifest.manifests.find(
+    const valid = manifest.manifests.filter(
       (m: any) =>
-        m.platform?.os === "linux" &&
-        m.platform?.architecture === "arm64" &&
-        m.platform?.os !== "unknown" &&
-        m.platform?.architecture !== "unknown",
+        m.platform?.os &&
+        m.platform?.architecture &&
+        m.platform.os !== "unknown" &&
+        m.platform.architecture !== "unknown",
     );
-    if (entry) {
-      arm64 = true;
-      digest = entry.digest;
-      armManifest = await regFetch(
+    platforms = [...new Set<string>(valid.map((m: any) => `${m.platform.os}/${m.platform.architecture}`))];
+    const armEntry = valid.find(
+      (m: any) => m.platform.os === "linux" && m.platform.architecture === "arm64",
+    );
+    const amdEntry = valid.find(
+      (m: any) => m.platform.os === "linux" && m.platform.architecture === "amd64",
+    );
+    arm64 = Boolean(armEntry);
+    amd64 = Boolean(amdEntry);
+    amd64Digest = amdEntry?.digest;
+    digest = armEntry?.digest ?? amdEntry?.digest;
+
+    const inspectEntry = armEntry ?? amdEntry;
+    if (inspectEntry) {
+      targetManifest = await regFetch(
         ref.registryHost,
         token,
-        `/v2/${ref.name}/manifests/${digest}`,
+        `/v2/${ref.name}/manifests/${inspectEntry.digest}`,
         ACCEPT_MANIFEST,
       ).then((r) => r.json());
-    } else {
-      const archs = [...new Set(manifest.manifests.map((m: any) => m.platform?.architecture))];
+    }
+    if (!arm64 && !amd64) {
       warnings.push(
-        `linux/arm64 НЕ найден; доступные архитектуры: ${archs.join(", ")}`,
+        `linux/arm64 и linux/amd64 (CHR) НЕ найдены; доступные: ${platforms.join(", ") || "нет"}`,
       );
+    } else if (!arm64) {
+      warnings.push("нет linux/arm64 — образ только для MikroTik CHR (x86_64)");
+    } else if (!amd64) {
+      warnings.push("нет linux/amd64 — на MikroTik CHR (x86_64) не запустится");
     }
   } else {
     // одно-архитектурный манифест
-    armManifest = manifest;
+    targetManifest = manifest;
     digest = manifest.config?.digest;
   }
 
   let sizeCompressed = 0;
   let config: any = null;
-  if (armManifest) {
-    sizeCompressed = (armManifest.layers ?? []).reduce(
+  if (targetManifest) {
+    sizeCompressed = (targetManifest.layers ?? []).reduce(
       (s: number, l: any) => s + (l.size ?? 0),
       0,
     );
-    const cfgDigest = armManifest.config?.digest;
+    const cfgDigest = targetManifest.config?.digest;
     if (cfgDigest) {
       const cr = await regFetch(
         ref.registryHost,
@@ -155,11 +176,20 @@ export async function checkImage(input: string): Promise<ImageInfo> {
       const blob: any = await cr.json();
       config = blob.config ?? {};
       if (!Array.isArray(manifest.manifests)) {
-        arm64 = config.architecture === "arm64" && config.os === "linux";
-        if (!arm64) {
+        const os = blob.os ?? config.os;
+        const arch = blob.architecture ?? config.architecture;
+        if (os && arch) platforms = [`${os}/${arch}`];
+        arm64 = arch === "arm64" && os === "linux";
+        amd64 = arch === "amd64" && os === "linux";
+        if (amd64) amd64Digest = digest;
+        if (!arm64 && !amd64) {
           warnings.push(
-            `образ одно-архитектурный: ${config.os}/${config.architecture}, нужен linux/arm64`,
+            `образ одно-архитектурный: ${os}/${arch}, нужен linux/arm64 или linux/amd64 (CHR)`,
           );
+        } else if (!arm64) {
+          warnings.push("образ одно-архитектурный: только linux/amd64 (MikroTik CHR)");
+        } else if (!amd64) {
+          warnings.push("образ одно-архитектурный: только linux/arm64 (без CHR x86_64)");
         }
       }
     }
@@ -180,7 +210,10 @@ export async function checkImage(input: string): Promise<ImageInfo> {
     name: ref.name,
     tag: ref.tag,
     arm64,
+    amd64,
+    platforms,
     digest,
+    amd64Digest,
     sizeCompressed,
     env: config?.Env ?? [],
     exposedPorts: Object.keys(config?.ExposedPorts ?? {}),
@@ -191,11 +224,49 @@ export async function checkImage(input: string): Promise<ImageInfo> {
   };
 }
 
+export type TargetArch = "any" | "arm64" | "amd64" | "chr" | "both";
+
+export function assertImageArch(
+  image: string,
+  info: Pick<ImageInfo, "arm64" | "amd64" | "platforms">,
+  arch: TargetArch = "any",
+  contextLabel = "",
+): void {
+  const ctx = contextLabel ? ` (${contextLabel})` : "";
+  if (arch === "arm64" && !info.arm64) {
+    throw new Error(
+      `Образ ${image}${ctx} не имеет linux/arm64 — на ARM-роутерах MikroTik не запустится. Добавление прервано.`,
+    );
+  }
+  if ((arch === "amd64" || arch === "chr") && !info.amd64) {
+    throw new Error(
+      `Образ ${image}${ctx} не имеет linux/amd64 — на MikroTik CHR не запустится. Добавление прервано.`,
+    );
+  }
+  if (arch === "both" && (!info.arm64 || !info.amd64)) {
+    throw new Error(
+      `Образ ${image}${ctx} не поддерживает обе архитектуры (linux/arm64 и linux/amd64 для CHR). Доступны: ${info.platforms.join(", ") || "нет"}.`,
+    );
+  }
+  if (!info.arm64 && !info.amd64) {
+    throw new Error(
+      `Образ ${image}${ctx} не имеет ни linux/arm64 (ARM), ни linux/amd64 (CHR) — на MikroTik не запустится. Добавление прервано.`,
+    );
+  }
+}
+
+export function formatArchList(info: Pick<ImageInfo, "arm64" | "amd64" | "digest" | "amd64Digest">): string {
+  const parts: string[] = [];
+  if (info.arm64) parts.push(`linux/arm64 (${info.digest?.slice(0, 19) ?? "n/a"}…)`);
+  if (info.amd64) parts.push(`linux/amd64 CHR (${info.amd64Digest?.slice(0, 19) ?? "n/a"}…)`);
+  return parts.join(", ") || "нет";
+}
+
 export function formatInfo(info: ImageInfo): string {
   const mb = (info.sizeCompressed / 1024 / 1024).toFixed(1);
   const lines = [
     `Образ: ${info.registry}/${info.name}:${info.tag}`,
-    `arm64: ${info.arm64 ? "✅ да" : "❌ НЕТ"}`,
+    `arm64 (ARM): ${info.arm64 ? "✅ да" : "❌ нет"} | amd64 (CHR): ${info.amd64 ? "✅ да" : "❌ нет"}`,
     `Размер (сжато): ${mb} МБ`,
   ];
   if (info.exposedPorts.length) lines.push(`Порты контейнера: ${info.exposedPorts.join(", ")}`);
