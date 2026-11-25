@@ -1,5 +1,5 @@
 name: A-mikrotik-mcp
-descr: "MCP-шлюз нового поколения (v2.0.3) для RouterOS 7.24+ (REST API + Binary API over Streamable HTTP) — 46 инструментов, аудит безопасности (0-100), автодискавери, машина времени снапшотов конфигурации, diffing парка, веб-дашборд (/dashboard) с SVG-топологией и проактивный инцидент-мониторинг"
+descr: "MCP-шлюз нового поколения (v2.0.4) для RouterOS 7.24+ (REST API + Binary API over Streamable HTTP) — 46 инструментов, аудит безопасности (0-100), автодискавери, машина времени снапшотов конфигурации, diffing парка, веб-дашборд (/dashboard) с SVG-топологией и проактивный инцидент-мониторинг"
 page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/mikrotik-mcp
 category: ai
 icon: icon.png
@@ -8,7 +8,7 @@ auto-update: false
 
 services:
   mikrotik-mcp:
-    image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.3
+    image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.4
     hostname: mikrotik-mcp
     ports:
       - 3000:3000/tcp:web
@@ -25,6 +25,7 @@ services:
       MCP_WATCH_INTERVAL_SEC: "60"
       MCP_DASHBOARD_ENABLED: "true"
       MCP_DASHBOARD_ALLOWED_IPS: ""
+      MCP_TRUSTED_PROXIES: ""
       MIKROTIK_HOST: auto
       MIKROTIK_ROUTER_ID: local-router
       MIKROTIK_USERNAME: mcp

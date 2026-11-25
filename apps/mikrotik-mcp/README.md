@@ -1,8 +1,8 @@
 # A-mikrotik-mcp
 
-Полнофункциональный мульти-роутерный **MCP-шлюз нового поколения (`mikrotik-mcp-server` v2.0.3)** для **MikroTik RouterOS 7.24+** по протоколам **REST API** (`/rest`) и **Binary API** (`8728`/`8729`), без использования SSH.
+Полнофункциональный мульти-роутерный **MCP-шлюз нового поколения (`mikrotik-mcp-server` v2.0.4)** для **MikroTik RouterOS 7.24+** по протоколам **REST API** (`/rest`) и **Binary API** (`8728`/`8729`), без использования SSH.
 
-- Образ: `ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.3` (`linux/arm64`, `linux/amd64`; теги каналов `:2.0`, `:2` и `:latest`).
+- Образ: `ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.4` (`linux/arm64`, `linux/amd64`; теги каналов `:2.0`, `:2` и `:latest`).
 - Порт: `3000/tcp` (веб-дашборд `/dashboard`, Streamable HTTP MCP endpoint `/mcp` и проверка живости `/healthz`).
 - Тома:
   - `mcp-config` → `/app/config` (опциональные `routers.yaml` для управления парком роутеров и `ca.pem` для TLS-верификации).
@@ -67,6 +67,10 @@
 | `MIKROTIK_TLS_VERIFY` | Проверять TLS-сертификат роутера (при `ca.pem` можно `true`) | `false` |
 | `MCP_PORT` / `MCP_PATH` | Порт и URL-путь HTTP MCP endpoint | `3000` / `/mcp` |
 | `MCP_ALLOWED_HOSTS` | Разрешённые HTTP `Host` (`*`, `*.routingthecloud.com`, или конкретные домены/IP; `127.0.0.1` и `localhost` разрешены всегда) | `*` |
+| `MCP_DASHBOARD_ALLOWED_IPS` | Белый список IP/CIDR для `/dashboard` и `/api/dashboard/*` | `""` |
+| `MCP_TRUSTED_PROXIES` | Доверенные IP/CIDR обратного прокси для `X-Forwarded-For` / `X-Real-IP` | `""` |
+| `MCP_READONLY_TOKENS` | Read-Only Bearer-токены (`mikrotik:read`, без мутаций и выгрузки секретов) | `""` |
+| `MCP_DENY_POWER_ACTIONS` | Запретить `reboot`, `shutdown` и `reset-configuration` во всех инструментах | `"false"` |
 | `MCP_AUDIT_LOG_PATH` | Файл JSONL-аудита вызовов MCP внутри тома `mcp-data` | `/app/data/mcp-audit.jsonl` |
 | `MIKROTIK_ROUTER_AUDIT_LOG` | Автоматически создавать на роутере отдельный лог `mcpdisk` + правила `[MCP-LOG]` в `/system/logging` | `true` |
 | `MIKROTIK_ROUTER_LOG_MARKERS` | Писать `[MCP]`-метки через `/log/info` / `/log/warning` при мутациях | `true` |
