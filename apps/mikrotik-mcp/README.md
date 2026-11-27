@@ -1,37 +1,45 @@
 # A-mikrotik-mcp
 
-Полнофункциональный мульти-роутерный **MCP-шлюз нового поколения (`mikrotik-mcp-server` v2.0.4)** для **MikroTik RouterOS 7.24+** по протоколам **REST API** (`/rest`) и **Binary API** (`8728`/`8729`), без использования SSH.
+Полнофункциональный мульти-роутерный **MCP-шлюз нового поколения (`mikrotik-mcp-server` v2.0.5)** для **MikroTik RouterOS 7.24+** по протоколам **REST API** (`/rest`) и **Binary API** (`8728`/`8729`), без использования SSH.
 
-- Образ: `ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.4` (`linux/arm64`, `linux/amd64`, `linux/386`, `linux/arm/v7`; теги каналов `:2.0`, `:2` и `:latest`).
+- Образ: `ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.5` (`linux/arm64`, `linux/amd64`, `linux/386`, `linux/arm/v7`; теги каналов `:2.0`, `:2` и `:latest`).
 - Порт: `3000/tcp` (веб-дашборд `/dashboard`, Streamable HTTP MCP endpoint `/mcp` и проверка живости `/healthz`).
 - Тома:
-  - `mcp-config` → `/app/config` (опциональные `routers.yaml` для управления парком роутеров и `ca.pem` для TLS-верификации).
-  - `mcp-data` → `/app/data` (хранит автосгенерированный Bearer-токен `.bearer_token`, снапшоты конфигураций в `/app/data/snapshots` и JSONL-аудит).
+  - `mcp-config` → `/app/config` (опциональные `routers.yaml` для первичного импорта парка роутеров и `ca.pem` для TLS-верификации).
+  - `mcp-data` → `/app/data` (хранит SQLite-БД `gateway.db` — единый источник настроек/профилей/политик, токен `.bearer_token`, снапшоты `/app/data/snapshots` и JSONL-аудит).
 
-## Новые возможности версии 2.0.0:
-1. **46 MCP-инструментов**:
+## Новые возможности версии 2.0.5 и 2.0.x:
+1. **49 MCP-инструментов**:
+   - `mikrotik_diagnose_route` (+ read-only `routing_route`): диагностика маршрутов `/routing/route` по IP/CIDR-префиксу и VRF/таблице (активные, ECMP, `immediate-gw`, отфильтрованные, недостижимые).
+   - `mikrotik_analyze_firmware_changelog` и `include_changelog` в `mikrotik_fleet_updates`: анализ официальных changelog MikroTik (что уже исправлено vs ещё не исправлено на текущей прошивке, CVE и RouterBOOT BIOS).
+   - `mikrotik_diagnostics`: добавлены роли STP (`stp_status`), состояние LACP-партнёров (`lacp_status`), а в `mikrotik_monitor_traffic` поддержан одиночный замер `once` через REST.
+   - `mikrotik_manage_gateway_policy`: управление SQLite-настройками шлюза и SHA-256 Bearer-политиками доступа.
    - `mikrotik_security_audit`: Автоматический аудит безопасности с расчётом оценки защищённости 0–100 по 10+ критическим векторам и генерацией готовых команд устранения.
    - `mikrotik_discover_routers`: Автообнаружение роутеров сети через MNDP, LLDP, WireGuard, OSPF, BGP и DHCP-аренды с безопасным пробингом и авторегистрацией.
-   - `mikrotik_config_snapshots`: Машина времени конфигураций `.rsc` с очисткой динамических баннеров, unified diffing и мгновенным откатом.
-   - `mikrotik_fleet_diff` & `mikrotik_fleet_updates`: N-way сравнение дрейфа конфигураций парка с эталонным роутером и матрица обновлений RouterOS / RouterBOOT.
-   - `mikrotik_topology_map`: Интерактивная карта топологии сети (Mermaid + JSON) с корреляцией L2/L3/WireGuard/VRRP/BGP/OSPF.
-   - `mikrotik_fleet_incidents`: Проактивный мониторинг инцидентов (недоступность, BGP/VRRP флапы, устаревшие WG-хэндшейки, NAND износ).
+   - `mikrotik_config_snapshots`: Машина времени конфигураций `.rsc` с детекцией неполного экспорта (`truncated`, `#error exporting`), unified diffing и обязательным паролем для бинарных `.backup`.
+   - `mikrotik_fleet_execute`: Canary/Safe Mode с проверками (`verify_after`/`verify_ping`) строго до `/safe-mode/release`, явным `commit_status` (`committed`/`rolled_back`/`unknown`), fail-closed валидацией (`highlight` + `import verbose=yes dry-run`) и прерыванием при неполном пре-снимке.
+   - `mikrotik_topology_map` & `mikrotik_fleet_incidents`: Интерактивная карта топологии и проактивный мониторинг с реальными флагами VRRP (`master`/`backup`/`failure`/`invalid`) и сохранением инцидентов при сбое чтения логов.
    - `mikrotik_manage_cloud_and_zerotier`: Управление MikroTik Cloud DDNS, Back-To-Home VPN и ZeroTier.
-   - Расширенная аппаратная диагностика: SFP DDM оптика, управление PoE-out, профилирование CPU (`/tool/profile`), топ-соединения conntrack.
+   - Аппаратная диагностика: SFP DDM оптика, управление PoE-out, профилирование CPU (`/tool/profile`), топ-соединения conntrack.
 2. **Встроенный Web Dashboard (`/dashboard`)**:
    - Графическая визуализация топологии, карточки аудита безопасности, просмотр снапшотов с diffing и панель инцидентов прямо в браузере.
-3. **Безопасность и RBAC**:
+3. **Надёжность, SQLite SSOT и RBAC**:
+   - SQLite-БД (`/app/data/gateway.db`, `MCP_DB_PATH`) как единый источник настроек шлюза, профилей и SHA-256 политик доступа (мигрирует ENV/YAML при первом старте, затем восстанавливается из БД даже без ENV).
+   - Разделение учётных записей чтения и записи (`MIKROTIK_READ_USERNAME` / `MIKROTIK_READ_PASSWORD` с политикой `read,api,rest-api`), очередь REST `1` запрос на пару `(устройство, учётка)`, учёт 60 с лимита REST и сверка состояния после таймаута записи.
    - Ограничение доступа к веб-интерфейсу по белому списку IP (`MCP_DASHBOARD_ALLOWED_IPS`, например `192.168.200.0/24,10.0.0.5`).
    - Поддержка Read-Only токенов (`MCP_READONLY_TOKENS`) для мониторинга без риска случайных изменений.
    - Блокировка команд перезагрузки и выключения (`MCP_DENY_POWER_ACTIONS=true`).
 
 ## Подготовка RouterOS перед запуском
 
-На целевом MikroTik создайте пользователя с правами `rest-api` и `api` и включите сервисы:
+На целевом MikroTik создайте пользователя с правами `rest-api` и `api` (и при желании отдельного read-only пользователя) и включите сервисы:
 
 ```rsc
 /user/group/add name=mcp policy=read,write,test,ftp,api,rest-api,!local,!telnet,!ssh,!winbox
 /user/add name=mcp group=mcp password="STRONG_PASSWORD"
+# Опционально — отдельная учётка только для чтения (MIKROTIK_READ_USERNAME):
+/user/group/add name=mcp-read policy=read,api,rest-api,!write,!local,!telnet,!ssh,!winbox
+/user/add name=mcp-read group=mcp-read password="READONLY_PASSWORD"
 /ip/service/set www-ssl disabled=no
 /ip/service/set api-ssl disabled=no
 ```
@@ -61,6 +69,8 @@
 | `MIKROTIK_HOST` | IP/домен роутера (`auto`) или список через запятую (`auto,10.10.20.1`, `core=auto,branch=https://10.10.20.1:443`) | `auto` |
 | `MIKROTIK_ROUTER_ID` | Идентификатор профиля роутера в шлюзе | `local-router` |
 | `MIKROTIK_USERNAME` / `MIKROTIK_PASSWORD` | Учётные данные пользователя RouterOS (`api,rest-api`) | `mcp` / `change-me-router-password` |
+| `MIKROTIK_READ_USERNAME` / `MIKROTIK_READ_PASSWORD` | Опциональная раздельная учётка чтения (`read,api,rest-api`) | `""` |
+| `MCP_DB_PATH` | SQLite-БД настроек, профилей и SHA-256 политик доступа | `/app/data/gateway.db` |
 | `MIKROTIK_TRANSPORT_PREF` | Приоритет транспорта: `auto` \| `rest` \| `api` | `auto` |
 | `MIKROTIK_REST_PROTOCOL` / `MIKROTIK_REST_PORT` | Протокол (`https`/`http`) и порт REST API | `https` / `443` |
 | `MIKROTIK_API_TLS` / `MIKROTIK_API_PORT` | TLS (`true`/`false`) и порт Binary API | `true` / `8729` |

@@ -133,10 +133,10 @@
     relay-keys: {}
     relay-certs: {}
 - name: A-mikrotik-mcp
-  descr: MCP-шлюз нового поколения (v2.0.4) для RouterOS 7.24+ (REST API + Binary
-    API over Streamable HTTP) — 46 инструментов, аудит безопасности (0-100), автодискавери,
-    машина времени снапшотов конфигурации, diffing парка, веб-дашборд (/dashboard)
-    с SVG-топологией и проактивный инцидент-мониторинг
+  descr: MCP-шлюз нового поколения (v2.0.5) для RouterOS 7.24+ (REST API + Binary
+    API over Streamable HTTP) — 49 инструментов, аудит безопасности (0-100), автодискавери,
+    машина времени снапшотов, диагностика маршрутов (/routing/route) и STP/LACP, анализ
+    changelog прошивок, SQLite-хранилище настроек/политик и веб-дашборд (/dashboard)
   page: https://github.com/aligorov/routeros-aligorov/tree/main/apps/mikrotik-mcp
   category: ai
   icon: https://aligorov.github.io/routeros-aligorov/apps/mikrotik-mcp/icon.png
@@ -144,7 +144,7 @@
   auto-update: false
   services:
     mikrotik-mcp:
-      image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.4
+      image: ghcr.io/aligorov/routeros-aligorov/mikrotik-mcp-server:2.0.5
       hostname: mikrotik-mcp
       ports:
       - 3000:3000/tcp:web
@@ -157,6 +157,7 @@
         MCP_BEARER_TOKEN: auto
         MCP_READONLY_TOKENS: ''
         MCP_DENY_POWER_ACTIONS: 'false'
+        MCP_DB_PATH: /app/data/gateway.db
         MCP_WATCH_ENABLED: 'true'
         MCP_WATCH_INTERVAL_SEC: '60'
         MCP_DASHBOARD_ENABLED: 'true'
@@ -166,6 +167,8 @@
         MIKROTIK_ROUTER_ID: local-router
         MIKROTIK_USERNAME: mcp
         MIKROTIK_PASSWORD: change-me-router-password
+        MIKROTIK_READ_USERNAME: ''
+        MIKROTIK_READ_PASSWORD: ''
         MIKROTIK_TRANSPORT_PREF: auto
         MIKROTIK_REST_PROTOCOL: https
         MIKROTIK_REST_PORT: '443'
